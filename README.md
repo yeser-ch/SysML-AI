@@ -35,8 +35,8 @@ Hier liegt der funktionierende Code.
 Niemals direkt hierhin pushen.
 Niemals direkt von features/ hierhin mergen.
 
-2. Ebene: Persönliche Branches (Simon, Moritz, Marius, Michael, Dominik)
-Jedes Teammitglied hat seinen eigenen Branch (z.B. Dominik).
+2. Ebene: Persönliche Branches (Julius, Nikolaj, Florian, Max, Leo)
+Jedes Teammitglied hat seinen eigenen Branch (z.B. Leo).
 Dies ist dein persönlicher "Sammelplatz" (Staging Area).
 Verantwortung: Du bist dafür zuständig, dass dein Branch regelmäßig in main gemerged wird. Es dürfen sich keine riesigen Änderungen anstauen!
 
@@ -49,16 +49,16 @@ Regel: Diese Features werden immer von deinem persönlichen Branch abgeleitet un
 Schritt 1: Feature-Branch erstellen
 Du leitest deinen Feature-Branch immer von deinem persönlichen Branch ab (nie vom main!).
 
-Stelle sicher, dass dein persönlicher Branch aktuell ist und erstelle dann den Feature-Branch. Beispiel für Dominik:
+Stelle sicher, dass dein persönlicher Branch aktuell ist und erstelle dann den Feature-Branch. Beispiel für Leo:
 
 # 1. Auf deinen persönlichen Branch wechseln
-git checkout Dominik
+git checkout Leo
 
 # 2. Den neuesten Stand holen (falls du woanders gearbeitet hast)
-git pull origin Dominik
+git pull origin Leo
 
 # 3. Neuen Feature Branch davon ableiten (WICHTIG!)
-git checkout -b features/neue-buttons Dominik
+git checkout -b features/neue-buttons Leo
 Schritt 2: Entwickeln & Builden (Wichtig!)
 
 Bevor du deine Änderungen in CATIA Magic testen kannst, muss der Java-Code kompiliert werden. Das Plugin funktioniert sonst nicht mit dem neuen Code.
