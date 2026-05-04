@@ -9,8 +9,7 @@ import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
 
 import com.nomagic.magicreport.engine.ITemplateEngine;
-import com.nomagic.magicreport.engine.velocity.DefaultTemplateEngine;
-import com.nomagic.magicreport.TemplateEngineFactory;
+import com.nomagic.magicreport.engine.velocity.TextEngine;
 import com.nomagic.magicreport.Template;
 
 import java.io.File;
@@ -75,14 +74,18 @@ public class DataExtractionService {
             }
 
             // 6. ITemplateEngine Workflow
-            // Die konkrete Implementierung muss ueber die Factory bezogen werden, da der Konstruktor protected ist.
-            ITemplateEngine engine = TemplateEngineFactory.getInstance().getTemplateEngine(DefaultTemplateEngine.class);
+            ITemplateEngine engine = new TextEngine();
             try {
                 // Template erstellen
                 Template template = engine.createTemplate(templateFile, outputFile);
                 
-                // Kontext (Scope) an die Engine übergeben
+                // Kontext (Project und Scope) an die Engine übergeben
+                engine.addContext("project", currentProject);
                 engine.addContext("element", scope);
+                
+                // Encodings setzen
+                engine.setProperty("input.encoding", "UTF-8");
+                engine.setProperty("output.encoding", "UTF-8");
                 
                 // Export synchron ausführen
                 engine.evaluate(template);
