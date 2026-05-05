@@ -1,0 +1,385 @@
+{
+  "global_context": {
+    "project_name": "$!project.name",
+    "export_info": "SysML Flat Graph Export for AI (v7.2 - Stable Parser & Single-Line Formatting)"
+  },
+  "elements": [
+
+  ]
+}
+
+## ====================================================================
+## PARTIAL EXPORT - OPTIMIZED ARCHITECTURE WITH DIRECT REFERENCES
+## ====================================================================
+## 
+## PURPOSE:
+##   Export a subset of model elements centered around a specified system element.
+##   Uses direct element references from dependencies - no tree searches during traversal.
+##   Supports bidirectional dependency analysis with configurable traversal depth.
+##
+## KEY OPTIMIZATION:
+##   Dependencies ($rel.supplier.get(0), $rel.client.get(0)) provide element objects
+##   directly, eliminating the need for element lookups during graph traversal.
+##   Only one O(n) search needed to find center element from ID.
+##
+## PERFORMANCE CHARACTERISTICS:
+##   - Center Element Lookup: O(n) - single tree search on initialization
+##   - Cycle Detection: O(1)  - HashMap.containsKey() checks
+##   - Total: O(n+m) - one linear scan + traversal with direct references
+##   - Memory: O(m) - only stores accessed elements, no index overhead!
+##
+## ====================================================================
+## CONFIGURATION: User-configurable parameters
+## ====================================================================
+##
+## Enable/disable partial export mode
+#set($PARTIAL_EXPORT_ENABLED = false)##
+##
+## Center element ID around which to build the export
+## Example: "id_12345abc" - this becomes the root of your exported subgraph
+## IMPORTANT: Must be set to a valid element ID. If empty string, no center element
+##   will be found and $collectedElements will remain empty, resulting in empty
+##   export array [ ]. No error is raised - this is silent behavior.
+##   Always verify CENTER_ELEMENT_ID is set to a valid model element ID.
+#set($CENTER_ELEMENT_ID = "")##
+##
+## Maximum traversal depth for hidden dependencies
+## Defines how many "hops" to follow outgoing/incoming dependencies
+## Example: depth=2 means center + direct deps + deps of deps
+#set($MAX_DEPENDENCY_DEPTH = 2)##
+##
+## Include owned elements (parent-child hierarchy)
+## Set to true to export direct children of center element
+#set($INCLUDE_OWN_ELEMENTS = true)##
+
+## ====================================================================
+## GLOBAL DATA STRUCTURES: Optimized for O(1) cycle detection
+## ====================================================================
+##
+## Collected elements for export: Maps element ID -> metadata + object
+## Stores: { "element": elementObj, "depth": int, "source": string }
+#set($collectedElements = {})##
+##
+## Visited elements tracker: Uses HashMap for O(1) containsKey() checks
+## Tracks already-processed elements to prevent cycles and duplicates
+#set($visitedIndex = {})##
+
+## ====================================================================
+## MACRO 1: findElementByIdInTree - Helper for recursive tree search
+## ====================================================================
+## ONLY macro needed for center element lookup - no wrapper
+##
+## PURPOSE:
+##   Recursively search element and its children for matching ID.
+##   Helper macro called by initializePartialExport.
+##
+## PARAMETERS:
+##   $elem - Current element to check
+##   $searchId - ID we're looking for
+##   $result - Output map (stores found element)
+##
+#macro(findElementByIdInTree $elem $searchId $result)##
+  #if($elem.ID == $searchId)##
+    #set($void = $result.put("found", $elem))##
+  #else##
+    #foreach($child in $elem.ownedElement)##
+      #findElementByIdInTree($child $searchId $result)##
+      #if($result.containsKey("found"))#break#end##
+    #end##
+  #end##
+#end##
+
+## ====================================================================
+## MACRO 2: collectOwnedElements - Gather parent-child hierarchy
+## ====================================================================
+##
+## PURPOSE:
+##   Collect all owned child elements of a given element down to specified depth.
+##   This represents the "vertical" containment structure in the model.
+##
+## PARAMETERS:
+##   $elem - Current element to process
+##   $maxDepth - Maximum recursion depth allowed
+##   $currentDepth - Current depth in recursion (incremented each level)
+##
+## COMPLEXITY: O(m) where m = number of elements within max depth
+##
+## DATA STRUCTURE:
+##   Adds to $visitedIndex (HashMap) for O(1) cycle detection
+##   Adds to $collectedElements with metadata
+##
+## TERMINATION:
+##   Stops when reaching maxDepth level to limit export size
+##
+#macro(collectOwnedElements $elem $maxDepth $currentDepth)##
+  #if($currentDepth <= $maxDepth)##
+    #foreach($child in $elem.ownedElement)##
+      #if(!$visitedIndex.containsKey($child.ID))##
+        #set($void = $visitedIndex.put($child.ID, true))##
+        #set($void = $collectedElements.put($child.ID, {"element": $child, "depth": $currentDepth, "source": "owned_element"}))##
+        #collectOwnedElements($child $maxDepth $currentDepth + 1)##
+      #end##
+    #end##
+  #end##
+#end##
+
+## ====================================================================
+## MACRO 3: collectDependencyLinks - Traverse relationships bidirectionally
+## ====================================================================
+##
+## PURPOSE:
+##   Follow dependency chains (both outgoing and incoming) to discover
+##   related elements beyond the parent-child hierarchy. Elements are
+##   obtained directly from dependency references - NO lookups needed.
+##
+## PARAMETERS:
+##   $elem - Current element to analyze dependencies for
+##   $maxDepth - Maximum traversal depth
+##   $currentDepth - Current depth in traversal
+##
+## COMPLEXITY: O(m) per element, total O(m*k) where k = avg dependencies
+##             Direct references mean O(1) access, not O(n) search!
+##
+## DIRECT REFERENCES:
+##   $rel.supplier.get(0) - Returns element object directly (NOT just ID)
+##   $rel.client.get(0) - Returns element object directly (NOT just ID)
+##   NO findElementLazy calls needed here!
+##
+## TRAVERSAL MODES:
+##   - Outgoing: Elements that this element depends on (suppliers)
+##   - Incoming (Bidirectional): Elements that depend on this element (clients)
+##
+## ALGORITHM:
+##   1. Iterate outgoing dependencies via clientDependency
+##   2. Get target element directly: $rel.supplier.get(0) [O(1)]
+##   3. Check cycle via visitedIndex.containsKey() [O(1)]
+##   4. Repeat for incoming dependencies bidirectionally
+##   5. Stop at maxDepth to prevent infinite traversal in cyclic graphs
+##
+## CYCLE PREVENTION:
+##   Uses $visitedIndex (HashMap) to track already-processed elements
+##   Prevents infinite loops in cyclic dependency structures
+##
+#macro(collectDependencyLinks $elem $maxDepth $currentDepth)##
+  #if($currentDepth <= $maxDepth)##
+    ## OUTGOING DEPENDENCIES: Elements this element references/depends on
+    #foreach($rel in $elem.clientDependency)##
+      #if($rel.supplier.size() > 0)##
+        #set($targetElem = $rel.supplier.get(0))##
+        #if(!$visitedIndex.containsKey($targetElem.ID))##
+          #set($void = $visitedIndex.put($targetElem.ID, true))##
+          #set($void = $collectedElements.put($targetElem.ID, {"element": $targetElem, "depth": $currentDepth, "source": "dependency_outgoing", "relation_type": $rel.humanType}))##
+          #collectDependencyLinks($targetElem $maxDepth $currentDepth + 1)##
+        #end##
+      #end##
+    #end##
+    ## INCOMING DEPENDENCIES (BIDIRECTIONAL): Elements that reference this element
+    #foreach($rel in $elem.supplierDependency)##
+      #if($rel.client.size() > 0)##
+        #set($sourceElem = $rel.client.get(0))##
+        #if(!$visitedIndex.containsKey($sourceElem.ID))##
+          #set($void = $visitedIndex.put($sourceElem.ID, true))##
+          #set($void = $collectedElements.put($sourceElem.ID, {"element": $sourceElem, "depth": $currentDepth, "source": "dependency_incoming", "relation_type": $rel.humanType}))##
+          #collectDependencyLinks($sourceElem $maxDepth $currentDepth + 1)##
+        #end##
+      #end##
+    #end##
+  #end##
+#end##
+
+## ====================================================================
+## MACRO 4: initializePartialExport - Orchestrate entire partial export
+## ====================================================================
+##
+## PURPOSE:
+##   Main entry point for partial export. Coordinates:
+##   1. Center element discovery via lazy-search (O(n) one-time)
+##   2. Dependency traversal to build export set (O(m) with direct refs)
+##
+## EXECUTION FLOW:
+##   Step 1: Find center element by ID using lazy-loading (single O(n) search)
+##   Step 2: Add center element to collection
+##   Step 3: If enabled, collect owned children up to maxDepth (direct ownedElement refs)
+##   Step 4: Traverse dependencies bidirectionally (element refs available directly)
+##
+## RESULT:
+##   Populates $collectedElements with all elements to export,
+##   each marked with source (center, owned_element, dependency_outgoing, 
+##   dependency_incoming) and depth level for tracing the discovery path
+##
+## KEY INSIGHT:
+##   Dependencies provide direct element references via $rel.supplier.get(0) and
+##   $rel.client.get(0), so NO additional lookups needed during traversal.
+##   findElementLazy only needed for initial center element ID lookup.
+##
+## PERFORMANCE IMPROVEMENT:
+##   Traditional approach (tree search for each access):
+##     - Find center: O(n) tree search
+##     - Find deps: O(m*n) for each dependency lookup
+##     - Total: O(m*n)
+##   
+##   Optimized approach (direct element references):
+##     - Find center: O(n) one-time search only
+##     - Find deps: O(1) direct reference via $rel.supplier.get(0)
+##     - Total: O(n+m) (linear scan + traversal with no lookups)
+##     - Memory: O(m) - only stores accessed elements
+##     - Advantage: NO lazy-loading overhead during traversal!
+##
+#macro(initializePartialExport)##
+  ## Reset collection state for fresh export
+  #set($collectedElements = {})##
+  #set($void = $visitedIndex.clear())##
+  ##
+  ## STEP 1: Find center element by searching model tree (O(n) one-time search)
+  ## Direct inline search: iterate roots and recursively search for matching ID
+  ## Dependencies already contain element references directly, no lookup needed there
+  #set($centerSearchResult = {})##
+  #foreach($root in $project.primaryModel.ownedElement)##
+    #findElementByIdInTree($root $CENTER_ELEMENT_ID $centerSearchResult)##
+    #if($centerSearchResult.containsKey("found"))#break#end##
+  #end##
+  ##
+  ## STEP 2: Add center element if found## NOTE: If CENTER_ELEMENT_ID is empty string or invalid ID, nothing will be found.
+## The macro will complete silently with empty $collectedElements collection.
+## This graceful degradation means no errors are raised, but export will be empty.
+## Always verify $CENTER_ELEMENT_ID contains a valid, non-empty model element ID.  #if($centerSearchResult.containsKey("found"))##
+    #set($centerElement = $centerSearchResult.get("found"))##
+    #set($void = $visitedIndex.put($centerElement.ID, true))##
+    #set($void = $collectedElements.put($centerElement.ID, {"element": $centerElement, "depth": 0, "source": "center"}))##
+    ##
+    ## STEP 3: Optionally collect owned children of center element (O(m) direct traversal)
+    #if($INCLUDE_OWN_ELEMENTS)##
+      #collectOwnedElements($centerElement $MAX_DEPENDENCY_DEPTH 1)##
+    #end##
+    ##
+    ## STEP 4: Traverse dependencies bidirectionally (O(m) with direct element refs)
+    ## Uses element references from $rel.supplier.get(0) and $rel.client.get(0)
+    ## NO additional lookups needed
+    #collectDependencyLinks($centerElement $MAX_DEPENDENCY_DEPTH 1)##
+  #end##
+#end##
+
+## ====================================================================
+## MACRO 5: exportCollectedElements - Generate JSON for collected elements
+## ====================================================================
+## Was MACRO 4, renumbered after removing findElementLazy wrapper
+##
+## PURPOSE:
+##   Iterate over all collected elements and export them as JSON objects.
+##   Applies same SysML v1 filtering rules as main export.
+##   IMPORTANT: Generates COMMA-SEPARATED JSON objects only - must be wrapped
+##   in JSON array brackets [ ] by the caller. Does NOT include [ ] itself.
+##
+## OUTPUT FORMAT:
+##   Comma-separated objects (NOT including array wrapper):
+##     {"id":"elem1","name":"..."}
+##     ,{"id":"elem2","name":"..."}
+##     ,{"id":"elem3","name":"..."}
+##   
+##   Caller must provide array wrapper like:
+##     {
+##       "elements": [
+##         #exportCollectedElements()
+##       ]
+##     }
+##
+## FEATURES:
+##   - Filters out system elements (SysML, UML, StandardProfile, etc.)
+##   - Only exports whitelisted element types
+##   - Includes traversal metadata (depth, source) for analysis
+##   - Maintains proper comma handling for valid JSON array format
+##   - Handles empty collections gracefully: empty array if $collectedElements is empty
+##
+## FIELDS GENERATED:
+##   - Core fields: id, name, type, owner_id, documentation
+##   - Partial export metadata: partial_depth, partial_source
+##   - Stereotypes array: list of applied stereotype names
+##   - Empty collections: stereotypes=[] if no stereotypes applied
+##
+## REQUIREMENTS:
+##   - Must be called ONLY within JSON array brackets [ ]
+##   - Assumes $collectedElements already populated by initializePartialExport()
+##   - Requires SysML v1 element objects with humanType, qualifiedName attributes
+##
+## PERFORMANCE:
+##   Iterates $collectedElements HashMap.keySet() - already filtered set
+##   Does NOT re-traverse entire model (uses pre-collected elements only)
+##   Complexity: O(m) where m = elements in $collectedElements
+##
+##
+#macro(exportCollectedElements)##
+  #set($isFirstPartial = true)##
+  #set($sortedIds = $collectedElements.keySet())##
+  #foreach($elemId in $sortedIds)##
+    #set($collectionData = $collectedElements.get($elemId))##
+    #set($elem = $collectionData.get("element"))##
+    #set($depth = $collectionData.get("depth"))##
+    #set($source = $collectionData.get("source"))##
+    ##
+    ## Apply same filtering rules as main export
+    #set($type = "")#if($elem.humanType)#set($type = $elem.humanType)#end##
+    #set($t = $type.replace(" ", ""))##
+    #set($qName = "")#if($elem.qualifiedName)#set($qName = $elem.qualifiedName)#end##
+    #set($isSystem = false)##
+    #if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $elem.ID.contains("_180beta"))##
+      #set($isSystem = true)##
+    #end##
+    #set($isValidType = false)##
+    #if($t == "Block" || $t == "ValueType" || $t == "ConstraintBlock" || $t == "Port" || $t == "ProxyPort" || $t == "FullPort" || $t == "FlowPort" || $t == "PartProperty" || $t == "ValueProperty" || $t == "ReferenceProperty" || $t == "ConstraintProperty" || $t == "Property" || $t == "FlowProperty" || $t == "Connector" || $t == "BindingConnector" || $t == "ItemFlow" || $t == "Association" || $t == "AssociationClass" || $t == "InterfaceRealization" || $t == "Usage" || $t == "Requirement" || $t == "TestCase" || $t == "UseCase" || $t == "Actor" || $t == "Activity" || $t.contains("Action") || $t.contains("Node") || $t == "ControlFlow" || $t == "ObjectFlow" || $t == "ActivityPartition" || $t == "Pin" || $t == "StateMachine" || $t == "Region" || $t == "State" || $t == "Pseudostate" || $t == "FinalState" || $t == "Transition" || $t == "Trigger" || $t == "Event" || $t == "Interaction" || $t == "Lifeline" || $t == "Message" || $t == "ExecutionSpecification" || $t == "CombinedFragment" || $t == "InteractionOperand" || $t == "Package" || $t == "Model" || $t == "View" || $t == "Viewpoint" || $t == "Rationale" || $t == "Problem")##
+      #set($isValidType = true)##
+    #end##
+    ##
+    #if($isValidType && !$isSystem)##
+      #if(!$isFirstPartial),
+#end##
+      #set($isFirstPartial = false)##
+      {"id":"$elem.ID","name":"$!elem.name.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')","type":"$type","partial_depth":$depth,"partial_source":"$source"##
+      ,"stereotypes":[#set($isFirstSt=true)##
+      #foreach($st in $elem.appliedStereotype)##
+      #if(!$isFirstSt),#end#set($isFirstSt=false)##
+      "$st.name"##
+      #end]##
+      ,"owner_id":"$!elem.owner.ID"##
+      ,"documentation":"$!elem.documentation.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"##
+      }##
+    #end##
+  #end##
+#end##
+
+## ====================================================================
+## USAGE EXAMPLE
+## ====================================================================
+##
+## To use partial export functionality:
+##
+## 1. Enable partial export mode:
+##    #set($PARTIAL_EXPORT_ENABLED = true)
+##
+## 2. Set the center element ID (find this in your model):
+##    #set($CENTER_ELEMENT_ID = "your_model_element_id_here")
+##
+## 3. Configure traversal parameters (optional):
+##    #set($MAX_DEPENDENCY_DEPTH = 3)  // Go 3 hops deep
+##    #set($INCLUDE_OWN_ELEMENTS = true)  // Include children
+##
+## 4. Initialize and export:
+##    #initializePartialExport()
+##    
+## 5. Output collected elements within JSON array wrapper:
+##    {
+##      "elements": [
+##        #exportCollectedElements()
+##      ]
+##    }
+##
+## NOTE: exportCollectedElements() outputs ONLY comma-separated JSON objects.
+##       The [ ] brackets and overall structure must be provided by the caller.
+##       If $collectedElements is empty, the output will be empty (valid []).
+##
+## RESULT:
+## The export will then contain only the center element, its descendants,
+## and all elements reachable via dependency chains up to MAX_DEPENDENCY_DEPTH.
+## Each element is marked with its traversal source and depth level.
+##
+## ====================================================================
+
