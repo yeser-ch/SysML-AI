@@ -6,7 +6,7 @@ public class DummyExplanationService implements ExplanationService {
     public String fetchExplanation(String mode) {
         return "Initial Analysis (" + mode + "):\n" +
                 "XXXXXXXXXXXXXXXXXXX ExampleResponse XXXXXXXXXXXXXXXXXXX\n" +
-                "This SysML v1.x element is interpreted as a 'Block'. In the context of " +
+                "This SysML v1.xx element is interpreted as a 'Block'. In the context of " +
                 "the system architecture, it represents a structural unit that encapsulates " +
                 "both behavior and properties." ;
     }
