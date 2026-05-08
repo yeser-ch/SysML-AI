@@ -84,7 +84,7 @@ public class ExplanationDialog extends JDialog {
 
                 // Datenübergabe an die API LLM
                 if (isInitial) {
-                    return apiService.fetchExplanation(mode); //initale Anfrage mit ausgewähltem mode
+                    return apiService.fetchExplanation(targetElement,mode);
                 } else {
                     return apiService.fetchFollowUp(query); //Folgenachricht verarbeiten
                 }
