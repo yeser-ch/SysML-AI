@@ -13,6 +13,7 @@ import java.util.prefs.Preferences;
 
 public class SchroedingersBlockPlugin extends Plugin {
     public static final String PRIVACY_KEY = "data_privacy_accepted";
+    public static final String API_KEY_PREF = "gemini_api_key";
 
     @Override
     public void init() {
@@ -21,6 +22,11 @@ public class SchroedingersBlockPlugin extends Plugin {
         // Beim ersten Start nach Datenschutz fragen
         if ("UNKNOWN".equals(prefs.get(PRIVACY_KEY, "UNKNOWN"))) {
             askPrivacyConsent(prefs);
+        }
+
+        // Direkt im Anschluss den API-Key abfragen (nur, wenn der Datenschutz akzeptiert wurde und noch kein Key existiert)
+        if ("ACCEPTED".equals(prefs.get(PRIVACY_KEY, "UNKNOWN")) && prefs.get(API_KEY_PREF, "").isEmpty()) {
+            askApiKey(prefs);
         }
 
         MenuConfigurator configurator = new MenuConfigurator(); //Pluginmenu instanzeiren mit dem namen configurator
@@ -61,6 +67,20 @@ public class SchroedingersBlockPlugin extends Plugin {
             prefs.put(PRIVACY_KEY, "ACCEPTED");
         } else {
             prefs.put(PRIVACY_KEY, "DECLINED");
+        }
+    }
+
+    // Eingabefenster für den API-Key
+    public static void askApiKey(Preferences prefs) {
+        String currentKey = prefs.get(API_KEY_PREF, "");
+        String newKey = JOptionPane.showInputDialog(null,
+                "Please enter your Gemini API Key:\n(This will be saved locally on your device)",
+                "API Key Configuration",
+                JOptionPane.QUESTION_MESSAGE);
+
+        // Nur speichern, wenn der Nutzer nicht "Abbrechen" gedrückt hat und das Feld nicht leer ist
+        if (newKey != null && !newKey.trim().isEmpty()) {
+            prefs.put(API_KEY_PREF, newKey.trim());
         }
     }
 

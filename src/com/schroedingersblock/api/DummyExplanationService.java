@@ -6,14 +6,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.prefs.Preferences;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
+import com.schroedingersblock.core.SchroedingersBlockPlugin;
 
 public class DummyExplanationService implements ExplanationService {
 
-    // 🚨 WICHTIG: API-Key geheim halten! (Bitte nach dem Testen im Google AI Studio erneuern!) 🚨
-    private static final String API_KEY = "";
     private static final String MODEL = "gemini-2.5-flash";
-
     private final List<String> conversationHistory = new ArrayList<>();
 
     @Override
@@ -33,6 +32,15 @@ public class DummyExplanationService implements ExplanationService {
     }
 
     private String callGemini(String userMessage) {
+        // --- NEU: API-Key dynamisch aus den Preferences laden ---
+        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
+        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+
+        if (apiKey.isEmpty()) {
+            return "⚠️ Error: No API-Key found. Please restart the analysis and enter a valid key.";
+        }
+        // ---------------------------------------------------------
+
         try {
             // 1. JSON für die Nachricht bauen
             String userJson = "{\"role\": \"user\", \"parts\": [{\"text\": \"" + escapeJson(userMessage) + "\"}]}";
@@ -44,12 +52,12 @@ public class DummyExplanationService implements ExplanationService {
                     "\"contents\": [" + historyArray + "]," +
                     "\"generationConfig\": {" +
                     "  \"temperature\": 0.7," +
-                    "  \"maxOutputTokens\": 2048" +
+                    "  \"maxOutputTokens\": 8192" +
                     "}" +
                     "}";
 
             // 3. HTTP Request konfigurieren
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=" + API_KEY;
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=" + apiKey;
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
