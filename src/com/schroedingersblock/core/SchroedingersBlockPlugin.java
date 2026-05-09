@@ -58,7 +58,7 @@ public class SchroedingersBlockPlugin extends Plugin {
     // Zeigt das DatenschutzustimmungsFenster an und speichert die Antwort
     public static void askPrivacyConsent(Preferences prefs) {
         int choice = JOptionPane.showConfirmDialog(null,
-                "Privacy Notice: \nBy using this plugin, model data will be sent to an external AI provider.\nDo you agree?",
+                "Privacy Notice: \nBy using this plugin, model data will be sent to an external AI provider.\nDo you agree ?",
                 "Data Privacy",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
