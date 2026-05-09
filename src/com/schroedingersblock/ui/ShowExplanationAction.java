@@ -17,8 +17,8 @@ import com.nomagic.magicdraw.core.Project;
 import com.schroedingersblock.data_extraction.DataExtractionService;
 
 public class ShowExplanationAction extends MDAction { //MagicDraw-Button
-    private String mode;
-    private Element targetElement;
+    private final String mode;
+    private final Element targetElement;
 
     public ShowExplanationAction(String mode, Element targetElement) {
         super("EXPL_" + mode.toUpperCase().replace(" ", "_"), mode, null, null); //ID vergeben.. z.b: EXPL_ELEMENT_VIEW
@@ -32,9 +32,9 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
         String consent = prefs.get(SchroedingersBlockPlugin.PRIVACY_KEY, "UNKNOWN"); //aktuelle Datenschutzpräferenz
 
         if ("ACCEPTED".equals(consent)) { //wenn zugestimmt
-            openDialog();
+            checkApiKeyAndOpenDialog(prefs); // NEU: Ausgelagerte Logik
         } else { // Wenn der Nutzer abgelehnt hat --> erneute Prüfung
-            int choice = JOptionPane.showConfirmDialog(null, //errorfenster mit frage ob nochmal das Datenschutzfenster angezeigt werden soll
+            int choice = JOptionPane.showConfirmDialog(null,
                     "Access Denied: You declined the Data Privacy Policy.\nReview and accept now?",
                     "Privacy Error",
                     JOptionPane.YES_NO_OPTION,
@@ -43,11 +43,28 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
             if (choice == JOptionPane.YES_OPTION) {
                 SchroedingersBlockPlugin.askPrivacyConsent(prefs);
 
-                // Wenn jetzt zugestimmt, direkt Chat-Fenster öffnen
+                // Wenn jetzt zugestimmt, API Key prüfen und Dialog öffnen
                 if ("ACCEPTED".equals(prefs.get(SchroedingersBlockPlugin.PRIVACY_KEY, "UNKNOWN"))) {
-                    openDialog();
+                    checkApiKeyAndOpenDialog(prefs); // NEU
                 }
             }
+        }
+    }
+
+    private void checkApiKeyAndOpenDialog(Preferences prefs) {
+        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+
+        // Wenn kein Key vorhanden ist, Nutzer fragen
+        if (apiKey.isEmpty()) {
+            SchroedingersBlockPlugin.askApiKey(prefs);
+            apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, ""); // Key nach Eingabe neu laden
+        }
+
+        // Nur wenn wir jetzt einen Key haben, öffne Dialog
+        if (!apiKey.isEmpty()) {
+            openDialog();
+        } else {
+            Application.getInstance().getGUILog().log("[Schrödinger's Block] Info: Analyse abgebrochen, da kein API-Key hinterlegt wurde.");
         }
     }
 
