@@ -11,7 +11,7 @@ import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 public class DummyExplanationService implements ExplanationService {
 
     // 🚨 WICHTIG: API-Key geheim halten! (Bitte nach dem Testen im Google AI Studio erneuern!) 🚨
-    private static final String API_KEY = "AIzaSyA2B_SegI_s6QNZ1WrJqNi6K8R_h-B8Qjw";
+    private static final String API_KEY = "";
     private static final String MODEL = "gemini-2.5-flash";
 
     private final List<String> conversationHistory = new ArrayList<>();
