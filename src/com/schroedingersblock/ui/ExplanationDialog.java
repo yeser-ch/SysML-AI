@@ -43,9 +43,14 @@ public class ExplanationDialog extends JDialog {
         header.setFont(new Font("Arial", Font.BOLD, 16));
         add(header, BorderLayout.NORTH);
 
-        chatPanel = new JPanel();
+        chatPanel = new ScrollablePanel(); //Erzwingt den Zeilenumbruch
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
         scrollPane = new JScrollPane(chatPanel);
+
+        //Scroll-Geschwindigkeit und horizontales Scrollen anpassen
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16); // 16px pro Tick (flüssiges, schnelles Scrollen)
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); // Verhindert endloses Wachstum nach rechts
+
         add(scrollPane, BorderLayout.CENTER);
 
         // --- Eingabebereich ---
@@ -166,5 +171,21 @@ public class ExplanationDialog extends JDialog {
             chatPanel.revalidate();
             chatPanel.repaint();
         }
+    }
+
+    // Hilfsklasse für dynamischen Zeilenumbruch
+    // Implementiert das Scrollable-Interface, um dem JScrollPane zu sagen:
+    // "Bitte pass meine Breite immer exakt an die Fensterbreite an!"
+    private class ScrollablePanel extends JPanel implements Scrollable {
+        @Override
+        public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) { return 16; }
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) { return 16; }
+        @Override
+        public boolean getScrollableTracksViewportWidth() { return true; }
+        @Override
+        public boolean getScrollableTracksViewportHeight() { return false; }
     }
 }
