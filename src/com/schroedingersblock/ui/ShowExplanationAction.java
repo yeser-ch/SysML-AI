@@ -70,17 +70,17 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
 
     private void openDialog() {
         // --- NEU: JSON-Export triggern, bevor das Dialog-Fenster öffnet ---
-        Project project = Application.getInstance().getProject();
-        if (project != null) {
-            // Wenn "Model View" gewählt wurde, Scope null lassen (-> exportiert gesamtes Primärmodell)
-            // Wenn "Element View" gewählt wurde, nutzen wir das targetElement als Scope
-            Element scope = "Model View".equals(mode) ? null : targetElement;
-            
-            boolean success = DataExtractionService.executeJsonExport(project, scope);
-            if (!success) {
-                Application.getInstance().getGUILog().log("[Schrödinger's Block] Warnung: JSON-Export fehlgeschlagen.");
-            }
-        }
+        //Project project = Application.getInstance().getProject();
+        //if (project != null) {
+        //    // Wenn "Model View" gewählt wurde, Scope null lassen (-> exportiert gesamtes Primärmodell)
+        //    // Wenn "Element View" gewählt wurde, nutzen wir das targetElement als Scope
+        //    Element scope = "Model View".equals(mode) ? null : targetElement;
+        //
+        //    boolean success = DataExtractionService.executeJsonExport(project, scope);
+        //    if (!success) {
+        //        Application.getInstance().getGUILog().log("[Schrödinger's Block] Warnung: JSON-Export fehlgeschlagen.");
+        //}
+    //    }
         // ------------------------------------------------------------------
 
         new ExplanationDialog(mode, targetElement).setVisible(true); //modus und aktuelles Element weitergeben und chatfenster aktivieren
