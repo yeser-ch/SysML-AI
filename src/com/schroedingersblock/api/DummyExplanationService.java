@@ -14,11 +14,21 @@ public class DummyExplanationService implements ExplanationService {
 
     private static final String MODEL = "gemini-2.5-flash";
     private final List<String> conversationHistory = new ArrayList<>();
+    private String currentDetailLevel = "Basic"; // Standardwert
+
+    @Override
+    public void setDetailLevel(String level) {
+        this.currentDetailLevel = level;
+        System.out.println("[Service] Detail level set to: " + level);
+    }
 
     @Override
     public String fetchExplanation(Element targetElement, String mode) {
         // Hier nutzen wir das targetElement, um den Namen des Blocks zu bekommen
         String elementName = (targetElement != null) ? targetElement.getHumanName() : "Unbekanntes Element";
+
+        // Vorbereitung: Hier wird später zwischen den Prompts unterschieden
+        String detailInfo = "Basic".equals(currentDetailLevel) ? "short and easy" : "academic and extensive";
 
         String initialPrompt = "Du bist ein SysML-Experte. Analysiere das Element '" + elementName + "' im Modus: " + mode + ".\n" +
                 "Bitte erkläre kurz, was es im Kontext der Systemarchitektur bedeutet.";
