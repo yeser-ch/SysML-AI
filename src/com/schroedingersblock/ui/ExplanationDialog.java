@@ -7,6 +7,9 @@ package com.schroedingersblock.ui;
 import com.schroedingersblock.api.DummyExplanationService;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.NamedElement; // NEU: Wichtig für getName()
+import com.nomagic.magicdraw.core.Application;
+import com.nomagic.magicdraw.core.Project;
+import com.schroedingersblock.data_extraction.DataExtractionService;
 import javax.swing.*;
 import java.awt.*;
 
@@ -17,6 +20,7 @@ public class ExplanationDialog extends JDialog {
     private JTextField inputField;
     private final String mode;
     private final Element targetElement;
+    private JButton runBtn; // Als Feld deklarieren
 
     // Hier wird die LLM Logik angebunden
     private final DummyExplanationService apiService = new DummyExplanationService();
@@ -29,32 +33,57 @@ public class ExplanationDialog extends JDialog {
         setSize(550, 600);
         setLocationRelativeTo(null);
         setAlwaysOnTop(true);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
 
         buildUI();
 
-        // Start-Anfrage beim Öffnen des Fensters (mit geschütztem Leerzeichen)
-        addMessage("System", "Generating initial SysML explanation\u00A0...");
-        fetchData(mode, true);
+        // 1. Sofortige Rückmeldung
+        addMessage("System", "Starting model data export for <b>" + mode + "</b>\u00A0...");
+
+        // 2. Export im Hintergrund starten
+        runExportTask();
     }
 
     private void buildUI() {
-        JLabel header = new JLabel(" SysML Analysis: " + mode);
-        header.setFont(new Font("Arial", Font.BOLD, 16));
-        add(header, BorderLayout.NORTH);
+        // --- Header Panel (Oben) ---
+        JPanel headerPanel = new JPanel(new BorderLayout(10, 0));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
 
-        chatPanel = new ScrollablePanel(); //Erzwingt den Zeilenumbruch
+        // Titel und Target-Informationen werden über die Hilfsmethode geladen
+        headerPanel.add(createTitleArea(), BorderLayout.WEST);
+
+        // Die Steuerelemente (rechts)
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+
+        String[] levels = {"Basic", "Expert"};
+        JComboBox<String> levelBox = new JComboBox<>(levels);
+
+        runBtn = new JButton("RUN");
+        runBtn.setEnabled(false); // Am Anfang deaktiviert, bis der Export fertig ist
+
+        controlPanel.add(new JLabel("Detail Level: "));
+        controlPanel.add(levelBox);
+        controlPanel.add(runBtn);
+
+        headerPanel.add(controlPanel, BorderLayout.EAST);
+        add(headerPanel, BorderLayout.NORTH);
+
+        // --- Chat Bereich (Mitte) ---
+        chatPanel = new ScrollablePanel();
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
         scrollPane = new JScrollPane(chatPanel);
 
-        //Scroll-Geschwindigkeit und horizontales Scrollen anpassen
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16); // 16px pro Tick (flüssiges, schnelles Scrollen)
-        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); // Verhindert endloses Wachstum nach rechts
+        // Scroll-Geschwindigkeit und horizontales Scrollen anpassen
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
         add(scrollPane, BorderLayout.CENTER);
 
-        // --- Eingabebereich ---
+        // --- Eingabebereich (Süden) ---
         JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
+
         inputField = new JTextField();
         JButton sendBtn = new JButton("Send");
 
@@ -62,33 +91,21 @@ public class ExplanationDialog extends JDialog {
         bottomPanel.add(inputField, BorderLayout.CENTER);
         bottomPanel.add(sendBtn, BorderLayout.EAST);
 
-        // Wenn "Send" geklickt oder Enter gedrückt wird:
+        // Wenn "Send" geklickt oder Enter gedrückt wird
         sendBtn.addActionListener(e -> sendMessage());
         inputField.addActionListener(e -> sendMessage());
 
-        // --- Container für Eingabe + Statusleiste (Süden) ---
-        JPanel southContainer = new JPanel(new BorderLayout());
-        southContainer.add(bottomPanel, BorderLayout.CENTER);
+        add(bottomPanel, BorderLayout.SOUTH);
 
-        // Statusleiste erstellen (Englisch + Typ & Spezifischer Name)
-        String type = (targetElement != null) ? targetElement.getHumanType() : "Unknown";
-        String name = "";
-        if (targetElement instanceof NamedElement) {
-            String tempName = ((NamedElement) targetElement).getName();
-            if (tempName != null && !tempName.isEmpty()) {
-                name = " '" + tempName + "'";
-            }
-        }
+        // --- Logik für den RUN Button ---
+        runBtn.addActionListener(e -> {
+            // Ausgewähltes Level (Expert/Basic) an das Backend übergeben
+            apiService.setDetailLevel((String) levelBox.getSelectedItem());
 
-        String displayName = type + name;
-
-        JLabel statusBar = new JLabel(" Analyzed Target: " + displayName);
-        statusBar.setFont(new Font("Arial", Font.ITALIC, 11));
-        statusBar.setForeground(Color.GRAY);
-        statusBar.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
-
-        southContainer.add(statusBar, BorderLayout.SOUTH);
-        add(southContainer, BorderLayout.SOUTH);
+            // Neue Analyse starten
+            addMessage("AI", "Generating initial SysML explanation\u00A0...");
+            fetchData(mode, true);
+        });
     }
 
     // "Send" geklickt:
@@ -138,29 +155,22 @@ public class ExplanationDialog extends JDialog {
     private void addMessage(String sender, String message) {
         JPanel row = new JPanel(new BorderLayout());
 
-        // --- REFACTORING: JEditorPane statt JLabel für flexiblen Textumbruch ---
-        JEditorPane textPane = new JEditorPane();
-        textPane.setContentType("text/html");
-
-        // Inline-CSS für ein sauberes Erscheinungsbild ohne harte Breiten (px)
-        String htmlContent = "<html><body style='font-family: sans-serif; font-size: 11px; margin: 0; padding: 0;'>"
-                + "<b>" + sender + ":</b><br>"
-                + message.replace("\n", "<br>")
-                + "</body></html>";
-
-        textPane.setText(htmlContent);
-        textPane.setEditable(false);
-        textPane.setOpaque(false); // Transparenter Hintergrund, damit es wie ein Label aussieht
-        textPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        // JEditorPane-Erstellung ausgelagert.
+        JEditorPane textPane = createTextPane(sender, message);
 
         row.add(textPane, BorderLayout.CENTER);
         chatPanel.add(row);
-        chatPanel.revalidate(); // Fenstergröße anpassen/aktualisieren
+        chatPanel.revalidate();
 
-        // Scrollt die Ansicht im Fenster automatisch nach unten
         SwingUtilities.invokeLater(() -> {
-            JScrollBar bar = scrollPane.getVerticalScrollBar();
-            bar.setValue(bar.getMaximum());
+            if ("AI".equals(sender)) {
+                // Bei KI-Antworten: Scrolle genau zur Y-Koordinate dieser neuen Nachricht (zum Anfang)
+                chatPanel.scrollRectToVisible(new Rectangle(0, row.getY(), 1, 1));
+            } else {
+                // Bei User oder System: Ganz nach unten scrollen
+                JScrollBar bar = scrollPane.getVerticalScrollBar();
+                bar.setValue(bar.getMaximum());
+            }
         });
     }
 
@@ -173,10 +183,92 @@ public class ExplanationDialog extends JDialog {
         }
     }
 
+    private void runExportTask() {
+        SwingWorker<Boolean, Void> exportWorker = new SwingWorker<>() {
+            @Override
+            protected Boolean doInBackground() {
+                Project project = Application.getInstance().getProject();
+                if (project == null) return false;
+
+                // Bestimmung des Scopes (wie vorher in der Action)
+                Element scope = "Model View".equals(mode) ? null : targetElement;
+
+                // Der eigentliche Export-Aufruf
+                return DataExtractionService.executeJsonExport(project, scope);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    if (get()) { // Wenn erfolgreich
+                        addMessage("System", "Model data successfully exported.");
+                        addMessage("System", "Please select a detail level and press <b>RUN</b> to start analysis.");
+                        runBtn.setEnabled(true); // Jetzt darf der Nutzer die KI starten
+                    } else {
+                        addMessage("System", "Error: Model export failed. Please check the CATIA Log.");
+                    }
+                } catch (Exception e) {
+                    addMessage("System", "Critical Error during export: " + e.getMessage());
+                }
+            }
+        };
+        exportWorker.execute();
+    }
+
+    // Hilfsmethode zur Erstellung des Textfeldes für Nachrichten.
+    private JEditorPane createTextPane(String sender, String message) {
+        JEditorPane textPane = new JEditorPane();
+        textPane.setContentType("text/html");
+
+        String htmlContent = "<html><body style='font-family: sans-serif; font-size: 11px; margin: 0; padding: 0;'>"
+                + "<b>" + sender + ":</b><br>"
+                + message.replace("\n", "<br>")
+                + "</body></html>";
+
+        textPane.setText(htmlContent);
+        textPane.setEditable(false);
+        textPane.setOpaque(false);
+        textPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        return textPane;
+    }
+
+    // Zentrale Methode für den Namen des Elements
+    private String getTargetDisplayName() {
+        String type = (targetElement != null) ? targetElement.getHumanType() : "Unknown";
+        String name = "";
+        if (targetElement instanceof NamedElement) {
+            String tempName = ((NamedElement) targetElement).getName();
+            if (tempName != null && !tempName.isEmpty()) {
+                name = " '" + tempName + "'";
+            }
+        }
+        return type + name;
+    }
+
+    // Hilfsmethode für den Titel-Bereich (Oben Links)
+    private JPanel createTitleArea() {
+        JPanel titleArea = new JPanel();
+        titleArea.setLayout(new BoxLayout(titleArea, BoxLayout.Y_AXIS));
+        titleArea.setOpaque(false);
+
+        JLabel titleLabel = new JLabel("SysML Analysis: " + mode);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        titleArea.add(titleLabel);
+
+        // Nutzt jetzt die zentrale Hilfsmethode!
+        JLabel subtitleLabel = new JLabel("Target: " + getTargetDisplayName());
+        subtitleLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+        subtitleLabel.setForeground(Color.GRAY);
+        titleArea.add(subtitleLabel);
+
+        return titleArea;
+    }
+
     // Hilfsklasse für dynamischen Zeilenumbruch
     // Implementiert das Scrollable-Interface, um dem JScrollPane zu sagen:
     // "Bitte pass meine Breite immer exakt an die Fensterbreite an!"
-    private class ScrollablePanel extends JPanel implements Scrollable {
+    private static class ScrollablePanel extends JPanel implements Scrollable {
         @Override
         public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
         @Override
