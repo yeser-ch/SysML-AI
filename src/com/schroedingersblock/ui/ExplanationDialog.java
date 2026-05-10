@@ -29,20 +29,42 @@ public class ExplanationDialog extends JDialog {
         setSize(550, 600);
         setLocationRelativeTo(null);
         setAlwaysOnTop(true);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
 
         buildUI();
 
-        // Start-Anfrage beim Öffnen des Fensters (mit geschütztem Leerzeichen)
-        addMessage("System", "Generating initial SysML explanation\u00A0...");
+        // FEEDBACK: Zeigt dem Nutzer, dass der Export (aus der Action) geklappt hat
+        addMessage("System", "Model data successfully exported and ready for analysis.");
+        addMessage("System", "Please select your preferred detail level and press RUN.");
         fetchData(mode, true);
     }
 
     private void buildUI() {
-        JLabel header = new JLabel(" SysML Analysis: " + mode);
-        header.setFont(new Font("Arial", Font.BOLD, 16));
-        add(header, BorderLayout.NORTH);
+        // --- Header Panel (Oben) ---
+        JPanel headerPanel = new JPanel(new BorderLayout(10, 0));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0)); // Etwas Abstand nach unten
 
+        // Der alte Titel (links)
+        JLabel titleLabel = new JLabel(" SysML Analysis: " + mode);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        headerPanel.add(titleLabel, BorderLayout.WEST);
+
+        // Die Steuerelemente (rechts)
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+
+        String[] levels = {"Basic", "Expert"};
+        JComboBox<String> levelBox = new JComboBox<>(levels);
+        JButton runBtn = new JButton("RUN");
+
+        controlPanel.add(new JLabel("Detail Level: "));
+        controlPanel.add(levelBox);
+        controlPanel.add(runBtn);
+
+        headerPanel.add(controlPanel, BorderLayout.EAST);
+        add(headerPanel, BorderLayout.NORTH); // Fügt das gesamte Konstrukt oben ein
+
+        // --- Chat Bereich (Mitte)
         chatPanel = new ScrollablePanel(); //Erzwingt den Zeilenumbruch
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
         scrollPane = new JScrollPane(chatPanel);
@@ -53,7 +75,7 @@ public class ExplanationDialog extends JDialog {
 
         add(scrollPane, BorderLayout.CENTER);
 
-        // --- Eingabebereich ---
+        // --- Eingabebereich (Süden)
         JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
         inputField = new JTextField();
         JButton sendBtn = new JButton("Send");
@@ -66,7 +88,7 @@ public class ExplanationDialog extends JDialog {
         sendBtn.addActionListener(e -> sendMessage());
         inputField.addActionListener(e -> sendMessage());
 
-        // --- Container für Eingabe + Statusleiste (Süden) ---
+        // --- Container für Eingabe + Statusleiste (Süden)
         JPanel southContainer = new JPanel(new BorderLayout());
         southContainer.add(bottomPanel, BorderLayout.CENTER);
 
@@ -89,6 +111,21 @@ public class ExplanationDialog extends JDialog {
 
         southContainer.add(statusBar, BorderLayout.SOUTH);
         add(southContainer, BorderLayout.SOUTH);
+
+        // --- NEU: Logik für den RUN Button ---
+        runBtn.addActionListener(e -> {
+            // 1. Info (Expert/Basic) an das Backend übergeben
+            apiService.setDetailLevel((String) levelBox.getSelectedItem());
+
+            // 2. Chat-Fenster bereinigen (löscht alte Nachrichten)
+            chatPanel.removeAll();
+            chatPanel.revalidate();
+            chatPanel.repaint();
+
+            // 3. Neue Analyse starten
+            addMessage("AI", "Generating initial SysML explanation\u00A0...");
+            fetchData(mode, true);
+        });
     }
 
     // "Send" geklickt:
@@ -176,7 +213,7 @@ public class ExplanationDialog extends JDialog {
     // Hilfsklasse für dynamischen Zeilenumbruch
     // Implementiert das Scrollable-Interface, um dem JScrollPane zu sagen:
     // "Bitte pass meine Breite immer exakt an die Fensterbreite an!"
-    private class ScrollablePanel extends JPanel implements Scrollable {
+    private static class ScrollablePanel extends JPanel implements Scrollable {
         @Override
         public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
         @Override
