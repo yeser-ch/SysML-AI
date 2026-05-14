@@ -51,11 +51,16 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
 
     // Hauptmenü-Eintrag "Schrödinger's Block" mit dropdownmenü
     private void addMenu(ActionsManager mngr, Element targetElement) {
-        // Verhindert, dass das Menü doppelt eingefügt wird
-        //if (mngr.getCategory("SCHROEDINGER_ROOT") != null) return;
+
+        // Verhindert, dass das Menü bei mehrfachen Klick-Events im Diagramm doppelt eingefügt wird
+        if (mngr.getActionFor("SCHROEDINGER_ROOT") != null) {
+            return;
+        }
 
         ActionsCategory category = new ActionsCategory("SCHROEDINGER_ROOT", "Schrödinger's Block");
-        category.setNested(true);//Pfeil nach rechts
+        category.setNested(true); // Pfeil nach rechts
+
+        category.setDescription("AI-powered SysML analysis tool");
 
         category.addAction(new ShowExplanationAction("Element View", targetElement));
         category.addAction(new ShowExplanationAction("Model View", targetElement));
