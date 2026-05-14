@@ -20,7 +20,8 @@ public class DataExtractionService {
 
     private static final String PLUGIN_ID = "com.schroedingersblock.plugin";
     private static final String DATA_EXTRACTION_DIR = "data_extraction";
-    private static final String TEMPLATE_NAME = "sysml_flat_export.vm";
+    private static final String TEMPLATE_NAME_FLAT = "sysml_flat_export.vm";
+    private static final String TEMPLATE_NAME_PARTIAL = "sysml_partial_export.vm";
     private static final String TARGET_SUBDIR = "raw_model_data";
 
     /**
@@ -44,14 +45,21 @@ public class DataExtractionService {
             // 1. Basis-Verzeichnis ermitteln (Plugin-Verzeichnis)
             File baseDir = getBaseDirectory(currentProject);
 
-            // 2. Template-Pfad prüfen
-            File templateFile = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + TEMPLATE_NAME);
+            // 2. Template-Auswahl basierend auf exportScope
+            // - exportScope == null: Model View → sysml_flat_export.vm
+            // - exportScope != null: Element View → sysml_partial_export.vm
+            boolean isElementView = (exportScope != null);
+            String selectedTemplate = isElementView ? TEMPLATE_NAME_PARTIAL : TEMPLATE_NAME_FLAT;
+            log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View (partial)" : "Model View (flat)"));
+
+            // 3. Template-Pfad prüfen
+            File templateFile = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + selectedTemplate);
             if (!templateFile.exists()) {
                 log.log("[DataExtractionService] Fehler: Template nicht gefunden unter: " + templateFile.getAbsolutePath());
                 return false;
             }
 
-            // 3. Ziel-Ordner erstellen, falls nicht vorhanden
+            // 4. Ziel-Ordner erstellen, falls nicht vorhanden
             File targetDir = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + TARGET_SUBDIR);
             if (!targetDir.exists()) {
                 boolean created = targetDir.mkdirs();
@@ -61,27 +69,34 @@ public class DataExtractionService {
                 }
             }
 
-            // 4. Dynamischen Dateinamen mit Zeitstempel generieren
+            // 5. Dynamischen Dateinamen mit Zeitstempel generieren
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
             String outputFileName = "export_" + timestamp + ".json";
             File outputFile = new File(targetDir, outputFileName);
 
-            // 5. Scope festlegen
+            // 6. Scope festlegen
             Element scope = (exportScope != null) ? exportScope : currentProject.getPrimaryModel();
             if (scope == null) {
                 log.log("[DataExtractionService] Fehler: Kein gültiger Scope für den Export gefunden.");
                 return false;
             }
 
-            // 6. ITemplateEngine Workflow
+            // 7. ITemplateEngine Workflow
             ITemplateEngine engine = new TextEngine();
             try {
-                // Template erstellen
-                Template template = engine.createTemplate(templateFile, outputFile);
-                
-                // Kontext (Project und Scope) an die Engine übergeben
+                // WICHTIG: Context ZUERST setzen (vor createTemplate)
+                // Manche Template-Engines benötigen den Context beim Parsen
                 engine.addContext("project", currentProject);
                 engine.addContext("element", scope);
+                
+                // Für partielle Exports: centerElement übergeben (wird von sysml_partial_export.vm genutzt)
+                if (isElementView && exportScope != null) {
+                    engine.addContext("centerElement", exportScope);
+                    log.log("[DataExtractionService] Center Element für Partial Export gesetzt: " + exportScope.getHumanName());
+                }
+                
+                // Template erstellen (nach Context-Setup)
+                Template template = engine.createTemplate(templateFile, outputFile);
                 
                 // Encodings setzen
                 engine.setProperty("input.encoding", "UTF-8");
