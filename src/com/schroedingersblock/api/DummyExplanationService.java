@@ -13,6 +13,15 @@ import com.schroedingersblock.core.SchroedingersBlockPlugin;
 public class DummyExplanationService implements ExplanationService {
 
     private static final String MODEL = "gemini-2.5-flash";
+
+    // ─── Modus Konfiguration ───────────────────────────────────────────────────
+    private static final int EXPERT_MAX_TOKENS = 8192; // Max-Limit für detaillierte Antworten
+    private static final double EXPERT_TEMPERATURE = 0.2;
+
+    private static final int BASIC_MAX_TOKENS = 800;
+    private static final double BASIC_TEMPERATURE = 0.3;
+
+    // ─── Conversation State ────────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
     private String currentDetailLevel = "Basic"; // Standardwert
 
@@ -24,49 +33,63 @@ public class DummyExplanationService implements ExplanationService {
 
     @Override
     public String fetchExplanation(Element targetElement, String mode) {
-        // Hier nutzen wir das targetElement, um den Namen des Blocks zu bekommen
-        String elementName = (targetElement != null) ? targetElement.getHumanName() : "Unbekanntes Element";
+        // Element-Informationen für den Prompt extrahieren
+        String elementName = (targetElement != null) ? targetElement.getHumanName() : "Unknown element";
+        String elementType = (targetElement != null) ? targetElement.getHumanType() : "Unknown type";
+        String ownerName = (targetElement != null && targetElement.getOwner() != null)
+                ? targetElement.getOwner().getHumanName()
+                : "root";
 
-        // Vorbereitung: Hier wird später zwischen den Prompts unterschieden
-        String detailInfo = "Basic".equals(currentDetailLevel) ? "short and easy" : "academic and extensive";
+        // TODO: Später durch  JSON-Export der DataExtractionService ersetzen
+        String exportedXml = "No XML/JSON export available yet.";
 
-        String initialPrompt = "Du bist ein SysML-Experte. Analysiere das Element '" + elementName + "' im Modus: " + mode + ".\n" +
-                "Bitte erkläre kurz, was es im Kontext der Systemarchitektur bedeutet.";
+        // Prompt dynamisch über den externen Loader laden und mit Werten füllen
+        String initialPrompt = PromptLoader.buildPrompt(
+                currentDetailLevel, elementName, elementType, ownerName, exportedXml);
 
-        return callGemini(initialPrompt);
+        // Anfrage an die KI senden (mit dem ausgewählten Level)
+        return callGemini(initialPrompt, currentDetailLevel);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        return callGemini(question);
+        // Follow-Up Fragen nutzen immer den EXPERT-Modus (für tiefgreifende technische Konversationen)
+        return callGemini(question, "Expert");
     }
 
-    private String callGemini(String userMessage) {
-        // --- NEU: API-Key dynamisch aus den Preferences laden ---
+    // ─── Interne LLM API Logik ─────────────────────────────────────────────────
+
+    private String callGemini(String userMessage, String detailLevel) {
+        // API-Key sicher aus den lokalen Preferences laden
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
             return "⚠️ Error: No API-Key found. Please restart the analysis and enter a valid key.";
         }
-        // ---------------------------------------------------------
 
         try {
-            // 1. JSON für die Nachricht bauen
+            // 1. JSON für die User-Nachricht bauen und speichern
             String userJson = "{\"role\": \"user\", \"parts\": [{\"text\": \"" + escapeJson(userMessage) + "\"}]}";
             conversationHistory.add(userJson);
 
-            // 2. Request-Body zusammenbauen
+            // 2. Dynamische Konfiguration basierend auf dem Detail-Level wählen
+            boolean isExpert = "Expert".equalsIgnoreCase(detailLevel);
+            int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
+            double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
+
+            // 3. Request-Body zusammenbauen
             String historyArray = String.join(",", conversationHistory);
             String requestBody = "{" +
                     "\"contents\": [" + historyArray + "]," +
                     "\"generationConfig\": {" +
-                    "  \"temperature\": 0.7," +
-                    "  \"maxOutputTokens\": 8192" +
+                    "  \"temperature\": " + temp + "," +
+                    "  \"maxOutputTokens\": " + maxTokens + "," +
+                    "  \"topP\": 0.9" +
                     "}" +
                     "}";
 
-            // 3. HTTP Request konfigurieren
+            // 4. HTTP Request konfigurieren
             String url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=" + apiKey;
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -75,28 +98,31 @@ public class DummyExplanationService implements ExplanationService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            // 4. Client öffnen und senden (Normal, OHNE den extra try-Block!)
+            // 5. Client öffnen und Request senden
             HttpClient client = HttpClient.newHttpClient();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
+            // 6. Fehlerbehandlung
             if (response.statusCode() != 200) {
-                return "⚠️ Fehler von der KI (HTTP " + response.statusCode() + "):\n" + response.body();
+                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + response.body();
             }
 
-            // 5. Text extrahieren
+            // 7. Text extrahieren
             String responseText = extractTextFromJson(response.body());
 
-            // 6. Antwort im Verlauf speichern
+            // 8. Antwort der KI im Verlauf speichern
             String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
             conversationHistory.add(modelJson);
 
             return responseText;
 
         } catch (Exception e) {
-            System.err.println("[Schrödingers Block] Fehler: " + e.getMessage());
-            return "❌ Interner Fehler: " + e.getMessage();
+            System.err.println("[Schrödingers Block] Error calling Gemini: " + e.getMessage());
+            return "❌ Internal error: " + e.getMessage();
         }
     }
+
+    // ─── JSON Hilfsmethoden ────────────────────────────────────────────────────
 
     private String escapeJson(String text) {
         if (text == null) return "";
@@ -111,23 +137,24 @@ public class DummyExplanationService implements ExplanationService {
         try {
             String searchString = "\"text\": \"";
             int startIndex = json.indexOf(searchString);
-            if (startIndex == -1) return "Konnte Text nicht finden.";
+            if (startIndex == -1) return "Could not find text in response.";
 
             startIndex += searchString.length();
             int endIndex = json.indexOf("\"", startIndex);
 
+            // Escapede Anführungszeichen überspringen
             while (endIndex != -1 && json.charAt(endIndex - 1) == '\\') {
                 endIndex = json.indexOf("\"", endIndex + 1);
             }
 
-            if (endIndex == -1) return "Fehler beim Parsen der Antwort.";
+            if (endIndex == -1) return "Error parsing response.";
 
             String extracted = json.substring(startIndex, endIndex);
             return extracted.replace("\\n", "\n")
                     .replace("\\\"", "\"")
                     .replace("\\\\", "\\");
         } catch (Exception e) {
-            return "Fehler beim Text-Extrakt.";
+            return "Error extracting text from response.";
         }
     }
 }
