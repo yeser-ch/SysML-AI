@@ -63,6 +63,24 @@ public class ExplanationDialog extends JFrame {
         String defaultMode = prefs.get(com.schroedingersblock.core.SchroedingersBlockPlugin.DEFAULT_MODE_PREF, "Basic");
         levelBox.setSelectedItem(defaultMode);
         levelBox.setToolTipText("Choose how detailed you want the AI to explain the system to you.");
+        //Tooltips für die Einträge im Dropdown (Hover)
+        levelBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                JComponent comp = (JComponent) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+
+                // index -1 ist der aktuell ausgewählte Eintrag in der Box
+                // index >= 0 sind die Einträge in der aufgeklappten Liste
+                if (value != null) {
+                    if ("Basic".equals(value)) {
+                        comp.setToolTipText("Short, concise explanations.");
+                    } else if ("Expert".equals(value)) {
+                        comp.setToolTipText("Long, detailed explanations.");
+                    }
+                }
+                return comp;
+            }
+        });
 
         runBtn = new JButton("RUN");
         runBtn.setEnabled(false); // Deaktiviert bis Export abgeschlossen
