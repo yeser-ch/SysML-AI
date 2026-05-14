@@ -58,6 +58,12 @@ public class ExplanationDialog extends JFrame {
         String[] levels = {"Basic", "Expert"};
         JComboBox<String> levelBox = new JComboBox<>(levels);
 
+        // Standardwert aus den Einstellungen laden
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(com.schroedingersblock.core.SchroedingersBlockPlugin.class);
+        String defaultMode = prefs.get(com.schroedingersblock.core.SchroedingersBlockPlugin.DEFAULT_MODE_PREF, "Basic");
+        levelBox.setSelectedItem(defaultMode);
+        levelBox.setToolTipText("Choose how detailed you want the AI to explain the system to you.");
+
         runBtn = new JButton("RUN");
         runBtn.setEnabled(false); // Deaktiviert bis Export abgeschlossen
 
@@ -95,6 +101,7 @@ public class ExplanationDialog extends JFrame {
         add(bottomPanel, BorderLayout.SOUTH);
 
         // Logik für den RUN Button ---
+        runBtn.setToolTipText("Start AI analysis.");
         runBtn.addActionListener(e -> {
             apiService.setDetailLevel((String) levelBox.getSelectedItem());
 
