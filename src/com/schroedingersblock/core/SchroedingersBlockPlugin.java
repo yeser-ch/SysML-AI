@@ -6,14 +6,20 @@
 
 package com.schroedingersblock.core;
 
+import com.nomagic.actions.AMConfigurator;
+import com.nomagic.actions.ActionsCategory;
+import com.nomagic.actions.ActionsManager;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.actions.ActionsConfiguratorsManager;
+import com.schroedingersblock.ui.OpenSettingsAction;
+
 import javax.swing.JOptionPane;
 import java.util.prefs.Preferences;
 
 public class SchroedingersBlockPlugin extends Plugin {
     public static final String PRIVACY_KEY = "data_privacy_accepted";
     public static final String API_KEY_PREF = "gemini_api_key";
+    public static final String DEFAULT_MODE_PREF = "schroedingersblock_default_mode";
 
     @Override
     public void init() {
@@ -53,6 +59,23 @@ public class SchroedingersBlockPlugin extends Plugin {
         for (String type : diagramTypes) {
             manager.addDiagramContextConfigurator(type, configurator); // Das Menü wird für jeden Typ in der obrigen Liste angemeldet
         }
+
+        ActionsConfiguratorsManager.getInstance().addMainMenuConfigurator(new AMConfigurator() {
+            @Override
+            public void configure(ActionsManager manager) {
+                // Suche nach dem Tools-Menü
+                ActionsCategory toolsMenu = (ActionsCategory) manager.getActionFor("TOOLS");
+                if (toolsMenu != null) {
+                    // Füge die Einstellungs-Action hinzu
+                    toolsMenu.addAction(new OpenSettingsAction());
+                }
+            }
+
+            @Override
+            public int getPriority() {
+                return AMConfigurator.MEDIUM_PRIORITY;
+            }
+        });
     }
 
     // Zeigt das DatenschutzustimmungsFenster an und speichert die Antwort

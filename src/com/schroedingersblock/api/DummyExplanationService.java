@@ -1,5 +1,10 @@
 package com.schroedingersblock.api;
 
+import com.nomagic.magicdraw.core.Application;
+import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
+import com.schroedingersblock.core.SchroedingersBlockPlugin;
+import com.nomagic.magicdraw.core.GUILog;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -7,66 +12,81 @@ import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.prefs.Preferences;
-import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
-import com.schroedingersblock.core.SchroedingersBlockPlugin;
+import java.io.File;
+import java.nio.file.Files;
 
 public class DummyExplanationService implements ExplanationService {
 
     private static final String MODEL = "gemini-2.5-flash";
+
+    // ─── Modus Konfiguration ───────────────────────────────────────────────────
+    private static final int EXPERT_MAX_TOKENS = 9000; // Erhöht für tiefe Analysen
+    private static final double EXPERT_TEMPERATURE = 0.0;
+
+    private static final int BASIC_MAX_TOKENS = 1000;
+    private static final double BASIC_TEMPERATURE = 0.0;
+
+    // ─── Conversation State ────────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
     private String currentDetailLevel = "Basic"; // Standardwert
 
     @Override
     public void setDetailLevel(String level) {
         this.currentDetailLevel = level;
-        System.out.println("[Service] Detail level set to: " + level);
     }
 
     @Override
     public String fetchExplanation(Element targetElement, String mode) {
-        // Hier nutzen wir das targetElement, um den Namen des Blocks zu bekommen
-        String elementName = (targetElement != null) ? targetElement.getHumanName() : "Unbekanntes Element";
+        String elementName = targetElement != null ? targetElement.getHumanName() : "Unknown element";
+        String elementType = targetElement != null ? targetElement.getHumanType() : "Unknown type";
+        String ownerName = (targetElement != null && targetElement.getOwner() != null)
+                ? targetElement.getOwner().getHumanName()
+                : "root";
 
-        // Vorbereitung: Hier wird später zwischen den Prompts unterschieden
-        String detailInfo = "Basic".equals(currentDetailLevel) ? "short and easy" : "academic and extensive";
+        // DATENDURCHSTICH: Echte JSON-Datei von der Platte laden!
+        String exportedJson = loadLatestExportedJson();
 
-        String initialPrompt = "Du bist ein SysML-Experte. Analysiere das Element '" + elementName + "' im Modus: " + mode + ".\n" +
-                "Bitte erkläre kurz, was es im Kontext der Systemarchitektur bedeutet.";
+        String prompt = PromptLoader.buildPrompt(
+                currentDetailLevel, elementName, elementType, ownerName, exportedJson);
 
-        return callGemini(initialPrompt);
+        return callGemini(prompt, currentDetailLevel);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        return callGemini(question);
+        // Follow-Up Fragen nutzen immer den Expert-Modus
+        return callGemini(question, currentDetailLevel);
     }
 
-    private String callGemini(String userMessage) {
-        // --- NEU: API-Key dynamisch aus den Preferences laden ---
+    // ─── Interne LLM API Logik ─────────────────────────────────────────────────
+
+    private String callGemini(String userMessage, String mode) {
+        GUILog log = Application.getInstance().getGUILog();
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
             return "⚠️ Error: No API-Key found. Please restart the analysis and enter a valid key.";
         }
-        // ---------------------------------------------------------
 
         try {
-            // 1. JSON für die Nachricht bauen
             String userJson = "{\"role\": \"user\", \"parts\": [{\"text\": \"" + escapeJson(userMessage) + "\"}]}";
             conversationHistory.add(userJson);
 
-            // 2. Request-Body zusammenbauen
-            String historyArray = String.join(",", conversationHistory);
-            String requestBody = "{" +
-                    "\"contents\": [" + historyArray + "]," +
-                    "\"generationConfig\": {" +
-                    "  \"temperature\": 0.7," +
-                    "  \"maxOutputTokens\": 8192" +
-                    "}" +
-                    "}";
+            boolean isExpert = "Expert".equalsIgnoreCase(mode);
+            int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
+            double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
 
-            // 3. HTTP Request konfigurieren
+            String historyArray = String.join(",", conversationHistory);
+            String requestBody = "{"
+                    + "\"contents\": [" + historyArray + "],"
+                    + "\"generationConfig\": {"
+                    + "  \"temperature\": " + temp + ","
+                    + "  \"maxOutputTokens\": " + maxTokens + ","
+                    + "  \"topP\": 0.9"
+                    + "}"
+                    + "}";
+
             String url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=" + apiKey;
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -75,59 +95,84 @@ public class DummyExplanationService implements ExplanationService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            // 4. Client öffnen und senden (Normal, OHNE den extra try-Block!)
             HttpClient client = HttpClient.newHttpClient();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            log.log("[Debug] Raw Json:\n" + response.body());
 
             if (response.statusCode() != 200) {
-                return "⚠️ Fehler von der KI (HTTP " + response.statusCode() + "):\n" + response.body();
+                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + response.body();
             }
 
-            // 5. Text extrahieren
             String responseText = extractTextFromJson(response.body());
 
-            // 6. Antwort im Verlauf speichern
             String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
             conversationHistory.add(modelJson);
+
+            log.log(responseText);
 
             return responseText;
 
         } catch (Exception e) {
-            System.err.println("[Schrödingers Block] Fehler: " + e.getMessage());
-            return "❌ Interner Fehler: " + e.getMessage();
+            return "❌ Internal error: " + e.getMessage();
         }
     }
 
+    // ─── JSON Datendurchstich Logik ────────────────────────────────────────────
+
+    private String loadLatestExportedJson() {
+        try {
+            String pluginId = "com.schroedingersblock.plugin";
+            File pluginDir = new File(System.getProperty("user.dir"), "plugins" + File.separator + pluginId);
+            File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
+
+            if (!exportDir.exists() || !exportDir.isDirectory()) {
+                return "Error: Export directory not found at " + exportDir.getAbsolutePath();
+            }
+
+            File[] files = exportDir.listFiles((dir, name) -> name.endsWith(".json"));
+            if (files == null || files.length == 0) {
+                return "Error: No model JSON files found.";
+            }
+
+            File newestFile = files[0];
+            for (File f : files) {
+                if (f.lastModified() > newestFile.lastModified()) {
+                    newestFile = f;
+                }
+            }
+
+            return Files.readString(newestFile.toPath());
+
+        } catch (Exception e) {
+            return "Error reading exported model data: " + e.getMessage();
+        }
+    }
+
+    // ─── JSON Hilfsmethoden ────────────────────────────────────────────────────
+
     private String escapeJson(String text) {
         if (text == null) return "";
-        return text.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private String extractTextFromJson(String json) {
         try {
-            String searchString = "\"text\": \"";
-            int startIndex = json.indexOf(searchString);
-            if (startIndex == -1) return "Konnte Text nicht finden.";
+            String marker = "\"text\": \"";
+            int start = json.indexOf(marker);
+            if (start == -1) return "Could not find text in response.";
 
-            startIndex += searchString.length();
-            int endIndex = json.indexOf("\"", startIndex);
+            start += marker.length();
+            int end = json.indexOf("\"", start);
 
-            while (endIndex != -1 && json.charAt(endIndex - 1) == '\\') {
-                endIndex = json.indexOf("\"", endIndex + 1);
+            while (end != -1 && json.charAt(end - 1) == '\\') {
+                end = json.indexOf("\"", end + 1);
             }
 
-            if (endIndex == -1) return "Fehler beim Parsen der Antwort.";
+            if (end == -1) return "Error parsing response.";
 
-            String extracted = json.substring(startIndex, endIndex);
-            return extracted.replace("\\n", "\n")
-                    .replace("\\\"", "\"")
-                    .replace("\\\\", "\\");
+            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
         } catch (Exception e) {
-            return "Fehler beim Text-Extrakt.";
+            return "Error extracting text from response.";
         }
     }
 }
