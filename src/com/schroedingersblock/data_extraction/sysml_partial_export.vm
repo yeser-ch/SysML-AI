@@ -300,6 +300,47 @@
 #end##macro(collectDependencyLinks)##
 ##
 ## ====================================================================
+<<<<<<< HEAD
+=======
+## MAKROS FÜR SAUBERE DATENEXTRAKTION (API-ROHDATEN KOMPATIBEL)
+## ====================================================================
+## Extrahiert die ID, egal ob Liste oder Einzelobjekt
+#macro(getCleanId $target)##
+#if($target)##
+#set($val = "")##
+#if($target.getID())#set($val = $target.getID())#elseif($target.ID)#set($val = $target.ID)#end##
+#if("$!val" == "")##
+#foreach($item in $target)#if("$!val" == "")#if($item.getID())#set($val = $item.getID())#elseif($item.ID)#set($val = $item.ID)#end#end#end##
+#end##
+$!val##
+#end##
+#end##
+##
+## Extrahiert einen sauberen String (Name/Wert), verhindert Java-Objektreferenzen (@...)
+## Nutzt StringCleaner Utility aus Java für Whitespace-Cleaning (Zeilenumbrüche -> Leerzeichen)
+#macro(getCleanText $target)##
+#if($target)##
+#set($txt = "")##
+#if($target.getName())#set($txt = $target.getName())#elseif($target.name)#set($txt = $target.name)#elseif($target.value)#set($txt = $target.value.toString())#else#set($txt = $target.toString())#end##
+#if($txt && $txt != "")##
+$!stringUtil.cleanWhitespace($txt)##
+#end##
+#end##
+#end##
+##
+## JSON-Safe String: Ersetzt Zeilenumbrüche durch \n, Tabs durch \t, und escaped Backslashes
+## Dies ist notwendig, da Velocity 1.7 keine .replace() Methoden unterstützt
+#macro(getJsonSafeText $target)##
+#if($target)##
+#set($txt = "")##
+#if($target.getName())#set($txt = $target.getName())#elseif($target.name)#set($txt = $target.name)#elseif($target.value)#set($txt = $target.value.toString())#else#set($txt = $target.toString())#end##
+#if($txt.contains("@") || $txt.contains("impl."))#set($txt = "")#end##
+$!txt##
+#end##
+#end##
+##
+## ====================================================================
+>>>>>>> LeosWorkspace
 ## MACRO: initializePartialExport
 ## ====================================================================
 ## Main entry point: Initialize center element and traverse relationships
@@ -329,6 +370,7 @@
 #end##macro(initializePartialExport)##
 ##
 ## ====================================================================
+<<<<<<< HEAD
 ## MACRO: exportCollectedElements
 ## ====================================================================
 ## Generate JSON for all collected elements
@@ -376,6 +418,178 @@
 ], "owner_id": "$!elem.owner.ID", "documentation": "$!elem.documentation.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"}#if(!$foreach.last),
 #end##if(!$foreach.last)##
 #end##if($isValidType...)##
+=======
+## MACRO: exportElementFull (adapted from sysml_flat_export)
+## ====================================================================
+## Export complete element data with all supported fields
+## NO RECURSION - processes single element only
+##
+#macro(exportElementFull $elem $isFirst)##
+#set($type = "")#if($elem.humanType)#set($type = $elem.humanType)#end##
+#set($t = $type.replace(" ", ""))##
+#set($qName = "")#if($elem.qualifiedName)#set($qName = $elem.qualifiedName)#end##
+##
+## --- 1. SYSTEM-FILTER ---
+#set($isSystem = false)##
+#if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $elem.getID().contains("_180beta"))##
+#set($isSystem = true)##
+#end##
+##
+## --- 2. SYSML v1 WHITELIST ---
+#set($isValidType = false)##
+#if($t == "Block" || $t == "ValueType" || $t == "ConstraintBlock" || 
+    $t == "Port" || $t == "ProxyPort" || $t == "FullPort" || $t == "FlowPort" || 
+    $t == "PartProperty" || $t == "ValueProperty" || $t == "ReferenceProperty" || $t == "ConstraintProperty" || $t == "Property" || $t == "FlowProperty" || 
+    $t == "Connector" || $t == "BindingConnector" || $t == "ItemFlow" ||
+    $t == "Association" || $t == "AssociationClass" || $t == "InterfaceRealization" || $t == "Usage" ||
+    $t == "Requirement" || $t == "TestCase" || $t == "UseCase" || $t == "Actor" ||
+    $t == "Activity" || $t.contains("Action") || $t.contains("Node") || 
+    $t == "ControlFlow" || $t == "ObjectFlow" || $t == "ActivityPartition" || $t == "Pin" ||
+    $t == "StateMachine" || $t == "Region" || $t == "State" || $t == "Pseudostate" || 
+    $t == "FinalState" || $t == "Transition" || $t == "Trigger" || $t == "Event" ||
+    $t == "Interaction" || $t == "Lifeline" || $t == "Message" || 
+    $t == "ExecutionSpecification" || $t == "CombinedFragment" || $t == "InteractionOperand" ||
+    $t == "Package" || $t == "Model" || $t == "View" || $t == "Viewpoint" || 
+    $t == "Rationale" || $t == "Problem")##
+#set($isValidType = true)##
+#end##
+##
+#if($isValidType && !$isSystem)##
+#if(!$isFirst),
+#end##
+{"id":"#getCleanId($elem)","name":"#getCleanText($elem)","type":"$type"##
+,"stereotypes":[#set($isFirstSt=true)##
+#foreach($st in $elem.appliedStereotype)##
+#if(!$isFirstSt),#end#set($isFirstSt=false)##
+"$st.name"##
+#end]##
+,"owner_id":"#getCleanId($elem.owner)"##
+,"documentation":"#getCleanText($elem.documentation)"##
+##
+## --- A. WERTE & TEXTE ---
+#if($t == "Requirement" && $elem.text)##
+,"requirement_text":"#getCleanText($elem.text)"##
+#end##
+##
+#if($t == "ConstraintBlock" || $t == "ConstraintProperty")##
+#if($elem.specification && $elem.specification.body.size() > 0)##
+,"constraint_equation":"#getCleanText($elem.specification.body.get(0))"##
+#end##
+#end##
+##
+#if($elem.defaultValue)##
+,"default_value":"#getCleanText($elem.defaultValue)"##
+#end##
+##
+,"tagged_values":{##
+#set($isFirstTag = true)##
+#foreach($st in $elem.appliedStereotype)##
+#foreach($tagProp in $st.attribute)##
+#set($tagValue = $elem.getValue($st, $tagProp.name))##
+#if($tagValue)##
+#set($tagStr = "#getCleanText($tagValue)")##
+#if($tagStr != "" && $tagStr != "[]")##
+#if(!$isFirstTag),#end#set($isFirstTag = false)##
+"$tagProp.name":"$tagStr"##
+#end##
+#end##
+#end##
+#end##
+}##
+##
+## --- B. STRUKTUR & TYPISIERUNG ---
+#if($elem.type)##
+,"property_type_id":"#getCleanId($elem.type)","property_type_name":"#getCleanText($elem.type)"##
+#end##
+##
+#if($t == "PartProperty" || $t == "ReferenceProperty" || $t == "Property" || $t == "FlowProperty")##
+,"aggregation":"#getCleanText($elem.aggregation)"##
+#end##
+##
+#if($elem.lowerValue || $elem.upperValue)##
+,"multiplicity":{"lower":"#getCleanText($elem.lower)","upper":"#getCleanText($elem.upper)"}##
+#end##
+##
+## --- C. SCHNITTSTELLEN & FLÜSSE ---
+#if($t == "FlowProperty" || $t.contains("Port"))##
+,"direction":"#getCleanText($elem.direction)"##
+#end##
+##
+#if($t == "ItemFlow")##
+,"item_flow_details":{"conveyed_id":"#getCleanId($elem.itemProperty)","realizing_connector_id":"#if($elem.realizingConnector.size() > 0)#getCleanId($elem.realizingConnector.get(0))#end"}##
+#end##
+##
+## --- D. ALLOKATIONEN & VERHALTEN ---
+#if($t == "ActivityPartition")##
+,"represents_block_id":"#getCleanId($elem.represents)"##
+#end##
+##
+#if($t.contains("Flow") || $t == "Transition" || $t == "Message" || $t == "InterfaceRealization" || $t == "Usage")##
+,"routing_details":{"source_id":"#getCleanId($elem.source)","target_id":"#getCleanId($elem.target)"}##
+#end##
+##
+## --- E. ASSOZIATIONEN & VERBINDUNGEN ---
+#if($t == "Association" || $t == "AssociationClass")##
+,"association_ends":[#set($isFirstEnd = true)##
+#foreach($end in $elem.memberEnd)##
+#if(!$isFirstEnd),#end#set($isFirstEnd = false)##
+{"property_id":"#getCleanId($end)","property_type_id":"#getCleanId($end.type)"}##
+#end]##
+#end##
+##
+#if($type == "Connector" || $type == "Binding Connector")##
+,"connector_details":[#set($isFirstConn = true)##
+#foreach($end in $elem.end)##
+#if(!$isFirstConn),#end#set($isFirstConn = false)##
+{"role_name":"#getCleanText($end.role)","role_id":"#getCleanId($end.role)","part_id":"#getCleanId($end.partWithPort)"}##
+#end]##
+#end##
+##
+## --- F. AUSGEHENDE BEZIEHUNGEN ---
+,"outgoing_relations":[##
+#set($isFirstRel = true)##
+#foreach($rel in $elem.clientDependency)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"#getCleanText($rel.humanType)","relation_stereotypes":[#set($isFirstRelSt=true)##
+#foreach($st in $rel.appliedStereotype)##
+#if(!$isFirstRelSt),#end#set($isFirstRelSt=false)##
+"$st.name"##
+#end],"target_id":"#if($rel.supplier.size() > 0)#getCleanId($rel.supplier.get(0))#end"}##
+#end##
+#foreach($inc in $elem.include)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Include","relation_stereotypes":[],"target_id":"#getCleanId($inc.addition)"}##
+#end##
+#foreach($ext in $elem.extend)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Extend","relation_stereotypes":[],"target_id":"#getCleanId($ext.extendedCase)"}##
+#end##
+#foreach($gen in $elem.generalization)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Generalization","relation_stereotypes":[],"target_id":"#getCleanId($gen.general)"}##
+#end##
+#foreach($real in $elem.realization)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Realization","relation_stereotypes":[],"target_id":"#if($real.supplier.size() > 0)#getCleanId($real.supplier.get(0))#end"}##
+#end##
+]}##
+#end##
+#end##macro(exportElementFull)##
+##
+## ====================================================================
+## MACRO: exportCollectedElements
+## ====================================================================
+## Iterate collected elements and export each with full data
+## Uses exportElementFull for comprehensive JSON export
+##
+#macro(exportCollectedElements)##
+#set($sortedIds = $collectedElements.keySet())##
+#set($isFirst = true)##
+#foreach($elemId in $sortedIds)##
+#set($elem = $collectedElements.get($elemId).element)##
+#exportElementFull($elem $isFirst)##
+#set($isFirst = false)##
+>>>>>>> LeosWorkspace
 #end##foreach($elemId in $sortedIds)##
 #end##macro(exportCollectedElements)##
 }

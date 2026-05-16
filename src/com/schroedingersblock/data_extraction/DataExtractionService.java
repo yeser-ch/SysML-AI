@@ -95,6 +95,9 @@ public class DataExtractionService {
                     log.log("[DataExtractionService] Center Element für Partial Export gesetzt: " + exportScope.getHumanName());
                 }
                 
+                // String-Utility für Velocity verfügbar machen (für Whitespace-Cleaning)
+                engine.addContext("stringUtil", new StringCleaner());
+                
                 // Template erstellen (nach Context-Setup)
                 Template template = engine.createTemplate(templateFile, outputFile);
                 
@@ -157,5 +160,38 @@ public class DataExtractionService {
 
         // 3. Letzter Fallback: MagicDraw Arbeitsverzeichnis
         return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
+    }
+
+    /**
+     * Hilfsmethode für Velocity: Bereinigt String von Zeilenumbrüchen und Tabs
+     * Ersetzt diese durch einzelne Leerzeichen für saubere JSON-Ausgabe
+     */
+    public static class StringCleaner {
+        /**
+         * Entfernt Zeilenumbrüche (\n, \r) und Tabs durch Leerzeichen
+         * Reduziert mehrfache Leerzeichen auf eines
+         * Filtert auch Java-Objektreferenzen (@...)
+         */
+        public String cleanWhitespace(Object input) {
+            if (input == null) {
+                return "";
+            }
+            String text = input.toString();
+            
+            // Java-Objektreferenzen filtern
+            if (text.contains("@") || text.contains("impl.")) {
+                return "";
+            }
+            
+            // Zeilenumbrüche und Tabs durch Leerzeichen ersetzen
+            text = text.replace("\n", " ")   // Newline
+                       .replace("\r", " ")   // Carriage Return
+                       .replace("\t", " ");  // Tab
+            
+            // Mehrfache Leerzeichen auf eines reduzieren
+            text = text.replaceAll(" +", " ");
+            
+            return text.trim();
+        }
     }
 }
