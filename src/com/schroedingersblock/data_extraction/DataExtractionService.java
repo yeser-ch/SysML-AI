@@ -98,6 +98,9 @@ public class DataExtractionService {
                 // String-Utility für Velocity verfügbar machen (für Whitespace-Cleaning)
                 engine.addContext("stringUtil", new StringCleaner());
                 
+                // Debug-Logger für Velocity verfügbar machen (für Template-Debugging)
+                engine.addContext("debugUtil", new DebugLogger(log));
+                
                 // Template erstellen (nach Context-Setup)
                 Template template = engine.createTemplate(templateFile, outputFile);
                 
@@ -192,6 +195,52 @@ public class DataExtractionService {
             text = text.replaceAll(" +", " ");
             
             return text.trim();
+        }
+    }
+
+    /**
+     * Debug-Logger für Velocity-Templates: Gibt Meldungen in MagicDraw GUILog aus
+     * Verwendung im Template: $debugUtil.log("Nachricht: " + $variable)
+     */
+    public static class DebugLogger {
+        private final GUILog log;
+
+        public DebugLogger(GUILog log) {
+            this.log = log;
+        }
+
+        /**
+         * Gibt eine Debug-Nachricht im GUILog aus
+         * Prefix: [VELOCITY_DEBUG]
+         */
+        public String log(Object message) {
+            if (message != null) {
+                String msg = "[VELOCITY_DEBUG] " + message.toString();
+                log.log(msg);
+                return "";  // Velocity erwartet Rückgabewert, gibt aber nichts aus
+            }
+            return "";
+        }
+
+        /**
+         * Gibt einen Wert aus und gibt ihn weiter (für Inline-Nutzung)
+         * Verwendung: $debugUtil.logAndReturn("label", $value)
+         */
+        public Object logAndReturn(String label, Object value) {
+            if (value != null) {
+                String msg = "[VELOCITY_DEBUG] " + label + ": " + value.toString();
+                log.log(msg);
+            }
+            return value;
+        }
+
+        /**
+         * Gibt die Größe einer Collection aus
+         */
+        public int logSize(String label, java.util.Collection<?> collection) {
+            int size = collection != null ? collection.size() : 0;
+            log.log("[VELOCITY_DEBUG] " + label + " size: " + size);
+            return size;
         }
     }
 }
