@@ -11,7 +11,7 @@ import java.util.Objects;
 class InstallerMain extends JFrame {
 
     private static final String APP_NAME = "Schrödinger's Block – Installer";
-    private static final String PLUGIN_DIR_NAME = "com.schroedingersblock.plugin";
+    private static final String PLUGIN_DIR_NAME = "com.schroedingersblock";
     private final boolean isMac;
 
     // UI Elemente
@@ -190,7 +190,7 @@ class InstallerMain extends JFrame {
 
                 // Kern-Dateien kopieren
                 copyRes("plugin.xml", new File(myPluginDir, "plugin.xml"));
-                copyRes("schroedinger-block.jar", new File(myPluginDir, "schroedinger-block.jar"));
+                copyRes("schroedingers-block.jar", new File(myPluginDir, "schroedingers-block.jar"));
 
                 // data_extraction-Unterordner mit Velocity-Templates anlegen
                 File dataExtractionDir = new File(myPluginDir, "data_extraction");
