@@ -13,9 +13,9 @@
 # Enable partial export mode
 #set($PARTIAL_EXPORT_ENABLED = $IS_CENTER_SET)##
 # Traversal depth limit (prevent infinite loops in cyclic dependencies)
-#set($MAX_DEPENDENCY_DEPTH = 5)##
+#set($MAX_DEPENDENCY_DEPTH = $maxDependencyDepth)##
 # Maximum depth for sibling element collection (horizontal expansion via parent)
-#set($MAX_SIBLING_DEPTH = 2)##
+#set($MAX_SIBLING_DEPTH = $maxSiblingDepth)##
 # Include owned child elements (downward parent-child hierarchy)
 #set($INCLUDE_OWN_ELEMENTS = true)##
 # Include owner hierarchy (upward parent-child hierarchy)
