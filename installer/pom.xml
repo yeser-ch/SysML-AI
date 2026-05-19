@@ -36,7 +36,7 @@
                 Alles im Ordner installer/ressources/ wird in den JAR-Root gebündelt.
                 Vor dem Build müssen folgende Dateien dort liegen:
                   - plugin.xml
-                  - schroedinger-block.jar  (Build-Artefakt des Hauptprojekts)
+                  - schroedingers-block.jar  (Build-Artefakt des Hauptprojekts)
                   - sysml_flat_export.vm
                   - sysml_partial_export.vm
                   - images/logo.png         (optional)

@@ -5,6 +5,6 @@
         provider-name="SE Projekt Team"
         class="com.schroedingersblock.core.SchroedingersBlockPlugin">
     <runtime>
-        <library name="schroedinger-block.jar"/>
+        <library name="schroedingers-block.jar"/>
     </runtime>
 </plugin>
