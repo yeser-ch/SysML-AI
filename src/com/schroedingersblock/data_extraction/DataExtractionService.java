@@ -101,6 +101,10 @@ public class DataExtractionService {
                 // Debug-Logger für Velocity verfügbar machen (für Template-Debugging)
                 engine.addContext("debugUtil", new DebugLogger(log));
                 
+                // Suchgrenzen für partial Export setzen (Fallback-Defaults)
+                engine.addContext("maxDependencyDepth", 5);
+                engine.addContext("maxSiblingDepth", 2);
+                
                 // Template erstellen (nach Context-Setup)
                 Template template = engine.createTemplate(templateFile, outputFile);
                 
