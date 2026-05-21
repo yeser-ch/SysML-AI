@@ -4,6 +4,9 @@ import com.nomagic.magicdraw.core.Application;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.schroedingersblock.core.SchroedingersBlockPlugin;
 import com.nomagic.magicdraw.core.GUILog;
+import com.nomagic.magicdraw.plugins.Plugin;
+import com.nomagic.magicdraw.plugins.PluginDescriptor;
+import com.nomagic.magicdraw.plugins.PluginUtils;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,7 +23,7 @@ public class DummyExplanationService implements ExplanationService {
     private static final String MODEL = "gemini-2.5-flash";
 
     // ─── Modus Konfiguration ───────────────────────────────────────────────────
-    private static final int EXPERT_MAX_TOKENS = 9000; // Erhöht für tiefe Analysen
+    private static final int EXPERT_MAX_TOKENS = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
     private static final int BASIC_MAX_TOKENS = 1000;
@@ -28,7 +31,7 @@ public class DummyExplanationService implements ExplanationService {
 
     // ─── Conversation State ────────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
-    private String currentDetailLevel = "Basic"; // Standardwert
+    private String currentDetailLevel = "Basic";
 
     @Override
     public void setDetailLevel(String level) {
@@ -46,6 +49,15 @@ public class DummyExplanationService implements ExplanationService {
         // DATENDURCHSTICH: Echte JSON-Datei von der Platte laden!
         String exportedJson = loadLatestExportedJson();
 
+        // --- DEBUG-NACHRICHT FÜR DIE KONSOLE ---
+        GUILog log = Application.getInstance().getGUILog();
+        if (exportedJson.startsWith("Error")) {
+            log.log("[Schrödinger's Block] ❌ FEHLER beim Laden der JSON: " + exportedJson);
+        } else {
+            log.log("[Schrödinger's Block] ✅ JSON erfolgreich in den Prompt geladen! Textgröße: " + exportedJson.length() + " Zeichen.");
+        }
+        // ---------------------------------------------
+
         String prompt = PromptLoader.buildPrompt(
                 currentDetailLevel, elementName, elementType, ownerName, exportedJson);
 
@@ -54,14 +66,12 @@ public class DummyExplanationService implements ExplanationService {
 
     @Override
     public String fetchFollowUp(String question) {
-        // Follow-Up Fragen nutzen immer den Expert-Modus
         return callGemini(question, currentDetailLevel);
     }
 
     // ─── Interne LLM API Logik ─────────────────────────────────────────────────
 
     private String callGemini(String userMessage, String mode) {
-        GUILog log = Application.getInstance().getGUILog();
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
@@ -95,20 +105,17 @@ public class DummyExplanationService implements ExplanationService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
+            // KORREKTUR FÜR JAVA 11/17: Ganz normaler HttpClient ohne try-with-resources
             HttpClient client = HttpClient.newHttpClient();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            log.log("[Debug] Raw Json:\n" + response.body());
 
             if (response.statusCode() != 200) {
                 return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + response.body();
             }
 
             String responseText = extractTextFromJson(response.body());
-
             String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
             conversationHistory.add(modelJson);
-
-            log.log(responseText);
 
             return responseText;
 
@@ -116,20 +123,20 @@ public class DummyExplanationService implements ExplanationService {
             return "❌ Internal error: " + e.getMessage();
         }
     }
-
     // ─── JSON Datendurchstich Logik ────────────────────────────────────────────
 
     private String loadLatestExportedJson() {
         try {
-            String pluginId = "com.schroedingersblock.plugin";
-            File pluginDir = new File(System.getProperty("user.dir"), "plugins" + File.separator + pluginId);
+            File pluginDir = getBaseDirectory();
             File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
 
             if (!exportDir.exists() || !exportDir.isDirectory()) {
                 return "Error: Export directory not found at " + exportDir.getAbsolutePath();
             }
 
+            // Java 17 Filter (Kurz & Modern via Lambda)
             File[] files = exportDir.listFiles((dir, name) -> name.endsWith(".json"));
+
             if (files == null || files.length == 0) {
                 return "Error: No model JSON files found.";
             }
@@ -141,11 +148,29 @@ public class DummyExplanationService implements ExplanationService {
                 }
             }
 
+            // Java 17 Datei-Reader
             return Files.readString(newestFile.toPath());
 
         } catch (Exception e) {
             return "Error reading exported model data: " + e.getMessage();
         }
+    }
+
+    // FIX: Unterdrückt die IntelliJ-Warnung bezüglich des doppelten Codes mit dem DataExtractionService
+    @SuppressWarnings("DuplicatedCode")
+    private File getBaseDirectory() {
+        String PLUGIN_ID = "com.schroedingersblock.plugin";
+        try {
+            for (Plugin plugin : PluginUtils.getPlugins()) {
+                PluginDescriptor descriptor = plugin.getDescriptor();
+                if (descriptor != null && PLUGIN_ID.equals(descriptor.getID())) {
+                    return descriptor.getPluginDirectory();
+                }
+            }
+        } catch (Throwable t) {
+            // Ignoriere Fehler
+        }
+        return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
 
     // ─── JSON Hilfsmethoden ────────────────────────────────────────────────────
