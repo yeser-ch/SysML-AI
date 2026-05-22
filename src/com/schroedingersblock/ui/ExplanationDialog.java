@@ -205,8 +205,10 @@ public class ExplanationDialog extends JFrame {
             protected Boolean doInBackground() {
                 Project project = Application.getInstance().getProject();
                 if (project == null) return false;
-                Element scope = "Model View".equals(mode) ? null : targetElement;
-                return DataExtractionService.executeJsonExport(project, scope);
+                // Bestimmung des Scopes (wie vorher in der Action)
+                boolean isElementView = "Model View".equals(mode) ? false : true;
+                // Der eigentliche Export-Aufruf
+                return DataExtractionService.executeJsonExport(project, targetElement, isElementView);
             }
 
             @Override
