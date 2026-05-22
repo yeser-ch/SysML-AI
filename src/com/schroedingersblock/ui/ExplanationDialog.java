@@ -4,7 +4,7 @@
 
 package com.schroedingersblock.ui;
 
-import com.schroedingersblock.api.DummyExplanationService;
+import com.schroedingersblock.api.GeminiExplanationService;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.NamedElement;
 import com.nomagic.magicdraw.core.Application;
@@ -18,12 +18,14 @@ public class ExplanationDialog extends JFrame {
     private JPanel chatPanel;
     private JScrollPane scrollPane;
     private JTextField inputField;
+    private JButton runBtn;
+    private JButton sendBtn;
+
     private final String mode;
     private final Element targetElement;
-    private JButton runBtn;
 
     // Anbindung der LLM-Logik
-    private final DummyExplanationService apiService = new DummyExplanationService();
+    private final GeminiExplanationService apiService = new GeminiExplanationService();
 
     public ExplanationDialog(String mode, Element targetElement) {
         this.mode = mode;
@@ -63,14 +65,11 @@ public class ExplanationDialog extends JFrame {
         String defaultMode = prefs.get(com.schroedingersblock.core.SchroedingersBlockPlugin.DEFAULT_MODE_PREF, "Basic");
         levelBox.setSelectedItem(defaultMode);
         levelBox.setToolTipText("Choose how detailed you want the AI to explain the system to you.");
-        //Tooltips für die Einträge im Dropdown (Hover)
+
         levelBox.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
                 JComponent comp = (JComponent) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-
-                // index -1 ist der aktuell ausgewählte Eintrag in der Box
-                // index >= 0 sind die Einträge in der aufgeklappten Liste
                 if (value != null) {
                     if ("Basic".equals(value)) {
                         comp.setToolTipText("Short, concise explanations.");
@@ -106,7 +105,10 @@ public class ExplanationDialog extends JFrame {
         bottomPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
 
         inputField = new JTextField();
-        JButton sendBtn = new JButton("Send");
+        inputField.setEnabled(false); //Textfeld am Anfang sperren
+
+        sendBtn = new JButton("Send");
+        sendBtn.setEnabled(false); //Senden-Button am Anfang sperren
 
         bottomPanel.add(new JLabel("Follow-up: "), BorderLayout.WEST);
         bottomPanel.add(inputField, BorderLayout.CENTER);
@@ -115,7 +117,6 @@ public class ExplanationDialog extends JFrame {
         sendBtn.addActionListener(e -> sendMessage());
         inputField.addActionListener(e -> sendMessage());
 
-        // HIER GEÄNDERT: Nur das Eingabefeld im Süden, keine doppelte Statusleiste mehr!
         add(bottomPanel, BorderLayout.SOUTH);
 
         // Logik für den RUN Button ---
@@ -123,8 +124,12 @@ public class ExplanationDialog extends JFrame {
         runBtn.addActionListener(e -> {
             apiService.setDetailLevel((String) levelBox.getSelectedItem());
 
-            // Diese Nachricht dient nun als temporärer Ladeindikator.
             addMessage("AI", "Preparing and uploading model context to AI\u00A0...");
+
+            // Alles konsequent sperren, sobald RUN gedrückt wird!
+            runBtn.setEnabled(false);
+            inputField.setEnabled(false);
+            sendBtn.setEnabled(false);
 
             fetchData(mode, true);
         });
@@ -136,6 +141,12 @@ public class ExplanationDialog extends JFrame {
             addMessage("User", text);
             inputField.setText("");
             addMessage("AI", "Processing\u00A0...");
+
+            // Felder sperren, während die KI die Antwort generiert
+            inputField.setEnabled(false);
+            sendBtn.setEnabled(false);
+            runBtn.setEnabled(false);
+
             fetchData(text, false);
         }
     }
@@ -145,7 +156,7 @@ public class ExplanationDialog extends JFrame {
             @Override
             protected String doInBackground() {
                 try {
-                    Thread.sleep(2000); // Simulation der Latenz
+                    Thread.sleep(2000); // Simulation der Latenz (falls gewünscht)
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -164,6 +175,14 @@ public class ExplanationDialog extends JFrame {
                     addMessage("AI", get());
                 } catch (Exception e) {
                     addMessage("System", "Error: Connection failed.");
+                } finally {
+                    // Alles wieder freischalten, wenn die KI fertig ist!
+                    runBtn.setEnabled(true);
+                    inputField.setEnabled(true);
+                    sendBtn.setEnabled(true);
+
+                    // Optional: Cursor direkt wieder ins Textfeld setzen
+                    inputField.requestFocusInWindow();
                 }
             }
         };
@@ -180,10 +199,8 @@ public class ExplanationDialog extends JFrame {
 
         SwingUtilities.invokeLater(() -> {
             if ("AI".equals(sender)) {
-                // KI-Antworten: Scrolle zum Anfang der Nachricht
                 chatPanel.scrollRectToVisible(new Rectangle(0, row.getY(), 1, 1));
             } else {
-                // User/System: Scrolle zum Ende
                 JScrollBar bar = scrollPane.getVerticalScrollBar();
                 bar.setValue(bar.getMaximum());
             }
@@ -205,9 +222,9 @@ public class ExplanationDialog extends JFrame {
             protected Boolean doInBackground() {
                 Project project = Application.getInstance().getProject();
                 if (project == null) return false;
-                // Bestimmung des Scopes (wie vorher in der Action)
+
+                // Deine Export-Logik bleibt hier genau wie von dir vorgegeben!
                 boolean isElementView = "Model View".equals(mode) ? false : true;
-                // Der eigentliche Export-Aufruf
                 return DataExtractionService.executeJsonExport(project, targetElement, isElementView);
             }
 
@@ -229,7 +246,6 @@ public class ExplanationDialog extends JFrame {
         exportWorker.execute();
     }
 
-    // Hilfsmethode für den Namen des Elements
     private String getTargetDisplayName() {
         String type = (targetElement != null) ? targetElement.getHumanType() : "Unknown";
         String name = "";
