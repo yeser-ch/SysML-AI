@@ -16,31 +16,17 @@
     </properties>
 
     <dependencies>
-        <!-- Dark-Theme UI für den Installer -->
         <dependency>
             <groupId>com.formdev</groupId>
             <artifactId>flatlaf</artifactId>
-            <version>3.4.1</version>
+            <version>3.4</version>
         </dependency>
     </dependencies>
 
     <build>
-        <!--
-            Nicht-Standard-Verzeichnisstruktur:
-            Quellcode liegt unter installer/src/ statt src/main/java/
-        -->
         <sourceDirectory>src</sourceDirectory>
 
         <resources>
-            <!--
-                Alles im Ordner installer/ressources/ wird in den JAR-Root gebündelt.
-                Vor dem Build müssen folgende Dateien dort liegen:
-                  - plugin.xml
-                  - schroedingers-block.jar  (Build-Artefakt des Hauptprojekts)
-                  - sysml_flat_export.vm
-                  - sysml_partial_export.vm
-                  - images/logo.png         (optional)
-            -->
             <resource>
                 <directory>ressources</directory>
             </resource>
@@ -53,11 +39,6 @@
                 <version>3.13.0</version>
             </plugin>
 
-            <!--
-                Maven Shade Plugin: erzeugt einen einzelnen, selbstständig
-                ausführbaren Fat-JAR mit FlatLaf und allen Ressourcen gebündelt.
-                Ausgabe: target/SchroedingersBlock-Installer.jar
-            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -73,7 +54,7 @@
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.schroedingersblock.installer.InstallerMain</mainClass>
+                                    <mainClass>com.schroedingersblock.installer.installer_main</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
