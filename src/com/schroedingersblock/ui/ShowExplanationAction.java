@@ -21,10 +21,17 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
     private final Element targetElement;
 
     public ShowExplanationAction(String mode, Element targetElement) {
-        super("EXPL_" + mode.toUpperCase().replace(" ", "_"), mode, null, null); //ID vergeben.. z.b: EXPL_ELEMENT_VIEW
+        //Dynamische Tooltips je nach Modus generieren ---
+        super("EXPL_" + mode.toUpperCase().replace(" ", "_"), mode, null, null);
         this.mode = mode;
         this.targetElement = targetElement;
-    } //Tastenkürzel und Icon wären noch möglich
+
+        if ("Element View".equals(mode)) {
+            setDescription("Short, concise explanations.");
+        } else if ("Model View".equals(mode)) {
+            setDescription("Long, detailed explanations.");
+        }
+    }//Tastenkürzel und Icon wären noch möglich
 
     @Override
     public void actionPerformed(ActionEvent e) { //Bei Klick auf das Menü
