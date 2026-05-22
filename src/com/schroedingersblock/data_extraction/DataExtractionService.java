@@ -11,6 +11,7 @@ import com.nomagic.magicdraw.plugins.PluginUtils;
 import com.nomagic.magicreport.engine.ITemplateEngine;
 import com.nomagic.magicreport.engine.velocity.TextEngine;
 import com.nomagic.magicreport.Template;
+import scala.Int;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -23,15 +24,17 @@ public class DataExtractionService {
     private static final String TEMPLATE_NAME_FLAT = "sysml_flat_export.vm";
     private static final String TEMPLATE_NAME_PARTIAL = "sysml_partial_export.vm";
     private static final String TARGET_SUBDIR = "raw_model_data";
+    private static int MAX_DEPENDENCY_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
+    private static int MAX_SIBLING_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
 
     /**
-     * Führt den JSON-Export über die Report Wizard API (ITemplateEngine) aus.
+     * Führt den JSON-Export über die ReportWizard API (ITemplateEngine) aus.
      *
      * @param currentProject Das aktuell geöffnete MagicDraw Projekt.
      * @param exportScope    Das Element, das als Scope dient. Wenn null, wird das Primary Model verwendet.
      * @return true wenn erfolgreich, false bei einem Fehler.
      */
-    public static boolean executeJsonExport(Project currentProject, Element exportScope) {
+    public static boolean executeJsonExport(Project currentProject, Element exportScope, Boolean isElementView) {
         GUILog log = Application.getInstance().getGUILog();
 
         if (currentProject == null) {
@@ -48,8 +51,9 @@ public class DataExtractionService {
             // 2. Template-Auswahl basierend auf exportScope
             // - exportScope == null: Model View → sysml_flat_export.vm
             // - exportScope != null: Element View → sysml_partial_export.vm
-            boolean isElementView = (exportScope != null);
-            String selectedTemplate = isElementView ? TEMPLATE_NAME_PARTIAL : TEMPLATE_NAME_FLAT;
+            MAX_DEPENDENCY_DEPTH_EXPORT = isElementView ? 2 : 5; // Beispielwerte, können auch über UI einstellbar gemacht werden
+            MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 5; //
+            String selectedTemplate = TEMPLATE_NAME_PARTIAL;
             log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View (partial)" : "Model View (flat)"));
 
             // 3. Template-Pfad prüfen
@@ -87,10 +91,10 @@ public class DataExtractionService {
                 // WICHTIG: Context ZUERST setzen (vor createTemplate)
                 // Manche Template-Engines benötigen den Context beim Parsen
                 engine.addContext("project", currentProject);
-                engine.addContext("element", scope);
+                //engine.addContext("element", scope);
                 
                 // Für partielle Exports: centerElement übergeben (wird von sysml_partial_export.vm genutzt)
-                if (isElementView && exportScope != null) {
+                if (exportScope != null) {
                     engine.addContext("centerElement", exportScope);
                     log.log("[DataExtractionService] Center Element für Partial Export gesetzt: " + exportScope.getHumanName());
                 }
@@ -102,8 +106,8 @@ public class DataExtractionService {
                 engine.addContext("debugUtil", new DebugLogger(log));
                 
                 // Suchgrenzen für partial Export setzen (Fallback-Defaults)
-                engine.addContext("maxDependencyDepth", 5);
-                engine.addContext("maxSiblingDepth", 2);
+                engine.addContext("maxDependencyDepth", MAX_DEPENDENCY_DEPTH_EXPORT);
+                engine.addContext("maxSiblingDepth", MAX_SIBLING_DEPTH_EXPORT);
                 
                 // Template erstellen (nach Context-Setup)
                 Template template = engine.createTemplate(templateFile, outputFile);
