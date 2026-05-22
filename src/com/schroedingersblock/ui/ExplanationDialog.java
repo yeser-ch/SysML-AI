@@ -191,10 +191,9 @@ public class ExplanationDialog extends JDialog {
                 if (project == null) return false;
 
                 // Bestimmung des Scopes (wie vorher in der Action)
-                Element scope = "Model View".equals(mode) ? null : targetElement;
-
+                boolean isElementView = "Model View".equals(mode) ? false : true;
                 // Der eigentliche Export-Aufruf
-                return DataExtractionService.executeJsonExport(project, scope);
+                return DataExtractionService.executeJsonExport(project, targetElement, isElementView);
             }
 
             @Override
