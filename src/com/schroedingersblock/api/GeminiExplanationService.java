@@ -18,7 +18,7 @@ import java.util.prefs.Preferences;
 import java.io.File;
 import java.nio.file.Files;
 
-public class DummyExplanationService implements ExplanationService {
+public class GeminiExplanationService implements ExplanationService {
 
     private static final String MODEL = "gemini-2.5-flash";
 
@@ -46,36 +46,46 @@ public class DummyExplanationService implements ExplanationService {
                 ? targetElement.getOwner().getHumanName()
                 : "root";
 
-        // DATENDURCHSTICH: Echte JSON-Datei von der Platte laden!
+        GUILog log = Application.getInstance().getGUILog();
+        log.log("[GeminiExplanationService] Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "]");
+        log.log("[GeminiExplanationService] Detail-Level: " + currentDetailLevel);
+
+        // Echte JSON-Datei von der Platte laden
         String exportedJson = loadLatestExportedJson();
 
-        // --- DEBUG-NACHRICHT FÜR DIE KONSOLE ---
-        GUILog log = Application.getInstance().getGUILog();
         if (exportedJson.startsWith("Error")) {
-            log.log("[Schrödinger's Block] ❌ FEHLER beim Laden der JSON: " + exportedJson);
+            log.log("[GeminiExplanationService] Fehler beim Lesen der lokalen Modelldaten: " + exportedJson);
         } else {
-            log.log("[Schrödinger's Block] ✅ JSON erfolgreich in den Prompt geladen! Textgröße: " + exportedJson.length() + " Zeichen.");
+            double jsonKb = exportedJson.length() / 1024.0;
+            log.log("[GeminiExplanationService] Lokale JSON erfolgreich geladen. Groesse: " + String.format("%.2f", jsonKb) + " KB");
         }
-        // ---------------------------------------------
 
+        // Prompt mit PromptLoader zusammenbauen
         String prompt = PromptLoader.buildPrompt(
                 currentDetailLevel, elementName, elementType, ownerName, exportedJson);
+
+        double promptKb = prompt.length() / 1024.0;
+        log.log("[GeminiExplanationService] System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
         return callGemini(prompt, currentDetailLevel);
     }
 
     @Override
     public String fetchFollowUp(String question) {
+        GUILog log = Application.getInstance().getGUILog();
+        log.log("[GeminiExplanationService] Sende Follow-Up Frage an das Modell...");
         return callGemini(question, currentDetailLevel);
     }
 
     // ─── Interne LLM API Logik ─────────────────────────────────────────────────
 
     private String callGemini(String userMessage, String mode) {
+        GUILog log = Application.getInstance().getGUILog();
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
+            log.log("[GeminiExplanationService] Fehler: Kein API-Schluessel in den Einstellungen hinterlegt.");
             return "⚠️ Error: No API-Key found. Please restart the analysis and enter a valid key.";
         }
 
@@ -105,13 +115,24 @@ public class DummyExplanationService implements ExplanationService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            // KORREKTUR FÜR JAVA 11/17: Ganz normaler HttpClient ohne try-with-resources
+            log.log("[GeminiExplanationService] Sende HTTP-POST an Gemini-Schnittstelle...");
+
+            // Zeitmessung für Performance-Überwachung starten
+            long startTime = System.currentTimeMillis();
+
             HttpClient client = HttpClient.newHttpClient();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
+            long duration = System.currentTimeMillis() - startTime;
+
+            // Fehler-Status abfangen (z.B. 429 Quota)
             if (response.statusCode() != 200) {
-                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + response.body();
+                log.log("[GeminiExplanationService] API-Antwort fehlgeschlagen mit HTTP-Status: " + response.statusCode() + " (Dauer: " + duration + "ms)");
+                String cleanError = extractErrorMessageFromJson(response.body());
+                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError;
             }
+
+            log.log("[GeminiExplanationService] API-Antwort erfolgreich empfangen (HTTP 200 OK | Dauer: " + duration + "ms)");
 
             String responseText = extractTextFromJson(response.body());
             String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
@@ -120,9 +141,11 @@ public class DummyExplanationService implements ExplanationService {
             return responseText;
 
         } catch (Exception e) {
+            log.log("[GeminiExplanationService] Interner Verbindungsfehler: " + e.getMessage());
             return "❌ Internal error: " + e.getMessage();
         }
     }
+
     // ─── JSON Datendurchstich Logik ────────────────────────────────────────────
 
     private String loadLatestExportedJson() {
@@ -134,7 +157,6 @@ public class DummyExplanationService implements ExplanationService {
                 return "Error: Export directory not found at " + exportDir.getAbsolutePath();
             }
 
-            // Java 17 Filter (Kurz & Modern via Lambda)
             File[] files = exportDir.listFiles((dir, name) -> name.endsWith(".json"));
 
             if (files == null || files.length == 0) {
@@ -148,7 +170,6 @@ public class DummyExplanationService implements ExplanationService {
                 }
             }
 
-            // Java 17 Datei-Reader
             return Files.readString(newestFile.toPath());
 
         } catch (Exception e) {
@@ -156,7 +177,6 @@ public class DummyExplanationService implements ExplanationService {
         }
     }
 
-    // FIX: Unterdrückt die IntelliJ-Warnung bezüglich des doppelten Codes mit dem DataExtractionService
     @SuppressWarnings("DuplicatedCode")
     private File getBaseDirectory() {
         String PLUGIN_ID = "com.schroedingersblock.plugin";
@@ -198,6 +218,27 @@ public class DummyExplanationService implements ExplanationService {
             return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
         } catch (Exception e) {
             return "Error extracting text from response.";
+        }
+    }
+
+    private String extractErrorMessageFromJson(String json) {
+        try {
+            String marker = "\"message\": \"";
+            int start = json.indexOf(marker);
+            if (start == -1) return json;
+
+            start += marker.length();
+            int end = json.indexOf("\"", start);
+
+            while (end != -1 && json.charAt(end - 1) == '\\') {
+                end = json.indexOf("\"", end + 1);
+            }
+
+            if (end == -1) return json;
+
+            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+        } catch (Exception e) {
+            return json;
         }
     }
 }
