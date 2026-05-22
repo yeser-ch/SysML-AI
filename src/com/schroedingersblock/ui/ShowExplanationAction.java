@@ -13,8 +13,6 @@ import java.awt.event.ActionEvent;
 import java.util.prefs.Preferences;
 
 import com.nomagic.magicdraw.core.Application;
-import com.nomagic.magicdraw.core.Project;
-import com.schroedingersblock.data_extraction.DataExtractionService;
 
 public class ShowExplanationAction extends MDAction { //MagicDraw-Button
     private final String mode;
