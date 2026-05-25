@@ -1,117 +1,223 @@
 package com.schroedingersblock.api;
 
+import com.nomagic.magicdraw.core.Application;
+import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
+import com.schroedingersblock.core.SchroedingersBlockPlugin;
+import com.nomagic.magicdraw.plugins.Plugin;
+import com.nomagic.magicdraw.plugins.PluginDescriptor;
+import com.nomagic.magicdraw.plugins.PluginUtils;
+
+import java.io.File;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
+import java.util.Map;
+import java.util.prefs.Preferences;
 
-public class DummyExplanationService implements ExplanationService {
+public class GeminiExplanationService implements ExplanationService {
 
-    // ─── Configuration ────────────────────────────────────────────────────────
-    // TODO: move API_KEY to a config file or environment variable — never commit it
-    private static final String API_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-    private static final String MODEL   = "gemini-2.5-flash";
-    private static final String API_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            + MODEL + ":generateContent?key=" + API_KEY;
+    // ─── Model cascade (tried in order) ──────────────────────────────────────
+    private static final String[] MODELS = {
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro-latest"
+    };
+    private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+    // Static so circuit state persists across all requests in the same session
+    private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
+
+    // ─── Circuit Breaker (inner class) ───────────────────────────────────────
+    private static class CircuitBreaker {
+        private static final long COOLDOWN_MS = 5 * 60 * 1000;
+        private enum State { CLOSED, OPEN, HALF_OPEN }
+        private final Map<String, State> states   = new HashMap<>();
+        private final Map<String, Long>  openedAt = new HashMap<>();
+
+        boolean isAvailable(String model) {
+            State state = states.getOrDefault(model, State.CLOSED);
+            if (state == State.CLOSED || state == State.HALF_OPEN) return true;
+            if (System.currentTimeMillis() - openedAt.getOrDefault(model, 0L) > COOLDOWN_MS) {
+                states.put(model, State.HALF_OPEN);
+                return true;
+            }
+            return false;
+        }
+
+        void recordSuccess(String model) {
+            State previous = states.getOrDefault(model, State.CLOSED);
+            states.put(model, State.CLOSED);
+            openedAt.remove(model);
+            if (previous != State.CLOSED)
+                System.out.println("[GeminiExplanationService] Circuit CLOSED for " + model + " — recovered.");
+        }
+
+        void recordFailure(String model) {
+            states.put(model, State.OPEN);
+            openedAt.put(model, System.currentTimeMillis());
+            System.out.println("[GeminiExplanationService] Circuit OPEN for " + model
+                    + " — skipping for " + (COOLDOWN_MS / 60000) + " min.");
+        }
+    }
 
     // ─── Mode configuration ───────────────────────────────────────────────────
-    private static final int    EXPERT_MAX_TOKENS = 2048;
-    private static final double EXPERT_TEMPERATURE = 0.2;
+    private static final int    EXPERT_MAX_TOKENS  = 9000;
+    private static final double EXPERT_TEMPERATURE = 0.0;
 
-    private static final int    BASIC_MAX_TOKENS  = 800;
-    private static final double BASIC_TEMPERATURE  = 0.3;
+    private static final int    BASIC_MAX_TOKENS   = 1000;
+    private static final double BASIC_TEMPERATURE  = 0.0;
+
+    private static final String SYSTEM_INSTRUCTION =
+            "You are a SysML model analysis assistant embedded in Cameo Systems Modeler. "
+            + "ONLY answer questions about SysML, systems engineering, model elements, "
+            + "ports, flows, constraints, requirements, and the current model under analysis. "
+            + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
+            + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
+            + "IMPORTANT: Always finish your last sentence completely. "
+            + "Never stop mid-sentence. If you are running out of space, wrap up your "
+            + "answer early but always end on a complete sentence with a full stop.";
 
     // ─── Conversation state ───────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
+    private String currentDetailLevel = "Basic";
 
     // ─── ExplanationService interface ─────────────────────────────────────────
 
     @Override
+    public void setDetailLevel(String level) {
+        this.currentDetailLevel = level;
+    }
+
+    @Override
     public String fetchExplanation(Element targetElement, String mode) {
+        String elementName = targetElement != null ? targetElement.getHumanName() : "Unknown element";
+        String elementType = targetElement != null ? targetElement.getHumanType() : "Unknown type";
+        String ownerName   = (targetElement != null && targetElement.getOwner() != null)
+                ? targetElement.getOwner().getHumanName() : "root";
 
-        String elementName = targetElement != null
-                ? targetElement.getHumanName()
-                : "Unknown element";
+        log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
 
-        String elementType = targetElement != null
-                ? targetElement.getHumanType()
-                : "Unknown type";
+        String exportedJson = loadLatestExportedJson();
+        if (exportedJson.startsWith("Error")) {
+            log("Fehler beim Lesen der Modelldaten: " + exportedJson);
+        } else {
+            log("JSON geladen: " + String.format("%.2f", exportedJson.length() / 1024.0) + " KB");
+        }
 
-        String ownerName = (targetElement != null && targetElement.getOwner() != null)
-                ? targetElement.getOwner().getHumanName()
-                : "root";
+        String prompt = PromptLoader.buildPrompt(currentDetailLevel, elementName, elementType, ownerName, exportedJson);
+        log("Prompt generiert: " + String.format("%.2f", prompt.length() / 1024.0) + " KB");
 
-        // TODO: replace with real Cameo XML export when available
-        String exportedXml = "No XML export available yet.";
-
-        String prompt = PromptLoader.buildPrompt(
-                mode, elementName, elementType, ownerName, exportedXml);
-
-        return callGemini(prompt, mode);
+        return callGemini(prompt, currentDetailLevel);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        // Follow-up messages use EXPERT config — they are part of a technical conversation
-        return callGemini(question, "EXPERT");
+        log("Sende Follow-Up Frage...");
+        return callGemini(question, currentDetailLevel);
     }
 
-    // ─── Internal LLM call ────────────────────────────────────────────────────
+    // ─── Internal LLM call with circuit breaker cascade ──────────────────────
 
     private String callGemini(String userMessage, String mode) {
-        try {
-            // 1. Add user message to history
-            String userJson = buildMessageJson("user", userMessage);
-            conversationHistory.add(userJson);
+        String apiKey = resolveApiKey();
+        if (apiKey == null || apiKey.isEmpty()) {
+            return "⚠️ Error: No API key found. Please enter a valid Gemini API key.";
+        }
 
-            // 2. Build request body with mode-specific config
-            String requestBody = buildRequestBody(mode);
+        String userJson    = buildMessageJson("user", userMessage);
+        conversationHistory.add(userJson);
+        String requestBody = buildRequestBody(mode);
 
-            // 3. Send HTTP POST
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(API_URL))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
-
-            HttpClient client = HttpClient.newHttpClient();
-            HttpResponse<String> response =
-                    client.send(request, HttpResponse.BodyHandlers.ofString());
-
-            // 4. Handle non-200 responses
-            if (response.statusCode() != 200) {
-                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + response.body();
+        for (String model : MODELS) {
+            if (!CIRCUIT.isAvailable(model)) {
+                log("Skipping " + model + " (circuit open)");
+                continue;
             }
 
-            // 5. Extract response text
-            String responseText = extractTextFromJson(response.body());
+            log("Trying " + model + " ...");
+            long start = System.currentTimeMillis();
+            HttpResponse<String> response = sendRequest(model, apiKey, requestBody);
+            long duration = System.currentTimeMillis() - start;
 
-            // 6. Save model response to conversation history
-            conversationHistory.add(buildMessageJson("model", responseText));
+            if (isSuccess(response)) {
+                CIRCUIT.recordSuccess(model);
+                log("Antwort empfangen von " + model + " (" + duration + "ms)");
+                return extractAndSave(response.body());
+            }
 
-            return responseText;
-
-        } catch (Exception e) {
-            System.err.println("[Schrödingers Block] Error calling Gemini: " + e.getMessage());
-            return "❌ Internal error: " + e.getMessage();
+            if (isOverloaded(response)) {
+                CIRCUIT.recordFailure(model);
+            } else {
+                conversationHistory.remove(conversationHistory.size() - 1);
+                return formatError(response);
+            }
         }
+
+        conversationHistory.remove(conversationHistory.size() - 1);
+        return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load.\n"
+             + "Please wait a few minutes and try again.";
+    }
+
+    // ─── API key resolution (Cameo Preferences → ApiKeyManager fallback) ─────
+
+    private String resolveApiKey() {
+        try {
+            Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
+            String key = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+            if (!key.isEmpty()) return key;
+        } catch (Throwable ignored) {}
+        return ApiKeyManager.loadKey();
+    }
+
+    // ─── HTTP helper ──────────────────────────────────────────────────────────
+
+    private HttpResponse<String> sendRequest(String model, String apiKey, String body) {
+        try {
+            String url = API_BASE + model + ":generateContent?key=" + apiKey;
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            return HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            log("Request failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean isSuccess(HttpResponse<String> r)   { return r != null && r.statusCode() == 200; }
+    private boolean isOverloaded(HttpResponse<String> r) {
+        if (r == null) return true;
+        int c = r.statusCode();
+        return c == 404 || c == 429 || c == 500 || c == 503;
+    }
+    private String formatError(HttpResponse<String> r) {
+        if (r == null) return "❌ No response from server.";
+        return "⚠️ API error (HTTP " + r.statusCode() + "):\n" + extractErrorMessage(r.body());
+    }
+    private String extractAndSave(String body) {
+        String text = extractTextFromJson(body);
+        conversationHistory.add(buildMessageJson("model", text));
+        return text;
     }
 
     // ─── Request builders ─────────────────────────────────────────────────────
 
     private String buildRequestBody(String mode) {
-        boolean isExpert  = mode.equalsIgnoreCase("EXPERT");
+        boolean isExpert  = "Expert".equalsIgnoreCase(mode) || "EXPERT".equalsIgnoreCase(mode);
         int     maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
         double  temp      = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
 
-        String historyArray = String.join(",", conversationHistory);
-
         return "{"
-                + "\"contents\": [" + historyArray + "],"
+                + "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},"
+                + "\"contents\": [" + String.join(",", conversationHistory) + "],"
                 + "\"generationConfig\": {"
                 + "  \"temperature\": " + temp + ","
                 + "  \"maxOutputTokens\": " + maxTokens + ","
@@ -121,25 +227,56 @@ public class DummyExplanationService implements ExplanationService {
     }
 
     private String buildMessageJson(String role, String text) {
-        return "{\"role\": \"" + role + "\", "
-                + "\"parts\": [{\"text\": \"" + escapeJson(text) + "\"}]}";
+        return "{\"role\": \"" + role + "\", \"parts\": [{\"text\": \"" + escapeJson(text) + "\"}]}";
+    }
+
+    // ─── JSON model loader ────────────────────────────────────────────────────
+
+    private String loadLatestExportedJson() {
+        try {
+            File exportDir = new File(getBaseDirectory(), "data_extraction" + File.separator + "raw_model_data");
+            if (!exportDir.exists()) return "Error: Export directory not found at " + exportDir.getAbsolutePath();
+
+            File[] files = exportDir.listFiles((d, name) -> name.endsWith(".json"));
+            if (files == null || files.length == 0) return "Error: No model JSON files found.";
+
+            File newest = files[0];
+            for (File f : files) if (f.lastModified() > newest.lastModified()) newest = f;
+            return Files.readString(newest.toPath());
+        } catch (Exception e) {
+            return "Error reading exported model data: " + e.getMessage();
+        }
+    }
+
+    private File getBaseDirectory() {
+        String PLUGIN_ID = "com.schroedingersblock.plugin";
+        try {
+            for (Plugin plugin : PluginUtils.getPlugins()) {
+                PluginDescriptor descriptor = plugin.getDescriptor();
+                if (descriptor != null && PLUGIN_ID.equals(descriptor.getID()))
+                    return descriptor.getPluginDirectory();
+            }
+        } catch (Throwable ignored) {}
+        return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
+    }
+
+    // ─── Logging (Cameo GUILog with System.out fallback for tests) ───────────
+
+    private void log(String msg) {
+        String prefixed = "[GeminiExplanationService] " + msg;
+        try {
+            Application.getInstance().getGUILog().log(prefixed);
+        } catch (Throwable t) {
+            System.out.println(prefixed);
+        }
     }
 
     // ─── JSON utilities ───────────────────────────────────────────────────────
 
-    /**
-     * Minimal JSON string escaper.
-     * NOTE: replace with Gson or Jackson once XML context is passed —
-     * XML contains characters that will corrupt hand-rolled JSON.
-     */
     private String escapeJson(String text) {
         if (text == null) return "";
-        return text
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        return text.replace("\\", "\\\\").replace("\"", "\\\"")
+                   .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private String extractTextFromJson(String json) {
@@ -147,24 +284,47 @@ public class DummyExplanationService implements ExplanationService {
             String marker = "\"text\": \"";
             int start = json.indexOf(marker);
             if (start == -1) return "Could not find text in response.";
-
             start += marker.length();
-            int end = json.indexOf("\"", start);
-
-            // Skip escaped quotes
-            while (end != -1 && json.charAt(end - 1) == '\\') {
-                end = json.indexOf("\"", end + 1);
+            StringBuilder result = new StringBuilder();
+            int i = start;
+            while (i < json.length()) {
+                char c = json.charAt(i);
+                if (c == '\\' && i + 1 < json.length()) {
+                    char next = json.charAt(i + 1);
+                    switch (next) {
+                        case 'n':  result.append('\n'); break;
+                        case 't':  result.append('\t'); break;
+                        case 'r':  result.append('\r'); break;
+                        case '"':  result.append('"');  break;
+                        case '\\': result.append('\\'); break;
+                        default:   result.append(next);
+                    }
+                    i += 2;
+                } else if (c == '"') {
+                    break;
+                } else {
+                    result.append(c);
+                    i++;
+                }
             }
-
-            if (end == -1) return "Error parsing response.";
-
-            return json.substring(start, end)
-                    .replace("\\n",  "\n")
-                    .replace("\\\"", "\"")
-                    .replace("\\\\", "\\");
-
+            return result.toString();
         } catch (Exception e) {
             return "Error extracting text from response.";
+        }
+    }
+
+    private String extractErrorMessage(String json) {
+        try {
+            String marker = "\"message\": \"";
+            int start = json.indexOf(marker);
+            if (start == -1) return json;
+            start += marker.length();
+            int end = json.indexOf("\"", start);
+            while (end != -1 && json.charAt(end - 1) == '\\') end = json.indexOf("\"", end + 1);
+            if (end == -1) return json;
+            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"");
+        } catch (Exception e) {
+            return json;
         }
     }
 }
