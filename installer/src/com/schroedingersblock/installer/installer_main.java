@@ -11,7 +11,8 @@ import java.util.Objects;
 public class installer_main extends JFrame {
 
     private static final String APP_NAME = "Schrödinger's Block – Installer";
-    private static final String PLUGIN_DIR_NAME = "com.schroedingersblock.plugin";
+    private static final String PLUGIN_DIR_NAME_WIN = "com.schroedingersblock.plugin";
+    private static final String PLUGIN_DIR_NAME_MAC = "com.schroedingersblock";
     private final boolean isMac;
 
     // 1. ANPASSUNG: Standardsprache ist jetzt Englisch
@@ -294,7 +295,9 @@ public class installer_main extends JFrame {
             try {
                 log(lang.equals("EN") ? "--- Starting Installation ---" : "--- Start Installation ---");
 
-                File myPluginDir = new File(pluginsDir, PLUGIN_DIR_NAME);
+                String pluginDirName = isMac ? PLUGIN_DIR_NAME_MAC : PLUGIN_DIR_NAME_WIN;
+    
+                File myPluginDir = new File(pluginsDir, pluginDirName);
                 if (!myPluginDir.exists()) myPluginDir.mkdirs();
                 log((lang.equals("EN") ? "Plugin directory: " : "Plugin-Verzeichnis: ") + myPluginDir.getAbsolutePath());
 

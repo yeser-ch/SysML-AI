@@ -22,7 +22,7 @@ public class SettingsDialog extends JFrame {
     }
 
     private void buildUI() {
-        // --- NEU: GridBagLayout für flexiblere Spaltenbreiten ---
+        // GridBagLayout für flexiblere Spaltenbreiten ---
         JPanel formPanel = new JPanel(new GridBagLayout());
         formPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         GridBagConstraints gbc = new GridBagConstraints();

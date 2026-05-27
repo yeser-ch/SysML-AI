@@ -4,6 +4,9 @@ import com.nomagic.magicdraw.core.Application;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.schroedingersblock.core.SchroedingersBlockPlugin;
 import com.nomagic.magicdraw.core.GUILog;
+import com.nomagic.magicdraw.plugins.Plugin;
+import com.nomagic.magicdraw.plugins.PluginDescriptor;
+import com.nomagic.magicdraw.plugins.PluginUtils;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,12 +18,12 @@ import java.util.prefs.Preferences;
 import java.io.File;
 import java.nio.file.Files;
 
-public class DummyExplanationService implements ExplanationService {
+public class GeminiExplanationService implements ExplanationService {
 
     private static final String MODEL = "gemini-2.5-flash";
 
     // ─── Modus Konfiguration ───────────────────────────────────────────────────
-    private static final int EXPERT_MAX_TOKENS = 9000; // Erhöht für tiefe Analysen
+    private static final int EXPERT_MAX_TOKENS = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
     private static final int BASIC_MAX_TOKENS = 1000;
@@ -28,7 +31,7 @@ public class DummyExplanationService implements ExplanationService {
 
     // ─── Conversation State ────────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
-    private String currentDetailLevel = "Basic"; // Standardwert
+    private String currentDetailLevel = "Basic";
 
     @Override
     public void setDetailLevel(String level) {
@@ -43,18 +46,34 @@ public class DummyExplanationService implements ExplanationService {
                 ? targetElement.getOwner().getHumanName()
                 : "root";
 
-        // DATENDURCHSTICH: Echte JSON-Datei von der Platte laden!
+        GUILog log = Application.getInstance().getGUILog();
+        log.log("[GeminiExplanationService] Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "]");
+        log.log("[GeminiExplanationService] Detail-Level: " + currentDetailLevel);
+
+        // Echte JSON-Datei von der Platte laden
         String exportedJson = loadLatestExportedJson();
 
+        if (exportedJson.startsWith("Error")) {
+            log.log("[GeminiExplanationService] Fehler beim Lesen der lokalen Modelldaten: " + exportedJson);
+        } else {
+            double jsonKb = exportedJson.length() / 1024.0;
+            log.log("[GeminiExplanationService] Lokale JSON erfolgreich geladen. Groesse: " + String.format("%.2f", jsonKb) + " KB");
+        }
+
+        // Prompt mit PromptLoader zusammenbauen
         String prompt = PromptLoader.buildPrompt(
                 currentDetailLevel, elementName, elementType, ownerName, exportedJson);
+
+        double promptKb = prompt.length() / 1024.0;
+        log.log("[GeminiExplanationService] System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
         return callGemini(prompt, currentDetailLevel);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        // Follow-Up Fragen nutzen immer den Expert-Modus
+        GUILog log = Application.getInstance().getGUILog();
+        log.log("[GeminiExplanationService] Sende Follow-Up Frage an das Modell...");
         return callGemini(question, currentDetailLevel);
     }
 
@@ -66,6 +85,7 @@ public class DummyExplanationService implements ExplanationService {
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
+            log.log("[GeminiExplanationService] Fehler: Kein API-Schluessel in den Einstellungen hinterlegt.");
             return "⚠️ Error: No API-Key found. Please restart the analysis and enter a valid key.";
         }
 
@@ -95,24 +115,33 @@ public class DummyExplanationService implements ExplanationService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
+            log.log("[GeminiExplanationService] Sende HTTP-POST an Gemini-Schnittstelle...");
+
+            // Zeitmessung für Performance-Überwachung starten
+            long startTime = System.currentTimeMillis();
+
             HttpClient client = HttpClient.newHttpClient();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            log.log("[Debug] Raw Json:\n" + response.body());
 
+            long duration = System.currentTimeMillis() - startTime;
+
+            // Fehler-Status abfangen (z.B. 429 Quota)
             if (response.statusCode() != 200) {
-                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + response.body();
+                log.log("[GeminiExplanationService] API-Antwort fehlgeschlagen mit HTTP-Status: " + response.statusCode() + " (Dauer: " + duration + "ms)");
+                String cleanError = extractErrorMessageFromJson(response.body());
+                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError;
             }
 
-            String responseText = extractTextFromJson(response.body());
+            log.log("[GeminiExplanationService] API-Antwort erfolgreich empfangen (HTTP 200 OK | Dauer: " + duration + "ms)");
 
+            String responseText = extractTextFromJson(response.body());
             String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
             conversationHistory.add(modelJson);
-
-            log.log(responseText);
 
             return responseText;
 
         } catch (Exception e) {
+            log.log("[GeminiExplanationService] Interner Verbindungsfehler: " + e.getMessage());
             return "❌ Internal error: " + e.getMessage();
         }
     }
@@ -121,8 +150,7 @@ public class DummyExplanationService implements ExplanationService {
 
     private String loadLatestExportedJson() {
         try {
-            String pluginId = "com.schroedingersblock.plugin";
-            File pluginDir = new File(System.getProperty("user.dir"), "plugins" + File.separator + pluginId);
+            File pluginDir = getBaseDirectory();
             File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
 
             if (!exportDir.exists() || !exportDir.isDirectory()) {
@@ -130,6 +158,7 @@ public class DummyExplanationService implements ExplanationService {
             }
 
             File[] files = exportDir.listFiles((dir, name) -> name.endsWith(".json"));
+
             if (files == null || files.length == 0) {
                 return "Error: No model JSON files found.";
             }
@@ -146,6 +175,22 @@ public class DummyExplanationService implements ExplanationService {
         } catch (Exception e) {
             return "Error reading exported model data: " + e.getMessage();
         }
+    }
+
+    @SuppressWarnings("DuplicatedCode")
+    private File getBaseDirectory() {
+        String PLUGIN_ID = "com.schroedingersblock.plugin";
+        try {
+            for (Plugin plugin : PluginUtils.getPlugins()) {
+                PluginDescriptor descriptor = plugin.getDescriptor();
+                if (descriptor != null && PLUGIN_ID.equals(descriptor.getID())) {
+                    return descriptor.getPluginDirectory();
+                }
+            }
+        } catch (Throwable t) {
+            // Ignoriere Fehler
+        }
+        return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
 
     // ─── JSON Hilfsmethoden ────────────────────────────────────────────────────
@@ -173,6 +218,27 @@ public class DummyExplanationService implements ExplanationService {
             return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
         } catch (Exception e) {
             return "Error extracting text from response.";
+        }
+    }
+
+    private String extractErrorMessageFromJson(String json) {
+        try {
+            String marker = "\"message\": \"";
+            int start = json.indexOf(marker);
+            if (start == -1) return json;
+
+            start += marker.length();
+            int end = json.indexOf("\"", start);
+
+            while (end != -1 && json.charAt(end - 1) == '\\') {
+                end = json.indexOf("\"", end + 1);
+            }
+
+            if (end == -1) return json;
+
+            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+        } catch (Exception e) {
+            return json;
         }
     }
 }
