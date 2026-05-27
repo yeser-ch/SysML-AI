@@ -95,7 +95,6 @@ public class SchroedingersBlockPlugin extends Plugin {
 
     // Eingabefenster für den API-Key
     public static void askApiKey(Preferences prefs) {
-        String currentKey = prefs.get(API_KEY_PREF, "");
         String newKey = JOptionPane.showInputDialog(null,
                 "Please enter your Gemini API Key:\n(This will be saved locally on your device)",
                 "API Key Configuration",

@@ -20,3 +20,4 @@ Owner: {ownerName}
 - Plain language — no unnecessary jargon
 - No introduction, no closing sentence
 - If something is unclear from the model data, say so briefly
+- Never finish mid-sentence!
