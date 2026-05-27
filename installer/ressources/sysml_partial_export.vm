@@ -365,10 +365,10 @@
 #if($target.getID())#set($val = $target.getID())#elseif($target.ID)#set($val = $target.ID)#end##
 #if("$!val" == "")##
 #foreach($item in $target)#if("$!val" == "")#if($item.getID())#set($val = $item.getID())#elseif($item.ID)#set($val = $item.ID)#end#end#end##
-#end##
+#end##if("$!val" == "")##
 $!val##
-#end##
-#end##
+#end##if($target)##
+#end##macro(getCleanId)##
 ##
 ## Extrahiert einen sauberen String (Name/Wert), verhindert Java-Objektreferenzen (@...)
 ## Nutzt StringCleaner Utility aus Java für Whitespace-Cleaning (Zeilenumbrüche -> Leerzeichen)
@@ -378,9 +378,9 @@ $!val##
 #if($target.getName())#set($txt = $target.getName())#elseif($target.name)#set($txt = $target.name)#elseif($target.value)#set($txt = $target.value.toString())#else#set($txt = $target.toString())#end##
 #if($txt && $txt != "")##
 $!stringUtil.cleanWhitespace($txt)##
-#end##
-#end##
-#end##
+#end##if($txt && $txt != "")##
+#end##if($target)##
+#end##macro(getCleanText)##
 ##
 ## JSON-Safe String: Ersetzt Zeilenumbrüche durch \n, Tabs durch \t, und escaped Backslashes
 ## Dies ist notwendig, da Velocity 1.7 keine .replace() Methoden unterstützt
@@ -390,8 +390,8 @@ $!stringUtil.cleanWhitespace($txt)##
 #if($target.getName())#set($txt = $target.getName())#elseif($target.name)#set($txt = $target.name)#elseif($target.value)#set($txt = $target.value.toString())#else#set($txt = $target.toString())#end##
 #if($txt.contains("@") || $txt.contains("impl."))#set($txt = "")#end##
 $!txt##
-#end##
-#end##
+#end##if($target)##
+#end##macro(getJsonSafeText)##
 ##
 ## ====================================================================
 ## MACRO: initializePartialExport

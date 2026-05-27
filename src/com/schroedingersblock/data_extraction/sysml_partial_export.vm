@@ -356,8 +356,6 @@
 #end##macro(collectDependencyLinks)##
 ##
 ## ====================================================================
-<<<<<<< HEAD
-=======
 ## MAKROS FÜR SAUBERE DATENEXTRAKTION (API-ROHDATEN KOMPATIBEL)
 ## ====================================================================
 ## Extrahiert die ID, egal ob Liste oder Einzelobjekt
@@ -367,10 +365,10 @@
 #if($target.getID())#set($val = $target.getID())#elseif($target.ID)#set($val = $target.ID)#end##
 #if("$!val" == "")##
 #foreach($item in $target)#if("$!val" == "")#if($item.getID())#set($val = $item.getID())#elseif($item.ID)#set($val = $item.ID)#end#end#end##
-#end##
+#end##if("$!val" == "")##
 $!val##
-#end##
-#end##
+#end##if($target)##
+#end##macro(getCleanId)##
 ##
 ## Extrahiert einen sauberen String (Name/Wert), verhindert Java-Objektreferenzen (@...)
 ## Nutzt StringCleaner Utility aus Java für Whitespace-Cleaning (Zeilenumbrüche -> Leerzeichen)
@@ -380,9 +378,9 @@ $!val##
 #if($target.getName())#set($txt = $target.getName())#elseif($target.name)#set($txt = $target.name)#elseif($target.value)#set($txt = $target.value.toString())#else#set($txt = $target.toString())#end##
 #if($txt && $txt != "")##
 $!stringUtil.cleanWhitespace($txt)##
-#end##
-#end##
-#end##
+#end##if($txt && $txt != "")##
+#end##if($target)##
+#end##macro(getCleanText)##
 ##
 ## JSON-Safe String: Ersetzt Zeilenumbrüche durch \n, Tabs durch \t, und escaped Backslashes
 ## Dies ist notwendig, da Velocity 1.7 keine .replace() Methoden unterstützt
@@ -392,11 +390,10 @@ $!stringUtil.cleanWhitespace($txt)##
 #if($target.getName())#set($txt = $target.getName())#elseif($target.name)#set($txt = $target.name)#elseif($target.value)#set($txt = $target.value.toString())#else#set($txt = $target.toString())#end##
 #if($txt.contains("@") || $txt.contains("impl."))#set($txt = "")#end##
 $!txt##
-#end##
-#end##
+#end##if($target)##
+#end##macro(getJsonSafeText)##
 ##
 ## ====================================================================
->>>>>>> LeosWorkspace
 ## MACRO: initializePartialExport
 ## ====================================================================
 ## Main entry point: Initialize center element and traverse relationships
@@ -423,55 +420,6 @@ $!txt##
 #end##macro(initializePartialExport)##
 ##
 ## ====================================================================
-<<<<<<< HEAD
-## MACRO: exportCollectedElements
-## ====================================================================
-## Generate JSON for all collected elements
-##
-## Features:
-##   - Filters system library elements (SysML, UML, StandardProfile, etc.)
-##   - Only exports whitelisted SysML v1 element types
-##   - Includes traversal metadata (depth, source)
-##   - Proper JSON comma handling
-##
-## Output: Comma-separated JSON objects (no array brackets)
-##         Caller must wrap in [ ] brackets
-##
-#macro(exportCollectedElements)##
-#set($sortedIds = $collectedElements.keySet())##
-#foreach($elemId in $sortedIds)##
-#set($collectionData = $collectedElements.get($elemId))##
-#set($elem = $collectionData.get("element"))##
-#set($depth = $collectionData.get("depth"))##
-#set($source = $collectionData.get("source"))##
-#set($type = "")##
-#if($elem.humanType)##
-#set($type = $elem.humanType)##
-#end##if($elem.humanType)##
-#set($t = $type.replace(" ", ""))##
-#set($qName = "")##
-#if($elem.qualifiedName)##
-#set($qName = $elem.qualifiedName)##
-#end##if($elem.qualifiedName)##
-#set($isSystem = false)##
-#if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $elem.ID.contains("_180beta"))##
-#set($isSystem = true)##
-#end##if($qName.startsWith("SysML") || ...)##
-#set($isValidType = false)##
-#if($t == "Block" || $t == "ValueType" || $t == "ConstraintBlock" || $t == "Port" || $t == "ProxyPort" || $t == "FullPort" || $t == "FlowPort" || $t == "PartProperty" || $t == "ValueProperty" || $t == "ReferenceProperty" || $t == "ConstraintProperty" || $t == "Property" || $t == "FlowProperty" || $t == "Connector" || $t == "BindingConnector" || $t == "ItemFlow" || $t == "Association" || $t == "AssociationClass" || $t == "InterfaceRealization" || $t == "Usage" || $t == "Requirement" || $t == "TestCase" || $t == "UseCase" || $t == "Actor" || $t == "Activity" || $t.contains("Action") || $t.contains("Node") || $t == "ControlFlow" || $t == "ObjectFlow" || $t == "ActivityPartition" || $t == "Pin" || $t == "StateMachine" || $t == "Region" || $t == "State" || $t == "Pseudostate" || $t == "FinalState" || $t == "Transition" || $t == "Trigger" || $t == "Event" || $t == "Interaction" || $t == "Lifeline" || $t == "Message" || $t == "ExecutionSpecification" || $t == "CombinedFragment" || $t == "InteractionOperand" || $t == "Package" || $t == "Model" || $t == "View" || $t == "Viewpoint" || $t == "Rationale" || $t == "Problem")##
-#set($isValidType = true)##
-#end##if($t == "Block" || ...)##
-#if($isValidType && !$isSystem)##
-{"id": "$elem.ID", "name": "$!elem.name.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')", "type": "$type", "partial_depth": $depth, "partial_source": "$source", "stereotypes": [#set($isFirstSt = true)##
-#foreach($st in $elem.appliedStereotype)##
-#if(!$isFirstSt),#else##
-#set($isFirstSt = false)##
-#end##
-"$st.name"#end##
-], "owner_id": "$!elem.owner.ID", "documentation": "$!elem.documentation.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"}#if(!$foreach.last),
-#end##if(!$foreach.last)##
-#end##if($isValidType...)##
-=======
 ## MACRO: exportElementFull (adapted from sysml_flat_export)
 ## ====================================================================
 ## Export complete element data with all supported fields
@@ -613,7 +561,6 @@ $!txt##
 #set($elem = $collectedElements.get($elemId).element)##
 #exportElementFull($elem $isFirst)##
 #set($isFirst = false)##
->>>>>>> LeosWorkspace
 #end##foreach($elemId in $sortedIds)##
 #end##macro(exportCollectedElements)##
 }
