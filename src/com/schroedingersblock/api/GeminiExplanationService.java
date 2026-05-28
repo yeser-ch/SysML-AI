@@ -127,9 +127,17 @@ public class GeminiExplanationService implements ExplanationService {
 
             // Fehler-Status abfangen (z.B. 429 Quota)
             if (response.statusCode() != 200) {
-                log.log("[GeminiExplanationService] API-Antwort fehlgeschlagen mit HTTP-Status: " + response.statusCode() + " (Dauer: " + duration + "ms)");
+                log.log("[GeminiExplanationService] API-Antwort fehlgeschlagen mit HTTP-Status: " + response.statusCode());
+
+                // --- NEU & SICHER: Wenn unberechtigt oder ungültig, fehlerhaften Key zurücksetzen ---
+                if (response.statusCode() == 400 || response.statusCode() == 403) {
+                    prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, "");
+                    log.log("[GeminiExplanationService] Info: Ungültiger API-Key wurde automatisch zurückgesetzt.");
+                }
+                // ------------------------------------------------------------------------------------
+
                 String cleanError = extractErrorMessageFromJson(response.body());
-                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError;
+                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError + "\n\n(Der Key wurde zurückgesetzt. Bitte öffne die Analyse neu, um einen gültigen Key einzugeben.)";
             }
 
             log.log("[GeminiExplanationService] API-Antwort erfolgreich empfangen (HTTP 200 OK | Dauer: " + duration + "ms)");
