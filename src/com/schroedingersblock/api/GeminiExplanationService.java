@@ -26,7 +26,7 @@ public class GeminiExplanationService implements ExplanationService {
     private static final int EXPERT_MAX_TOKENS = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
-    private static final int BASIC_MAX_TOKENS = 1000;
+    private static final int BASIC_MAX_TOKENS = 3000;
     private static final double BASIC_TEMPERATURE = 0.0;
 
     // ─── Conversation State ────────────────────────────────────────────────────
@@ -85,8 +85,8 @@ public class GeminiExplanationService implements ExplanationService {
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
-            log.log("[GeminiExplanationService] Fehler: Kein API-Schluessel in den Einstellungen hinterlegt.");
-            return "⚠️ Error: No API-Key found. Please restart the analysis and enter a valid key.";
+            log.log("[GeminiExplanationService] Error: No API key found in settings.");
+            return "⚠️ Error: No API key found. Please restart the analysis and enter a valid key.";
         }
 
         try {
@@ -115,9 +115,7 @@ public class GeminiExplanationService implements ExplanationService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            log.log("[GeminiExplanationService] Sende HTTP-POST an Gemini-Schnittstelle...");
-
-            // Zeitmessung für Performance-Überwachung starten
+            log.log("[GeminiExplanationService] Sending HTTP POST to Gemini API...");
             long startTime = System.currentTimeMillis();
 
             HttpClient client = HttpClient.newHttpClient();
@@ -125,22 +123,30 @@ public class GeminiExplanationService implements ExplanationService {
 
             long duration = System.currentTimeMillis() - startTime;
 
-            // Fehler-Status abfangen (z.B. 429 Quota)
+            // --- Refined HTTP Error Handling (Fully in English & Context-Specific) ---
             if (response.statusCode() != 200) {
-                log.log("[GeminiExplanationService] API-Antwort fehlgeschlagen mit HTTP-Status: " + response.statusCode());
+                log.log("[GeminiExplanationService] API request failed with HTTP status: " + response.statusCode());
+                String cleanError = extractErrorMessageFromJson(response.body());
 
-                // --- NEU & SICHER: Wenn unberechtigt oder ungültig, fehlerhaften Key zurücksetzen ---
+                // CASE 1: True authentication/invalid key error (400 Bad Request / 403 Forbidden)
                 if (response.statusCode() == 400 || response.statusCode() == 403) {
                     prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, "");
-                    log.log("[GeminiExplanationService] Info: Ungültiger API-Key wurde automatisch zurückgesetzt.");
-                }
-                // ------------------------------------------------------------------------------------
+                    log.log("[GeminiExplanationService] Info: Invalid API key has been automatically reset.");
 
-                String cleanError = extractErrorMessageFromJson(response.body());
-                return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError + "\n\n(Der Key wurde zurückgesetzt. Bitte öffne die Analyse neu, um einen gültigen Key einzugeben.)";
+                    return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
+                            + "\n\n(The API key was invalid and has been reset. Please reopen the analysis window to enter a valid key.)";
+                }
+
+                // CASE 2: Quota exceeded or temporary server issues (429 Rate Limit, 503 Overloaded, etc.)
+                else {
+                    log.log("[GeminiExplanationService] Info: Temporary server error or quota limit reached. Key remains saved.");
+
+                    return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
+                            + "\n\n(This is a temporary issue or rate limit. Please wait a moment and try again.)";
+                }
             }
 
-            log.log("[GeminiExplanationService] API-Antwort erfolgreich empfangen (HTTP 200 OK | Dauer: " + duration + "ms)");
+            log.log("[GeminiExplanationService] API response received successfully (HTTP 200 OK | Duration: " + duration + "ms)");
 
             String responseText = extractTextFromJson(response.body());
             String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
@@ -149,8 +155,13 @@ public class GeminiExplanationService implements ExplanationService {
             return responseText;
 
         } catch (Exception e) {
-            log.log("[GeminiExplanationService] Interner Verbindungsfehler: " + e.getMessage());
-            return "❌ Internal error: " + e.getMessage();
+            // --- Network and connection error handling ---
+            log.log("[GeminiExplanationService] Internal connection error: " + e.toString());
+
+            String friendlyNotice = (e.getMessage() != null && !e.getMessage().equals("null")) ? e.getMessage() : e.getClass().getSimpleName();
+
+            return "❌ Connection Error: No internet connection or the server is unreachable (" + friendlyNotice + ").\n"
+                    + "Please check your network connection and try again.";
         }
     }
 
@@ -210,20 +221,55 @@ public class GeminiExplanationService implements ExplanationService {
 
     private String extractTextFromJson(String json) {
         try {
+            StringBuilder fullText = new StringBuilder();
             String marker = "\"text\": \"";
-            int start = json.indexOf(marker);
-            if (start == -1) return "Could not find text in response.";
+            int currentPos = 0;
 
-            start += marker.length();
-            int end = json.indexOf("\"", start);
+            // Schleife über alle "text": " Fragmente im JSON
+            while (true) {
+                int start = json.indexOf(marker, currentPos);
+                if (start == -1) {
+                    break; // Keine weiteren Text-Blöcke gefunden
+                }
+                start += marker.length();
 
-            while (end != -1 && json.charAt(end - 1) == '\\') {
-                end = json.indexOf("\"", end + 1);
+                int end = json.indexOf("\"", start);
+                while (end != -1 && json.charAt(end - 1) == '\\') {
+                    // Robustheits-Check: Zähle Backslashes direkt vor der Quote
+                    int backslashCount = 0;
+                    int i = end - 1;
+                    while (i >= start && json.charAt(i) == '\\') {
+                        backslashCount++;
+                        i--;
+                    }
+                    // Wenn ungerade, ist es eine unvollständige escaped Quote (\") -> weitersuchen
+                    if (backslashCount % 2 == 1) {
+                        end = json.indexOf("\"", end + 1);
+                    } else {
+                        break; // Gerade Anzahl bedeutet, die Quote beendet den String (z.B. \\")
+                    }
+                }
+
+                if (end == -1) break;
+
+                // Text-Fragment extrahieren und parsen
+                String partText = json.substring(start, end)
+                        .replace("\\n", "\n")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\")
+                        .replace("\\t", "\t");
+
+                fullText.append(partText);
+
+                // Suche ab der aktuellen Position im nächsten Schleifendurchlauf weiter
+                currentPos = end + 1;
             }
 
-            if (end == -1) return "Error parsing response.";
+            if (fullText.length() == 0) {
+                return "Could not find text in response.";
+            }
 
-            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+            return fullText.toString();
         } catch (Exception e) {
             return "Error extracting text from response.";
         }
