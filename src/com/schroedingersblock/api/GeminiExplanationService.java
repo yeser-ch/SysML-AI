@@ -3,7 +3,6 @@ package com.schroedingersblock.api;
 import com.nomagic.magicdraw.core.Application;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.schroedingersblock.core.SchroedingersBlockPlugin;
-import com.nomagic.magicdraw.core.GUILog;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
@@ -13,21 +12,77 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.prefs.Preferences;
 import java.io.File;
 import java.nio.file.Files;
 
 public class GeminiExplanationService implements ExplanationService {
 
-    private static final String MODEL = "gemini-2.5-flash";
+    // ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    // ─── Modus Konfiguration ───────────────────────────────────────────────────
+    // ─── Modell-Kaskade (Werden der Reihe nach ausprobiert) ────────────────────
+    private static final String[] MODELS = {
+            "gemini-3.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-3-flash",
+            "gemini-3.1-flash-lite"
+    };
+    private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+    // Statisch, damit der Schalter-Zustand für die gesamte Sitzung erhalten bleibt
+    private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
+
+    // ─── Circuit Breaker Pattern (Leitungsschutzschalter) ──────────────────────
+    private static class CircuitBreaker {
+        private static final long COOLDOWN_MS = 1 * 60 * 1000; // 5 Minuten Sperre bei Ausfall
+        private enum State { CLOSED, OPEN, HALF_OPEN }
+        private final Map<String, State> states   = new HashMap<>();
+        private final Map<String, Long>  openedAt = new HashMap<>();
+
+        // OPTIMIERUNG: 'synchronized' verhindert Map-Kollisionen und unendliche Schleifen bei mehreren Fenstern
+        synchronized boolean isAvailable(String model) {
+            State state = states.getOrDefault(model, State.CLOSED);
+            if (state == State.CLOSED || state == State.HALF_OPEN) return true;
+            if (System.currentTimeMillis() - openedAt.getOrDefault(model, 0L) > COOLDOWN_MS) {
+                states.put(model, State.HALF_OPEN);
+                return true;
+            }
+            return false;
+        }
+
+        synchronized void recordSuccess(String model) {
+            states.put(model, State.CLOSED);
+            openedAt.remove(model);
+        }
+
+        synchronized void recordFailure(String model) {
+            states.put(model, State.OPEN);
+            openedAt.put(model, System.currentTimeMillis());
+        }
+    }
+
+    // ─── Modus & System-Konfiguration ──────────────────────────────────────────
     private static final int EXPERT_MAX_TOKENS = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
     private static final int BASIC_MAX_TOKENS = 3000;
     private static final double BASIC_TEMPERATURE = 0.0;
+
+    // Schutz vor Halluzinationen und halben Sätzen
+    private static final String SYSTEM_INSTRUCTION =
+            "You are a SysML model analysis assistant embedded in CATIA Magic Systems. "
+                    + "ONLY answer questions about SysML, systems engineering, model elements, "
+                    + "ports, flows, constraints, requirements, and the current model under analysis. "
+                    + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
+                    + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
+                    + "IMPORTANT: Always finish your last sentence completely. "
+                    + "Never stop mid-sentence. If you are running out of space, wrap up your "
+                    + "answer early but always end on a complete sentence with a full stop.";
 
     // ─── Conversation State ────────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
@@ -46,123 +101,134 @@ public class GeminiExplanationService implements ExplanationService {
                 ? targetElement.getOwner().getHumanName()
                 : "root";
 
-        GUILog log = Application.getInstance().getGUILog();
-        log.log("[GeminiExplanationService] Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "]");
-        log.log("[GeminiExplanationService] Detail-Level: " + currentDetailLevel);
+        log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "]");
+        log("Detail-Level: " + currentDetailLevel);
 
-        // Echte JSON-Datei von der Platte laden
         String exportedJson = loadLatestExportedJson();
 
         if (exportedJson.startsWith("Error")) {
-            log.log("[GeminiExplanationService] Fehler beim Lesen der lokalen Modelldaten: " + exportedJson);
+            log("Fehler beim Lesen der lokalen Modelldaten: " + exportedJson);
         } else {
             double jsonKb = exportedJson.length() / 1024.0;
-            log.log("[GeminiExplanationService] Lokale JSON erfolgreich geladen. Groesse: " + String.format("%.2f", jsonKb) + " KB");
+            log("Lokale JSON erfolgreich geladen. Groesse: " + String.format("%.2f", jsonKb) + " KB");
         }
 
-        // Prompt mit PromptLoader zusammenbauen
         String prompt = PromptLoader.buildPrompt(
                 currentDetailLevel, elementName, elementType, ownerName, exportedJson);
 
         double promptKb = prompt.length() / 1024.0;
-        log.log("[GeminiExplanationService] System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
+        log("System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
         return callGemini(prompt, currentDetailLevel);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        GUILog log = Application.getInstance().getGUILog();
-        log.log("[GeminiExplanationService] Sende Follow-Up Frage an das Modell...");
+        log("Sende Follow-Up Frage an das Modell...");
         return callGemini(question, currentDetailLevel);
     }
 
-    // ─── Interne LLM API Logik ─────────────────────────────────────────────────
+    // ─── Interne LLM API Logik mit Circuit Breaker Kaskade ─────────────────────
 
     private String callGemini(String userMessage, String mode) {
-        GUILog log = Application.getInstance().getGUILog();
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
-            log.log("[GeminiExplanationService] Error: No API key found in settings.");
+            log("Error: No API key found in settings.");
             return "⚠️ Error: No API key found. Please restart the analysis and enter a valid key.";
         }
 
-        try {
-            String userJson = "{\"role\": \"user\", \"parts\": [{\"text\": \"" + escapeJson(userMessage) + "\"}]}";
-            conversationHistory.add(userJson);
+        String userJson = "{\"role\": \"user\", \"parts\": [{\"text\": \"" + escapeJson(userMessage) + "\"}]}";
+        conversationHistory.add(userJson);
 
-            boolean isExpert = "Expert".equalsIgnoreCase(mode);
-            int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
-            double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
+        boolean isExpert = "Expert".equalsIgnoreCase(mode);
+        int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
+        double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
 
-            String historyArray = String.join(",", conversationHistory);
-            String requestBody = "{"
-                    + "\"contents\": [" + historyArray + "],"
-                    + "\"generationConfig\": {"
-                    + "  \"temperature\": " + temp + ","
-                    + "  \"maxOutputTokens\": " + maxTokens + ","
-                    + "  \"topP\": 0.9"
-                    + "}"
-                    + "}";
+        String historyArray = String.join(",", conversationHistory);
+        String requestBody = "{"
+                + "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},"
+                + "\"contents\": [" + historyArray + "],"
+                + "\"generationConfig\": {"
+                + "  \"temperature\": " + temp + ","
+                + "  \"maxOutputTokens\": " + maxTokens + ","
+                + "  \"topP\": 0.9"
+                + "}"
+                + "}";
 
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=" + apiKey;
+        // --- Iteriere über die Kaskade der verfügbaren Modelle ---
+        for (String model : MODELS) {
+            if (!CIRCUIT.isAvailable(model)) {
+                log("Skipping " + model + " (Circuit is OPEN due to previous failure)");
+                continue;
+            }
+
+            String url = API_BASE + model + ":generateContent?key=" + apiKey;
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .timeout(java.time.Duration.ofSeconds(5)) // Von 10s auf 5s gekürzt!
                     .build();
 
-            log.log("[GeminiExplanationService] Sending HTTP POST to Gemini API...");
+            log("Sending HTTP POST to " + model + "...");
             long startTime = System.currentTimeMillis();
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            try {
+                HttpResponse<String> response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                long duration = System.currentTimeMillis() - startTime;
 
-            long duration = System.currentTimeMillis() - startTime;
+                if (response.statusCode() == 200) {
+                    CIRCUIT.recordSuccess(model);
+                    log("Circuit CLOSED for " + model + " — recovered.");
+                    log("API response received successfully from " + model + " (HTTP 200 OK | Duration: " + duration + "ms)");
 
-            // --- Refined HTTP Error Handling (Fully in English & Context-Specific) ---
-            if (response.statusCode() != 200) {
-                log.log("[GeminiExplanationService] API request failed with HTTP status: " + response.statusCode());
-                String cleanError = extractErrorMessageFromJson(response.body());
+                    String responseText = extractTextFromJson(response.body());
+                    String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
+                    conversationHistory.add(modelJson);
 
-                // CASE 1: True authentication/invalid key error (400 Bad Request / 403 Forbidden)
+                    return responseText;
+                }
+
+                // CASE 1: Echtes Authentifizierungsproblem -> Nur abbrechen und Key löschen, wenn Google explizit den Key bemängelt
                 if (response.statusCode() == 400 || response.statusCode() == 403) {
-                    prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, "");
-                    log.log("[GeminiExplanationService] Info: Invalid API key has been automatically reset.");
+                    String responseBody = response.body();
 
-                    return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
-                            + "\n\n(The API key was invalid and has been reset. Please reopen the analysis window to enter a valid key.)";
+                    // Präzise Inhaltsprüfung: Betrifft der HTTP 400/403 Fehler wirklich den API-Key?
+                    if (responseBody.contains("API key not valid") ||
+                            responseBody.contains("API_KEY_INVALID") ||
+                            responseBody.contains("not valid")) {
+
+                        prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, "");
+                        log("Info: Invalid API key has been automatically reset.");
+                        conversationHistory.remove(conversationHistory.size() - 1);
+
+                        String cleanError = extractErrorMessageFromJson(responseBody);
+                        return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
+                                + "\n\n(The API key was invalid and has been reset. Please reopen the analysis window to enter a valid key.)";
+                    }
+
+                    // Falls es ein anderer HTTP 400 Fehler ist (z.B. falscher Modellname),
+                    // loggen wir ihn unten in CASE 2 als Modellfehler und probieren das nächste Modell!
                 }
 
-                // CASE 2: Quota exceeded or temporary server issues (429 Rate Limit, 503 Overloaded, etc.)
-                else {
-                    log.log("[GeminiExplanationService] Info: Temporary server error or quota limit reached. Key remains saved.");
+                // CASE 2: Quota exceeded, falscher Modellname oder temporäre Serverprobleme -> Fehler notieren und NÄCHSTES Modell probieren
+                log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
+                CIRCUIT.recordFailure(model);
 
-                    return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
-                            + "\n\n(This is a temporary issue or rate limit. Please wait a moment and try again.)";
-                }
+            } catch (Exception e) {
+                log("Network/Connection error or timeout on " + model + ": " + e.getMessage());
+                CIRCUIT.recordFailure(model); // Bei Timeout direkt nächstes Modell probieren
             }
-
-            log.log("[GeminiExplanationService] API response received successfully (HTTP 200 OK | Duration: " + duration + "ms)");
-
-            String responseText = extractTextFromJson(response.body());
-            String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
-            conversationHistory.add(modelJson);
-
-            return responseText;
-
-        } catch (Exception e) {
-            // --- Network and connection error handling ---
-            log.log("[GeminiExplanationService] Internal connection error: " + e.toString());
-
-            String friendlyNotice = (e.getMessage() != null && !e.getMessage().equals("null")) ? e.getMessage() : e.getClass().getSimpleName();
-
-            return "❌ Connection Error: No internet connection or the server is unreachable (" + friendlyNotice + ").\n"
-                    + "Please check your network connection and try again.";
         }
+
+        // --- Wenn wir hier ankommen, haben ALLE Modelle in der Kaskade versagt ---
+        conversationHistory.remove(conversationHistory.size() - 1);
+
+        return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load or network issues.\n"
+                + "Please wait a few minutes, check your internet connection, and try again.";
     }
 
     // ─── JSON Datendurchstich Logik ────────────────────────────────────────────
@@ -212,6 +278,21 @@ public class GeminiExplanationService implements ExplanationService {
         return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
 
+    // ─── OPTIMIERUNG: Thread-Sicherer und Deadlock-freier Log-Helper für MagicDraw ─────
+    private void log(String msg) {
+        String prefixed = "[GeminiExplanationService] " + msg;
+        try {
+            // invokeLater entkoppelt den Log-Schritt asynchron vom GUI-Thread
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                try {
+                    Application.getInstance().getGUILog().log(prefixed);
+                } catch (Throwable ignored) {}
+            });
+        } catch (Throwable t) {
+            System.out.println(prefixed);
+        }
+    }
+
     // ─── JSON Hilfsmethoden ────────────────────────────────────────────────────
 
     private String escapeJson(String text) {
@@ -225,34 +306,28 @@ public class GeminiExplanationService implements ExplanationService {
             String marker = "\"text\": \"";
             int currentPos = 0;
 
-            // Schleife über alle "text": " Fragmente im JSON
             while (true) {
                 int start = json.indexOf(marker, currentPos);
-                if (start == -1) {
-                    break; // Keine weiteren Text-Blöcke gefunden
-                }
+                if (start == -1) break;
                 start += marker.length();
 
                 int end = json.indexOf("\"", start);
                 while (end != -1 && json.charAt(end - 1) == '\\') {
-                    // Robustheits-Check: Zähle Backslashes direkt vor der Quote
                     int backslashCount = 0;
                     int i = end - 1;
                     while (i >= start && json.charAt(i) == '\\') {
                         backslashCount++;
                         i--;
                     }
-                    // Wenn ungerade, ist es eine unvollständige escaped Quote (\") -> weitersuchen
                     if (backslashCount % 2 == 1) {
                         end = json.indexOf("\"", end + 1);
                     } else {
-                        break; // Gerade Anzahl bedeutet, die Quote beendet den String (z.B. \\")
+                        break;
                     }
                 }
 
                 if (end == -1) break;
 
-                // Text-Fragment extrahieren und parsen
                 String partText = json.substring(start, end)
                         .replace("\\n", "\n")
                         .replace("\\\"", "\"")
@@ -260,15 +335,10 @@ public class GeminiExplanationService implements ExplanationService {
                         .replace("\\t", "\t");
 
                 fullText.append(partText);
-
-                // Suche ab der aktuellen Position im nächsten Schleifendurchlauf weiter
                 currentPos = end + 1;
             }
 
-            if (fullText.length() == 0) {
-                return "Could not find text in response.";
-            }
-
+            if (fullText.isEmpty()) return "Could not find text in response.";
             return fullText.toString();
         } catch (Exception e) {
             return "Error extracting text from response.";
