@@ -29,7 +29,7 @@ public class GeminiExplanationService implements ExplanationService {
             "gemini-2.5-flash",       // Primäres Standardmodell
             "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
             "gemini-2.5-flash-lite",  // Offizielles Flash-Lite Modell
-            "gemini-1.5-flash-latest"        // Zuverlässiger, klassischer Fallback-Knoten
+            "gemini-1.5-flash-latest" // Zuverlässiger, klassischer Fallback-Knoten
     };
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
@@ -154,11 +154,10 @@ public class GeminiExplanationService implements ExplanationService {
             systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
         }
 
+        // KORREKTUR: systemInstructionPart wird jetzt korrekt eingebunden und tools (Google Search) bleibt aktiv
         String requestBody = "{"
                 + systemInstructionPart
-                // ─── AUS DER MAIN MERGED: GROUNDING (Google Search) aktiv für Fakten-Abgleich ───
                 + "\"tools\": [{\"google_search\": {}}],"
-                // ───────────────────────────────────────────────────────────────────────────────
                 + "\"contents\": [" + historyArray + "],"
                 + "\"generationConfig\": {"
                 + "  \"temperature\": " + temp + ","

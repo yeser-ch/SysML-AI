@@ -356,8 +356,6 @@
 #end##macro(collectDependencyLinks)##
 ##
 ## ====================================================================
-<<<<<<< HEAD
-=======
 ## MAKROS FÜR SAUBERE DATENEXTRAKTION (API-ROHDATEN KOMPATIBEL)
 ## ====================================================================
 ## Extrahiert die ID, egal ob Liste oder Einzelobjekt
@@ -396,7 +394,6 @@ $!txt##
 #end##
 ##
 ## ====================================================================
->>>>>>> LeosWorkspace
 ## MACRO: initializePartialExport
 ## ====================================================================
 ## Main entry point: Initialize center element and traverse relationships
@@ -423,7 +420,6 @@ $!txt##
 #end##macro(initializePartialExport)##
 ##
 ## ====================================================================
-<<<<<<< HEAD
 ## MACRO: exportCollectedElements
 ## ====================================================================
 ## Generate JSON for all collected elements
@@ -439,6 +435,7 @@ $!txt##
 ##
 #macro(exportCollectedElements)##
 #set($sortedIds = $collectedElements.keySet())##
+#set($isFirstOut = true)##
 #foreach($elemId in $sortedIds)##
 #set($collectionData = $collectedElements.get($elemId))##
 #set($elem = $collectionData.get("element"))##
@@ -462,27 +459,25 @@ $!txt##
 #set($isValidType = true)##
 #end##if($t == "Block" || ...)##
 #if($isValidType && !$isSystem)##
-{"id": "$elem.ID", "name": "$!elem.name.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')", "type": "$type", "partial_depth": $depth, "partial_source": "$source", "stereotypes": [#set($isFirstSt = true)##
-#foreach($st in $elem.appliedStereotype)##
-#if(!$isFirstSt),#else##
-#set($isFirstSt = false)##
+#if(!$isFirstOut),
 #end##
-"$st.name"#end##
-], "owner_id": "$!elem.owner.ID", "documentation": "$!elem.documentation.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"}#if(!$foreach.last),
-#end##if(!$foreach.last)##
-#end##if($isValidType...)##
-=======
+#set($isFirstOut = false)##
+#exportElementFull($elem)##
+#end##if($isValidType && !$isSystem)##
+#end##foreach($elemId in $sortedIds)##
+#end##macro(exportCollectedElements)##
+##
+## ====================================================================
 ## MACRO: exportElementFull (adapted from sysml_flat_export)
 ## ====================================================================
 ## Export complete element data with all supported fields
 ## NO RECURSION - processes single element only
 ##
-#macro(exportElementFull $elem $isFirst)##
+#macro(exportElementFull $elem)##
 #set($type = "")#if($elem.humanType)#set($type = $elem.humanType)#end##
+#set($t = $type.replace(" ", ""))##
 ##
-#if(!$isFirst),
-#end##
-{"id":"#getCleanId($elem)","name":"#getCleanText($elem)","type":"$type"##
+{"id":"#getCleanId($elem)","name":"#getCleanText($elem)","type":"$type","partial_depth":$depth,"partial_source":"$source"##
 ,"stereotypes":[#set($isFirstSt=true)##
 #foreach($st in $elem.appliedStereotype)##
 #if(!$isFirstSt),#end#set($isFirstSt=false)##
@@ -600,20 +595,4 @@ $!txt##
 ]}##
 #end##macro(exportElementFull)##
 ##
-## ====================================================================
-## MACRO: exportCollectedElements
-## ====================================================================
-## Iterate collected elements and export each with full data
-## Uses exportElementFull for comprehensive JSON export
-##
-#macro(exportCollectedElements)##
-#set($sortedIds = $collectedElements.keySet())##
-#set($isFirst = true)##
-#foreach($elemId in $sortedIds)##
-#set($elem = $collectedElements.get($elemId).element)##
-#exportElementFull($elem $isFirst)##
-#set($isFirst = false)##
->>>>>>> LeosWorkspace
-#end##foreach($elemId in $sortedIds)##
-#end##macro(exportCollectedElements)##
 }
