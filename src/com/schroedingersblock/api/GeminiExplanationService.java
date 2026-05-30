@@ -149,6 +149,12 @@ public class GeminiExplanationService implements ExplanationService {
         String historyArray = String.join(",", conversationHistory);
         String requestBody = "{"
                 + "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},"
+                // ─── GROUNDING: Google Search aktiviert für alle Anfragen ──────────────
+                // Das Modell darf das Internet (Google Search) befragen, bevor es antwortet.
+                // Dadurch werden aktuelle Informationen und Fakten in die Antwort eingebettet.
+                // Keine SDK-Abhängigkeit nötig — reines JSON-Feld in der REST-API (v1beta).
+                + "\"tools\": [{\"google_search\": {}}],"
+                // ──────────────────────────────────────────────────────────────────────
                 + "\"contents\": [" + historyArray + "],"
                 + "\"generationConfig\": {"
                 + "  \"temperature\": " + temp + ","
