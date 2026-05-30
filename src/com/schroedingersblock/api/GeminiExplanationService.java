@@ -24,13 +24,12 @@ public class GeminiExplanationService implements ExplanationService {
     // ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    // ─── Modell-Kaskade (Werden der Reihe nach ausprobiert) ────────────────────
+    // ─── Modell-Kaskade (Bereinigte IDs aus eurer AI Studio Übersicht) ──────────
     private static final String[] MODELS = {
-            "gemini-3.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-3-flash",
-            "gemini-3.1-flash-lite"
+            "gemini-2.5-flash",       // Primäres Standardmodell
+            "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
+            "gemini-2.5-flash-lite",  // Offizielles Flash-Lite Modell
+            "gemini-1.5-flash-latest" // Zuverlässiger, klassischer Fallback-Knoten
     };
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
@@ -39,12 +38,11 @@ public class GeminiExplanationService implements ExplanationService {
 
     // ─── Circuit Breaker Pattern (Leitungsschutzschalter) ──────────────────────
     private static class CircuitBreaker {
-        private static final long COOLDOWN_MS = 1 * 60 * 1000; // 5 Minuten Sperre bei Ausfall
+        private static final long COOLDOWN_MS = 3 * 60 * 1000; // 3 Minuten Sperre bei Serverausfall
         private enum State { CLOSED, OPEN, HALF_OPEN }
         private final Map<String, State> states   = new HashMap<>();
         private final Map<String, Long>  openedAt = new HashMap<>();
 
-        // OPTIMIERUNG: 'synchronized' verhindert Map-Kollisionen und unendliche Schleifen bei mehreren Fenstern
         synchronized boolean isAvailable(String model) {
             State state = states.getOrDefault(model, State.CLOSED);
             if (state == State.CLOSED || state == State.HALF_OPEN) return true;
@@ -73,7 +71,7 @@ public class GeminiExplanationService implements ExplanationService {
     private static final int BASIC_MAX_TOKENS = 3000;
     private static final double BASIC_TEMPERATURE = 0.0;
 
-    // Schutz vor Halluzinationen und halben Sätzen
+    // Schutzleitplanken NUR für die erste Analyse (Schützt vor Halluzinationen)
     private static final String SYSTEM_INSTRUCTION =
             "You are a SysML model analysis assistant embedded in CATIA Magic Systems. "
                     + "ONLY answer questions about SysML, systems engineering, model elements, "
@@ -119,18 +117,20 @@ public class GeminiExplanationService implements ExplanationService {
         double promptKb = prompt.length() / 1024.0;
         log("System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
-        return callGemini(prompt, currentDetailLevel);
+        // WICHTIG: 'true' signalisiert die initiale Analyse mit Leitplanken
+        return callGemini(prompt, currentDetailLevel, true);
     }
 
     @Override
     public String fetchFollowUp(String question) {
         log("Sende Follow-Up Frage an das Modell...");
-        return callGemini(question, currentDetailLevel);
+        // WICHTIG: 'false' signalisiert ein freies Follow-Up OHNE Leitplanken-Filter
+        return callGemini(question, currentDetailLevel, false);
     }
 
     // ─── Interne LLM API Logik mit Circuit Breaker Kaskade ─────────────────────
 
-    private String callGemini(String userMessage, String mode) {
+    private String callGemini(String userMessage, String mode, boolean isInitial) {
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
@@ -147,14 +147,17 @@ public class GeminiExplanationService implements ExplanationService {
         double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
 
         String historyArray = String.join(",", conversationHistory);
+
+        // DYNAMISCHE SYSTEM INSTRUCTION: Nur beim ersten Aufruf mitsenden!
+        String systemInstructionPart = "";
+        if (isInitial) {
+            systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
+        }
+
+        // KORREKTUR: systemInstructionPart wird jetzt korrekt eingebunden und tools (Google Search) bleibt aktiv
         String requestBody = "{"
-                + "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},"
-                // ─── GROUNDING: Google Search aktiviert für alle Anfragen ──────────────
-                // Das Modell darf das Internet (Google Search) befragen, bevor es antwortet.
-                // Dadurch werden aktuelle Informationen und Fakten in die Antwort eingebettet.
-                // Keine SDK-Abhängigkeit nötig — reines JSON-Feld in der REST-API (v1beta).
+                + systemInstructionPart
                 + "\"tools\": [{\"google_search\": {}}],"
-                // ──────────────────────────────────────────────────────────────────────
                 + "\"contents\": [" + historyArray + "],"
                 + "\"generationConfig\": {"
                 + "  \"temperature\": " + temp + ","
@@ -176,7 +179,7 @@ public class GeminiExplanationService implements ExplanationService {
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(java.time.Duration.ofSeconds(5)) // Von 10s auf 5s gekürzt!
+                    .timeout(java.time.Duration.ofSeconds(3)) // 3s Timeout gegen Kaskaden-Lags
                     .build();
 
             log("Sending HTTP POST to " + model + "...");
@@ -198,11 +201,9 @@ public class GeminiExplanationService implements ExplanationService {
                     return responseText;
                 }
 
-                // CASE 1: Echtes Authentifizierungsproblem -> Nur abbrechen und Key löschen, wenn Google explizit den Key bemängelt
                 if (response.statusCode() == 400 || response.statusCode() == 403) {
                     String responseBody = response.body();
 
-                    // Präzise Inhaltsprüfung: Betrifft der HTTP 400/403 Fehler wirklich den API-Key?
                     if (responseBody.contains("API key not valid") ||
                             responseBody.contains("API_KEY_INVALID") ||
                             responseBody.contains("not valid")) {
@@ -215,22 +216,17 @@ public class GeminiExplanationService implements ExplanationService {
                         return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
                                 + "\n\n(The API key was invalid and has been reset. Please reopen the analysis window to enter a valid key.)";
                     }
-
-                    // Falls es ein anderer HTTP 400 Fehler ist (z.B. falscher Modellname),
-                    // loggen wir ihn unten in CASE 2 als Modellfehler und probieren das nächste Modell!
                 }
 
-                // CASE 2: Quota exceeded, falscher Modellname oder temporäre Serverprobleme -> Fehler notieren und NÄCHSTES Modell probieren
                 log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
                 CIRCUIT.recordFailure(model);
 
             } catch (Exception e) {
                 log("Network/Connection error or timeout on " + model + ": " + e.getMessage());
-                CIRCUIT.recordFailure(model); // Bei Timeout direkt nächstes Modell probieren
+                CIRCUIT.recordFailure(model);
             }
         }
 
-        // --- Wenn wir hier ankommen, haben ALLE Modelle in der Kaskade versagt ---
         conversationHistory.remove(conversationHistory.size() - 1);
 
         return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load or network issues.\n"
@@ -284,11 +280,9 @@ public class GeminiExplanationService implements ExplanationService {
         return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
 
-    // ─── OPTIMIERUNG: Thread-Sicherer und Deadlock-freier Log-Helper für MagicDraw ─────
     private void log(String msg) {
         String prefixed = "[GeminiExplanationService] " + msg;
         try {
-            // invokeLater entkoppelt den Log-Schritt asynchron vom GUI-Thread
             javax.swing.SwingUtilities.invokeLater(() -> {
                 try {
                     Application.getInstance().getGUILog().log(prefixed);
