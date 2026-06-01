@@ -29,7 +29,7 @@ public class GeminiExplanationService implements ExplanationService {
             "gemini-2.5-flash",       // Primäres Standardmodell
             "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
             "gemini-2.5-flash-lite",  // Offizielles Flash-Lite Modell
-            "gemini-1.5-flash-latest" // Zuverlässiger, klassischer Fallback-Knoten
+            "gemini-1.5-flash" // Zuverlässiger, klassischer Fallback-Knoten
     };
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
@@ -38,29 +38,35 @@ public class GeminiExplanationService implements ExplanationService {
 
     // ─── Circuit Breaker Pattern (Leitungsschutzschalter) ──────────────────────
     private static class CircuitBreaker {
-        private static final long COOLDOWN_MS = 3 * 60 * 1000; // 3 Minuten Sperre bei Serverausfall
-        private enum State { CLOSED, OPEN, HALF_OPEN }
-        private final Map<String, State> states   = new HashMap<>();
-        private final Map<String, Long>  openedAt = new HashMap<>();
+        private final Map<String, Integer> failureCounts = new HashMap<>();
+        private final Map<String, Long>  retryAtMap    = new HashMap<>();
 
+        // Prüft thread-sicher, ob die dynamische Sperre eines Modells abgelaufen ist
         synchronized boolean isAvailable(String model) {
-            State state = states.getOrDefault(model, State.CLOSED);
-            if (state == State.CLOSED || state == State.HALF_OPEN) return true;
-            if (System.currentTimeMillis() - openedAt.getOrDefault(model, 0L) > COOLDOWN_MS) {
-                states.put(model, State.HALF_OPEN);
-                return true;
-            }
-            return false;
+            long retryAt = retryAtMap.getOrDefault(model, 0L);
+            return System.currentTimeMillis() >= retryAt;
         }
 
         synchronized void recordSuccess(String model) {
-            states.put(model, State.CLOSED);
-            openedAt.remove(model);
+            failureCounts.remove(model);
+            retryAtMap.remove(model);
         }
 
         synchronized void recordFailure(String model) {
-            states.put(model, State.OPEN);
-            openedAt.put(model, System.currentTimeMillis());
+            int failures = failureCounts.getOrDefault(model, 0) + 1;
+            failureCounts.put(model, failures);
+
+            // Dynamische Berechnung: 1. Fehler = 5s, 2. Fehler = 15s, 3. Fehler = 45s...
+            long lockDurationMs = (long) Math.pow(3, failures - 1) * 5 * 1000;
+
+            // Deckelung bei maximal 5 Minuten, um ein Modell im Free-Tier nicht ewig zu blockieren
+            if (lockDurationMs > 5 * 60 * 1000) {
+                lockDurationMs = 5 * 60 * 1000;
+            }
+
+            retryAtMap.put(model, System.currentTimeMillis() + lockDurationMs);
+            // Konsolen-Log für das Teampanel beim Debuggen
+            System.out.println("[CircuitBreaker] " + model + " temporaer gesperrt fuer " + (lockDurationMs / 1000) + " Sekunden.");
         }
     }
 
