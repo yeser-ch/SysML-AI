@@ -118,12 +118,18 @@ public class DataExtractionService {
                 
                 // Export synchron ausführen
                 engine.evaluate(template);
+
+                // Dateigröße direkt bestimmen und im log ausgeben
+                long fileSizeInBytes = outputFile.length();
+                double fileSizeInKB = fileSizeInBytes / 1024.0;
+
+                log.log("[DataExtractionService] Erfolgreich! JSON gespeichert unter: " + outputFile.getAbsolutePath());
+                log.log("[DataExtractionService] Exportierte Dateigröße: " + String.format("%.2f", fileSizeInKB) + " KB");
+
             } finally {
                 // Ressourcen nach dem Export freigeben
                 engine.destroy();
             }
-
-            log.log("[DataExtractionService] Erfolgreich! JSON gespeichert unter: " + outputFile.getAbsolutePath());
             return true;
 
         } catch (Exception e) {
