@@ -7,16 +7,15 @@ import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
 
-import java.io.File;
+import java.io.*;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.time.Instant;
+import java.util.*;
 import java.util.prefs.Preferences;
 
 public class GeminiExplanationService implements ExplanationService {
@@ -34,7 +33,7 @@ public class GeminiExplanationService implements ExplanationService {
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
 
     // ─── Circuit Breaker (inner class) ───────────────────────────────────────
-    private static class CircuitBreaker {
+    static class CircuitBreaker {
         private static final long COOLDOWN_MS = 5 * 60 * 1000;
         private enum State { CLOSED, OPEN, HALF_OPEN }
         private final Map<String, State> states   = new HashMap<>();
@@ -66,11 +65,98 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
+    // ─── File Manager (inner class) ──────────────────────────────────────────
+    private static class FileManager {
+        private static final String UPLOAD_URL =
+                "https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=multipart&key=";
+        private static final Path CACHE_FILE = Paths.get(
+                System.getProperty("user.home"),
+                "Documents", "SchroedingersBlock-MaxWorkspace", "gemini_file_cache.properties");
+
+        static String upload(String jsonContent, String apiKey) throws IOException {
+            String boundary = "sb_upload_boundary";
+            String CRLF = "\r\n";
+            String body = "--" + boundary + CRLF
+                    + "Content-Type: application/json; charset=UTF-8" + CRLF + CRLF
+                    + "{\"file\":{\"displayName\":\"SysML Model Export\",\"mimeType\":\"application/json\"}}" + CRLF
+                    + "--" + boundary + CRLF
+                    + "Content-Type: application/json" + CRLF + CRLF
+                    + jsonContent + CRLF
+                    + "--" + boundary + "--";
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(UPLOAD_URL + apiKey))
+                        .header("Content-Type", "multipart/related; boundary=" + boundary)
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(body.getBytes(StandardCharsets.UTF_8)))
+                        .build();
+                HttpResponse<String> resp = HttpClient.newHttpClient()
+                        .send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() != 200)
+                    throw new IOException("Upload failed (HTTP " + resp.statusCode() + "): " + resp.body());
+                String uri        = extractField(resp.body(), "\"uri\"");
+                String expiration = extractField(resp.body(), "\"expirationTime\"");
+                saveCache(uri, expiration);
+                return uri;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Upload interrupted", e);
+            }
+        }
+
+        static String getValidUri() {
+            try {
+                Properties p = loadCache();
+                String uri   = p.getProperty("uri", "");
+                long expires = Long.parseLong(p.getProperty("expires", "0"));
+                if (!uri.isEmpty() && System.currentTimeMillis() < expires) return uri;
+            } catch (Exception ignored) {}
+            return null;
+        }
+
+        private static void saveCache(String uri, String expirationIso) {
+            try {
+                long ms = (expirationIso != null && !expirationIso.isEmpty())
+                        ? Instant.parse(expirationIso).toEpochMilli()
+                        : System.currentTimeMillis() + 47L * 3600 * 1000;
+                Properties p = new Properties();
+                p.setProperty("uri",     uri);
+                p.setProperty("expires", String.valueOf(ms));
+                Files.createDirectories(CACHE_FILE.getParent());
+                try (Writer w = Files.newBufferedWriter(CACHE_FILE)) { p.store(w, null); }
+            } catch (IOException e) {
+                System.err.println("[GeminiExplanationService] Cache write failed: " + e.getMessage());
+            }
+        }
+
+        private static Properties loadCache() throws IOException {
+            Properties p = new Properties();
+            if (Files.exists(CACHE_FILE)) {
+                try (Reader r = Files.newBufferedReader(CACHE_FILE)) { p.load(r); }
+            }
+            return p;
+        }
+
+        private static String extractField(String json, String key) {
+            String marker = key + ": \"";
+            int start = json.indexOf(marker);
+            if (start == -1) { marker = key + ":\""; start = json.indexOf(marker); }
+            if (start == -1) return "";
+            start += marker.length();
+            int end = json.indexOf("\"", start);
+            return end == -1 ? "" : json.substring(start, end);
+        }
+    }
+
+    // ─── Public upload entry point ────────────────────────────────────────────
+    public static String uploadModel(String jsonContent, String apiKey) throws IOException {
+        return FileManager.upload(jsonContent, apiKey);
+    }
+
     // ─── Mode configuration ───────────────────────────────────────────────────
     private static final int    EXPERT_MAX_TOKENS  = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
-    private static final int    BASIC_MAX_TOKENS   = 1000;
+    private static final int    BASIC_MAX_TOKENS   = 4000;
     private static final double BASIC_TEMPERATURE  = 0.0;
 
     private static final String SYSTEM_INSTRUCTION =
@@ -103,17 +189,25 @@ public class GeminiExplanationService implements ExplanationService {
 
         log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
 
-        String exportedJson = loadLatestExportedJson();
-        if (exportedJson.startsWith("Error")) {
-            log("Fehler beim Lesen der Modelldaten: " + exportedJson);
+        String fileUri = FileManager.getValidUri();
+        String exportedJson;
+
+        if (fileUri != null) {
+            log("Verwende hochgeladene Modelldatei (Files API).");
+            exportedJson = "[Model context provided as uploaded file]";
         } else {
-            log("JSON geladen: " + String.format("%.2f", exportedJson.length() / 1024.0) + " KB");
+            exportedJson = loadLatestExportedJson();
+            if (exportedJson.startsWith("Error")) {
+                log("Fehler beim Lesen der Modelldaten: " + exportedJson);
+            } else {
+                log("JSON geladen: " + String.format("%.2f", exportedJson.length() / 1024.0) + " KB");
+            }
         }
 
         String prompt = PromptLoader.buildPrompt(currentDetailLevel, elementName, elementType, ownerName, exportedJson);
         log("Prompt generiert: " + String.format("%.2f", prompt.length() / 1024.0) + " KB");
 
-        return callGemini(prompt, currentDetailLevel);
+        return callGemini(prompt, currentDetailLevel, fileUri);
     }
 
     @Override
@@ -125,12 +219,18 @@ public class GeminiExplanationService implements ExplanationService {
     // ─── Internal LLM call with circuit breaker cascade ──────────────────────
 
     private String callGemini(String userMessage, String mode) {
+        return callGemini(userMessage, mode, null);
+    }
+
+    private String callGemini(String userMessage, String mode, String fileUri) {
         String apiKey = resolveApiKey();
         if (apiKey == null || apiKey.isEmpty()) {
             return "⚠️ Error: No API key found. Please enter a valid Gemini API key.";
         }
 
-        String userJson    = buildMessageJson("user", userMessage);
+        // Only attach fileUri to the very first message of the session
+        String userJson = buildMessageJson("user", userMessage,
+                conversationHistory.isEmpty() ? fileUri : null);
         conversationHistory.add(userJson);
         String requestBody = buildRequestBody(mode);
 
@@ -227,6 +327,17 @@ public class GeminiExplanationService implements ExplanationService {
     }
 
     private String buildMessageJson(String role, String text) {
+        return buildMessageJson(role, text, null);
+    }
+
+    private String buildMessageJson(String role, String text, String fileUri) {
+        if (fileUri != null && !fileUri.isEmpty()) {
+            return "{\"role\": \"" + role + "\", \"parts\": ["
+                    + "{\"fileData\": {\"mimeType\": \"application/json\", \"fileUri\": \""
+                    + escapeJson(fileUri) + "\"}},"
+                    + "{\"text\": \"" + escapeJson(text) + "\"}"
+                    + "]}";
+        }
         return "{\"role\": \"" + role + "\", \"parts\": [{\"text\": \"" + escapeJson(text) + "\"}]}";
     }
 
@@ -279,7 +390,7 @@ public class GeminiExplanationService implements ExplanationService {
                    .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
-    private String extractTextFromJson(String json) {
+    String extractTextFromJson(String json) {
         try {
             String marker = "\"text\": \"";
             int start = json.indexOf(marker);
