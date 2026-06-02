@@ -425,12 +425,11 @@ $!txt##
 ## Export complete element data with all supported fields
 ## NO RECURSION - processes single element only
 ##
-#macro(exportElementFull $elem $isFirst)##
+#macro(exportElementFull $elem)##
 #set($type = "")#if($elem.humanType)#set($type = $elem.humanType)#end##
+#set($t = $type.replace(" ", ""))##
 ##
-#if(!$isFirst),
-#end##
-{"id":"#getCleanId($elem)","name":"#getCleanText($elem)","type":"$type"##
+{"id":"#getCleanId($elem)","name":"#getCleanText($elem)","type":"$type","partial_depth":$depth,"partial_source":"$source"##
 ,"stereotypes":[#set($isFirstSt=true)##
 #foreach($st in $elem.appliedStereotype)##
 #if(!$isFirstSt),#end#set($isFirstSt=false)##

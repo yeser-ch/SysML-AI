@@ -155,12 +155,6 @@ public class ExplanationDialog extends JFrame {
         SwingWorker<String, Void> worker = new SwingWorker<>() {
             @Override
             protected String doInBackground() {
-                try {
-                    Thread.sleep(2000); // Simulation der Latenz (falls gewünscht)
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-
                 if (isInitial) {
                     return apiService.fetchExplanation(targetElement, mode);
                 } else {
