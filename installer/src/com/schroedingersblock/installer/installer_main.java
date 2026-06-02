@@ -237,7 +237,7 @@ public class installer_main extends JFrame {
 
         switch (key) {
             case "WELCOME_TITLE":
-                return isEn ? "Welcome to the Schrödinger's Block Installer" : "Willkommen beim Installer für Schrödinger's Block";
+                return isEn ? "Welcome to the Schrödinger's Block Installer for SysML V1" : "Willkommen beim Installer für Schrödinger's Block für SysML V1";
             case "WELCOME_INFO":
                 return isEn ? "<html><center>This tool installs the Schrödinger's Block Plugin for MagicDraw / Cameo.<br><br>Detected System: <b>" + sysName + "</b><br>Please ensure that CATIA Magic Systems of Systems Architect is closed.</center></html>"
                         : "<html><center>Dieses Tool installiert das Schrödinger's Block Plugin für MagicDraw / Cameo.<br><br>Erkanntes System: <b>" + sysName + "</b><br>Bitte stellen Sie sicher, dass das CATIA Magic Systems of Systems Architect geschlossen ist.</center></html>";
