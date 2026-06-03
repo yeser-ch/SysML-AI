@@ -7,24 +7,23 @@ import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
 
+import java.io.*;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.time.Instant;
+import java.util.*;
 import java.util.prefs.Preferences;
-import java.io.File;
-import java.nio.file.Files;
 
 public class GeminiExplanationService implements ExplanationService {
 
-    // ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
+// ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    // ─── Modell-Kaskade (Bereinigte IDs aus eurer AI Studio Übersicht) ──────────
+    // ─── Model cascade (tried in order) ──────────────────────────────────────
     private static final String[] MODELS = {
             "gemini-2.5-flash",       // Primäres Standardmodell
             "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
@@ -33,10 +32,10 @@ public class GeminiExplanationService implements ExplanationService {
     };
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
-    // Statisch, damit der Schalter-Zustand für die gesamte Sitzung erhalten bleibt
+    // Static so circuit state persists across all requests in the same session
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
 
-    // ─── Circuit Breaker Pattern (Leitungsschutzschalter) ──────────────────────
+    // ─── Circuit Breaker (inner class) ───────────────────────────────────────
     private static class CircuitBreaker {
         private final Map<String, Integer> failureCounts = new HashMap<>();
         private final Map<String, Long>  retryAtMap    = new HashMap<>();
@@ -70,27 +69,116 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
-    // ─── Modus & System-Konfiguration ──────────────────────────────────────────
-    private static final int EXPERT_MAX_TOKENS = 9000;
+
+    // ─── File Manager (inner class) ──────────────────────────────────────────
+    private static class FileManager {
+        private static final String UPLOAD_URL =
+                "https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=multipart&key=";
+        private static final Path CACHE_FILE = Paths.get(
+                System.getProperty("user.home"),
+                "Documents", "SchroedingersBlock-MaxWorkspace", "gemini_file_cache.properties");
+
+        static String upload(String jsonContent, String apiKey) throws IOException {
+            String boundary = "sb_upload_boundary";
+            String CRLF = "\r\n";
+            String body = "--" + boundary + CRLF
+                    + "Content-Type: application/json; charset=UTF-8" + CRLF + CRLF
+                    + "{\"file\":{\"displayName\":\"SysML Model Export\",\"mimeType\":\"application/json\"}}" + CRLF
+                    + "--" + boundary + CRLF
+                    + "Content-Type: application/json" + CRLF + CRLF
+                    + jsonContent + CRLF
+                    + "--" + boundary + "--";
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(UPLOAD_URL + apiKey))
+                        .header("Content-Type", "multipart/related; boundary=" + boundary)
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(body.getBytes(StandardCharsets.UTF_8)))
+                        .build();
+                HttpResponse<String> resp = HttpClient.newHttpClient()
+                        .send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() != 200)
+                    throw new IOException("Upload failed (HTTP " + resp.statusCode() + "): " + resp.body());
+                String uri        = extractField(resp.body(), "\"uri\"");
+                String expiration = extractField(resp.body(), "\"expirationTime\"");
+                saveCache(uri, expiration);
+                return uri;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Upload interrupted", e);
+            }
+        }
+
+        static String getValidUri() {
+            try {
+                Properties p = loadCache();
+                String uri   = p.getProperty("uri", "");
+                long expires = Long.parseLong(p.getProperty("expires", "0"));
+                if (!uri.isEmpty() && System.currentTimeMillis() < expires) return uri;
+            } catch (Exception ignored) {}
+            return null;
+        }
+
+        private static void saveCache(String uri, String expirationIso) {
+            try {
+                long ms = (expirationIso != null && !expirationIso.isEmpty())
+                        ? Instant.parse(expirationIso).toEpochMilli()
+                        : System.currentTimeMillis() + 47L * 3600 * 1000;
+                Properties p = new Properties();
+                p.setProperty("uri",     uri);
+                p.setProperty("expires", String.valueOf(ms));
+                Files.createDirectories(CACHE_FILE.getParent());
+                try (Writer w = Files.newBufferedWriter(CACHE_FILE)) { p.store(w, null); }
+            } catch (IOException e) {
+                System.err.println("[GeminiExplanationService] Cache write failed: " + e.getMessage());
+            }
+        }
+
+        private static Properties loadCache() throws IOException {
+            Properties p = new Properties();
+            if (Files.exists(CACHE_FILE)) {
+                try (Reader r = Files.newBufferedReader(CACHE_FILE)) { p.load(r); }
+            }
+            return p;
+        }
+
+        private static String extractField(String json, String key) {
+            String marker = key + ": \"";
+            int start = json.indexOf(marker);
+            if (start == -1) { marker = key + ":\""; start = json.indexOf(marker); }
+            if (start == -1) return "";
+            start += marker.length();
+            int end = json.indexOf("\"", start);
+            return end == -1 ? "" : json.substring(start, end);
+        }
+    }
+
+    // ─── Public upload entry point ────────────────────────────────────────────
+    public static String uploadModel(String jsonContent, String apiKey) throws IOException {
+        return FileManager.upload(jsonContent, apiKey);
+    }
+
+    // ─── Mode configuration ───────────────────────────────────────────────────
+    private static final int    EXPERT_MAX_TOKENS  = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
-    private static final int BASIC_MAX_TOKENS = 3000;
-    private static final double BASIC_TEMPERATURE = 0.0;
+    private static final int    BASIC_MAX_TOKENS   = 4000;
+    private static final double BASIC_TEMPERATURE  = 0.0;
 
-    // Schutzleitplanken NUR für die erste Analyse (Schützt vor Halluzinationen)
     private static final String SYSTEM_INSTRUCTION =
             "You are a SysML model analysis assistant embedded in CATIA Magic Systems. "
-                    + "ONLY answer questions about SysML, systems engineering, model elements, "
-                    + "ports, flows, constraints, requirements, and the current model under analysis. "
-                    + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
-                    + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
-                    + "IMPORTANT: Always finish your last sentence completely. "
-                    + "Never stop mid-sentence. If you are running out of space, wrap up your "
-                    + "answer early but always end on a complete sentence with a full stop.";
+            + "ONLY answer questions about SysML, systems engineering, model elements, "
+            + "ports, flows, constraints, requirements, and the current model under analysis. "
+            + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
+            + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
+            + "IMPORTANT: Always finish your last sentence completely. "
+            + "Never stop mid-sentence. If you are running out of space, wrap up your "
+            + "answer early but always end on a complete sentence with a full stop.";
 
-    // ─── Conversation State ────────────────────────────────────────────────────
+    // ─── Conversation state ───────────────────────────────────────────────────
     private final List<String> conversationHistory = new ArrayList<>();
     private String currentDetailLevel = "Basic";
+
+    // ─── ExplanationService interface ─────────────────────────────────────────
 
     @Override
     public void setDetailLevel(String level) {
@@ -101,78 +189,61 @@ public class GeminiExplanationService implements ExplanationService {
     public String fetchExplanation(Element targetElement, String mode) {
         String elementName = targetElement != null ? targetElement.getHumanName() : "Unknown element";
         String elementType = targetElement != null ? targetElement.getHumanType() : "Unknown type";
-        String ownerName = (targetElement != null && targetElement.getOwner() != null)
-                ? targetElement.getOwner().getHumanName()
-                : "root";
+        String ownerName   = (targetElement != null && targetElement.getOwner() != null)
+                ? targetElement.getOwner().getHumanName() : "root";
 
-        log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "]");
+        log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
         log("Detail-Level: " + currentDetailLevel);
 
-        String exportedJson = loadLatestExportedJson();
+        String fileUri = FileManager.getValidUri();
+        String exportedJson;
 
-        if (exportedJson.startsWith("Error")) {
-            log("Fehler beim Lesen der lokalen Modelldaten: " + exportedJson);
+        if (fileUri != null) {
+            log("Verwende hochgeladene Modelldatei (Files API).");
+            exportedJson = "[Model context provided as uploaded file]";
         } else {
-            double jsonKb = exportedJson.length() / 1024.0;
-            log("Lokale JSON erfolgreich geladen. Groesse: " + String.format("%.2f", jsonKb) + " KB");
+            exportedJson = loadLatestExportedJson();
+            if (exportedJson.startsWith("Error")) {
+                log("Fehler beim Lesen der Modelldaten: " + exportedJson);
+            } else {
+                log("JSON geladen: " + String.format("%.2f", exportedJson.length() / 1024.0) + " KB");
+            }
         }
 
-        String prompt = PromptLoader.buildPrompt(
-                currentDetailLevel, elementName, elementType, ownerName, exportedJson);
-
+        String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, elementName, elementType, ownerName, exportedJson);
         double promptKb = prompt.length() / 1024.0;
         log("System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
-        // WICHTIG: 'true' signalisiert die initiale Analyse mit Leitplanken
-        return callGemini(prompt, currentDetailLevel, true);
+        return callGemini(prompt, currentDetailLevel, fileUri);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        log("Sende Follow-Up Frage an das Modell...");
-        // WICHTIG: 'false' signalisiert ein freies Follow-Up OHNE Leitplanken-Filter
-        return callGemini(question, currentDetailLevel, false);
+        log("Sende Follow-Up Frage...");
+        return callGemini(question, currentDetailLevel);
     }
 
-    // ─── Interne LLM API Logik mit Circuit Breaker Kaskade ─────────────────────
+    // ─── Internal LLM call with circuit breaker cascade ──────────────────────
 
-    private String callGemini(String userMessage, String mode, boolean isInitial) {
+    private String callGemini(String userMessage, String mode) {
+        return callGemini(userMessage, mode, null);
+    }
+
+    private String callGemini(String userMessage, String mode, String fileUri) {
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
         if (apiKey.isEmpty()) {
             log("Error: No API key found in settings.");
-            return "⚠️ Error: No API key found. Please restart the analysis and enter a valid key.";
+            return "⚠️ Error: No API key found. Please enter a valid Gemini API key.";
         }
 
-        String userJson = "{\"role\": \"user\", \"parts\": [{\"text\": \"" + escapeJson(userMessage) + "\"}]}";
+        // Only attach fileUri to the very first message of the session
+        String userJson = buildMessageJson("user", userMessage,
+                conversationHistory.isEmpty() ? fileUri : null);
         conversationHistory.add(userJson);
+        String requestBody = buildRequestBody(mode, fileUri);
 
-        boolean isExpert = "Expert".equalsIgnoreCase(mode);
-        int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
-        double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
-
-        String historyArray = String.join(",", conversationHistory);
-
-        // DYNAMISCHE SYSTEM INSTRUCTION: Nur beim ersten Aufruf mitsenden!
-        String systemInstructionPart = "";
-        if (isInitial) {
-            systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
-        }
-
-        // KORREKTUR: systemInstructionPart wird jetzt korrekt eingebunden und tools (Google Search) bleibt aktiv
-        String requestBody = "{"
-                + systemInstructionPart
-                + "\"tools\": [{\"google_search\": {}}],"
-                + "\"contents\": [" + historyArray + "],"
-                + "\"generationConfig\": {"
-                + "  \"temperature\": " + temp + ","
-                + "  \"maxOutputTokens\": " + maxTokens + ","
-                + "  \"topP\": 0.9"
-                + "}"
-                + "}";
-
-        // --- Iteriere über die Kaskade der verfügbaren Modelle ---
         for (String model : MODELS) {
             if (!CIRCUIT.isAvailable(model)) {
                 log("Skipping " + model + " (Circuit is OPEN due to previous failure)");
@@ -234,12 +305,88 @@ public class GeminiExplanationService implements ExplanationService {
         }
 
         conversationHistory.remove(conversationHistory.size() - 1);
-
-        return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load or network issues.\n"
-                + "Please wait a few minutes, check your internet connection, and try again.";
+        return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load.\n"
+             + "Please wait a few minutes and try again.";
     }
 
-    // ─── JSON Datendurchstich Logik ────────────────────────────────────────────
+    // ─── HTTP helper ──────────────────────────────────────────────────────────
+
+    private HttpResponse<String> sendRequest(String model, String apiKey, String body) {
+        try {
+            String url = API_BASE + model + ":generateContent?key=" + apiKey;
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            return HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            log("Request failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean isSuccess(HttpResponse<String> r)   { return r != null && r.statusCode() == 200; }
+    private boolean isOverloaded(HttpResponse<String> r) {
+        if (r == null) return true;
+        int c = r.statusCode();
+        return c == 404 || c == 429 || c == 500 || c == 503;
+    }
+    private String formatError(HttpResponse<String> r) {
+        if (r == null) return "❌ No response from server.";
+        return "⚠️ API error (HTTP " + r.statusCode() + "):\n" + extractErrorMessageFromJson(r.body());
+    }
+    private String extractAndSave(String body) {
+        String text = extractTextFromJson(body);
+        conversationHistory.add(buildMessageJson("model", text));
+        return text;
+    }
+
+    // ─── Request builders ─────────────────────────────────────────────────────
+
+    private String buildRequestBody(String mode, String isInitial) {
+        
+        boolean isExpert = "Expert".equalsIgnoreCase(mode);
+        int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
+        double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
+
+        String historyArray = String.join(",", conversationHistory);
+
+        // DYNAMISCHE SYSTEM INSTRUCTION: Nur beim ersten Aufruf mitsenden!
+        String systemInstructionPart = "";
+        if (isInitial != null) {
+            systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
+        }
+
+        // KORREKTUR: systemInstructionPart wird jetzt korrekt eingebunden und tools (Google Search) bleibt aktiv
+        return "{"
+                + systemInstructionPart
+                + "\"tools\": [{\"google_search\": {}}],"
+                + "\"contents\": [" + historyArray + "],"
+                + "\"generationConfig\": {"
+                + "  \"temperature\": " + temp + ","
+                + "  \"maxOutputTokens\": " + maxTokens + ","
+                + "  \"topP\": 0.9"
+                + "}"
+                + "}";
+    }
+
+    private String buildMessageJson(String role, String text) {
+        return buildMessageJson(role, text, null);
+    }
+
+    private String buildMessageJson(String role, String text, String fileUri) {
+        if (fileUri != null && !fileUri.isEmpty()) {
+            return "{\"role\": \"" + role + "\", \"parts\": ["
+                    + "{\"fileData\": {\"mimeType\": \"application/json\", \"fileUri\": \""
+                    + escapeJson(fileUri) + "\"}},"
+                    + "{\"text\": \"" + escapeJson(text) + "\"}"
+                    + "]}";
+        }
+        return "{\"role\": \"" + role + "\", \"parts\": [{\"text\": \"" + escapeJson(text) + "\"}]}";
+    }
+
+    // ─── JSON model loader ────────────────────────────────────────────────────
 
     private String loadLatestExportedJson() {
         try {
@@ -281,10 +428,12 @@ public class GeminiExplanationService implements ExplanationService {
                 }
             }
         } catch (Throwable t) {
-            // Ignoriere Fehler
+            //Ignored
         }
         return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
+
+    // ─── Logging (Cameo GUILog with System.out fallback for tests) ───────────
 
     private void log(String msg) {
         String prefixed = "[GeminiExplanationService] " + msg;
@@ -299,11 +448,12 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
-    // ─── JSON Hilfsmethoden ────────────────────────────────────────────────────
+    // ─── JSON utilities ───────────────────────────────────────────────────────
 
     private String escapeJson(String text) {
         if (text == null) return "";
-        return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+        return text.replace("\\", "\\\\").replace("\"", "\\\"")
+                   .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private String extractTextFromJson(String json) {
