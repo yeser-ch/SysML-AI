@@ -20,12 +20,15 @@ import java.util.prefs.Preferences;
 
 public class GeminiExplanationService implements ExplanationService {
 
+// ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
     // ─── Model cascade (tried in order) ──────────────────────────────────────
     private static final String[] MODELS = {
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro-latest"
+            "gemini-2.5-flash",       // Primäres Standardmodell
+            "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
+            "gemini-2.5-flash-lite",  // Offizielles Flash-Lite Modell
+            "gemini-1.5-flash" // Zuverlässiger, klassischer Fallback-Knoten
     };
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
@@ -33,37 +36,39 @@ public class GeminiExplanationService implements ExplanationService {
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
 
     // ─── Circuit Breaker (inner class) ───────────────────────────────────────
-    static class CircuitBreaker {
-        private static final long COOLDOWN_MS = 5 * 60 * 1000;
-        private enum State { CLOSED, OPEN, HALF_OPEN }
-        private final Map<String, State> states   = new HashMap<>();
-        private final Map<String, Long>  openedAt = new HashMap<>();
+    private static class CircuitBreaker {
+        private final Map<String, Integer> failureCounts = new HashMap<>();
+        private final Map<String, Long>  retryAtMap    = new HashMap<>();
 
-        boolean isAvailable(String model) {
-            State state = states.getOrDefault(model, State.CLOSED);
-            if (state == State.CLOSED || state == State.HALF_OPEN) return true;
-            if (System.currentTimeMillis() - openedAt.getOrDefault(model, 0L) > COOLDOWN_MS) {
-                states.put(model, State.HALF_OPEN);
-                return true;
+        // Prüft thread-sicher, ob die dynamische Sperre eines Modells abgelaufen ist
+        synchronized boolean isAvailable(String model) {
+            long retryAt = retryAtMap.getOrDefault(model, 0L);
+            return System.currentTimeMillis() >= retryAt;
+        }
+
+        synchronized void recordSuccess(String model) {
+            failureCounts.remove(model);
+            retryAtMap.remove(model);
+        }
+
+        synchronized void recordFailure(String model) {
+            int failures = failureCounts.getOrDefault(model, 0) + 1;
+            failureCounts.put(model, failures);
+
+            // Dynamische Berechnung: 1. Fehler = 5s, 2. Fehler = 15s, 3. Fehler = 45s...
+            long lockDurationMs = (long) Math.pow(3, failures - 1) * 5 * 1000;
+
+            // Deckelung bei maximal 5 Minuten, um ein Modell im Free-Tier nicht ewig zu blockieren
+            if (lockDurationMs > 5 * 60 * 1000) {
+                lockDurationMs = 5 * 60 * 1000;
             }
-            return false;
-        }
 
-        void recordSuccess(String model) {
-            State previous = states.getOrDefault(model, State.CLOSED);
-            states.put(model, State.CLOSED);
-            openedAt.remove(model);
-            if (previous != State.CLOSED)
-                System.out.println("[GeminiExplanationService] Circuit CLOSED for " + model + " — recovered.");
-        }
-
-        void recordFailure(String model) {
-            states.put(model, State.OPEN);
-            openedAt.put(model, System.currentTimeMillis());
-            System.out.println("[GeminiExplanationService] Circuit OPEN for " + model
-                    + " — skipping for " + (COOLDOWN_MS / 60000) + " min.");
+            retryAtMap.put(model, System.currentTimeMillis() + lockDurationMs);
+            // Konsolen-Log für das Teampanel beim Debuggen
+            System.out.println("[CircuitBreaker] " + model + " temporaer gesperrt fuer " + (lockDurationMs / 1000) + " Sekunden.");
         }
     }
+
 
     // ─── File Manager (inner class) ──────────────────────────────────────────
     private static class FileManager {
@@ -160,7 +165,7 @@ public class GeminiExplanationService implements ExplanationService {
     private static final double BASIC_TEMPERATURE  = 0.0;
 
     private static final String SYSTEM_INSTRUCTION =
-            "You are a SysML model analysis assistant embedded in Cameo Systems Modeler. "
+            "You are a SysML model analysis assistant embedded in CATIA Magic Systems. "
             + "ONLY answer questions about SysML, systems engineering, model elements, "
             + "ports, flows, constraints, requirements, and the current model under analysis. "
             + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
@@ -188,6 +193,7 @@ public class GeminiExplanationService implements ExplanationService {
                 ? targetElement.getOwner().getHumanName() : "root";
 
         log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
+        log("Detail-Level: " + currentDetailLevel);
 
         String fileUri = FileManager.getValidUri();
         String exportedJson;
@@ -205,7 +211,8 @@ public class GeminiExplanationService implements ExplanationService {
         }
 
         String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, elementName, elementType, ownerName, exportedJson);
-        log("Prompt generiert: " + String.format("%.2f", prompt.length() / 1024.0) + " KB");
+        double promptKb = prompt.length() / 1024.0;
+        log("System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
         return callGemini(prompt, currentDetailLevel, fileUri);
     }
@@ -223,8 +230,11 @@ public class GeminiExplanationService implements ExplanationService {
     }
 
     private String callGemini(String userMessage, String mode, String fileUri) {
-        String apiKey = resolveApiKey();
-        if (apiKey == null || apiKey.isEmpty()) {
+        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
+        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+
+        if (apiKey.isEmpty()) {
+            log("Error: No API key found in settings.");
             return "⚠️ Error: No API key found. Please enter a valid Gemini API key.";
         }
 
@@ -232,47 +242,71 @@ public class GeminiExplanationService implements ExplanationService {
         String userJson = buildMessageJson("user", userMessage,
                 conversationHistory.isEmpty() ? fileUri : null);
         conversationHistory.add(userJson);
-        String requestBody = buildRequestBody(mode);
+        String requestBody = buildRequestBody(mode, fileUri);
 
         for (String model : MODELS) {
             if (!CIRCUIT.isAvailable(model)) {
-                log("Skipping " + model + " (circuit open)");
+                log("Skipping " + model + " (Circuit is OPEN due to previous failure)");
                 continue;
             }
 
-            log("Trying " + model + " ...");
-            long start = System.currentTimeMillis();
-            HttpResponse<String> response = sendRequest(model, apiKey, requestBody);
-            long duration = System.currentTimeMillis() - start;
+            String url = API_BASE + model + ":generateContent?key=" + apiKey;
 
-            if (isSuccess(response)) {
-                CIRCUIT.recordSuccess(model);
-                log("Antwort empfangen von " + model + " (" + duration + "ms)");
-                return extractAndSave(response.body());
-            }
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .timeout(java.time.Duration.ofSeconds(3)) // 3s Timeout gegen Kaskaden-Lags
+                    .build();
 
-            if (isOverloaded(response)) {
+            log("Sending HTTP POST to " + model + "...");
+            long startTime = System.currentTimeMillis();
+
+            try {
+                HttpResponse<String> response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                long duration = System.currentTimeMillis() - startTime;
+
+                if (response.statusCode() == 200) {
+                    CIRCUIT.recordSuccess(model);
+                    log("Circuit CLOSED for " + model + " — recovered.");
+                    log("API response received successfully from " + model + " (HTTP 200 OK | Duration: " + duration + "ms)");
+
+                    String responseText = extractTextFromJson(response.body());
+                    String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
+                    conversationHistory.add(modelJson);
+
+                    return responseText;
+                }
+
+                if (response.statusCode() == 400 || response.statusCode() == 403) {
+                    String responseBody = response.body();
+
+                    if (responseBody.contains("API key not valid") ||
+                            responseBody.contains("API_KEY_INVALID") ||
+                            responseBody.contains("not valid")) {
+
+                        prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, "");
+                        log("Info: Invalid API key has been automatically reset.");
+                        conversationHistory.remove(conversationHistory.size() - 1);
+
+                        String cleanError = extractErrorMessageFromJson(responseBody);
+                        return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
+                                + "\n\n(The API key was invalid and has been reset. Please reopen the analysis window to enter a valid key.)";
+                    }
+                }
+
+                log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
                 CIRCUIT.recordFailure(model);
-            } else {
-                conversationHistory.remove(conversationHistory.size() - 1);
-                return formatError(response);
+
+            } catch (Exception e) {
+                log("Network/Connection error or timeout on " + model + ": " + e.getMessage());
+                CIRCUIT.recordFailure(model);
             }
         }
 
         conversationHistory.remove(conversationHistory.size() - 1);
         return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load.\n"
              + "Please wait a few minutes and try again.";
-    }
-
-    // ─── API key resolution (Cameo Preferences → ApiKeyManager fallback) ─────
-
-    private String resolveApiKey() {
-        try {
-            Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
-            String key = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
-            if (!key.isEmpty()) return key;
-        } catch (Throwable ignored) {}
-        return ApiKeyManager.loadKey();
     }
 
     // ─── HTTP helper ──────────────────────────────────────────────────────────
@@ -300,7 +334,7 @@ public class GeminiExplanationService implements ExplanationService {
     }
     private String formatError(HttpResponse<String> r) {
         if (r == null) return "❌ No response from server.";
-        return "⚠️ API error (HTTP " + r.statusCode() + "):\n" + extractErrorMessage(r.body());
+        return "⚠️ API error (HTTP " + r.statusCode() + "):\n" + extractErrorMessageFromJson(r.body());
     }
     private String extractAndSave(String body) {
         String text = extractTextFromJson(body);
@@ -310,14 +344,25 @@ public class GeminiExplanationService implements ExplanationService {
 
     // ─── Request builders ─────────────────────────────────────────────────────
 
-    private String buildRequestBody(String mode) {
-        boolean isExpert  = "Expert".equalsIgnoreCase(mode) || "EXPERT".equalsIgnoreCase(mode);
-        int     maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
-        double  temp      = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
+    private String buildRequestBody(String mode, String isInitial) {
+        
+        boolean isExpert = "Expert".equalsIgnoreCase(mode);
+        int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
+        double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
 
+        String historyArray = String.join(",", conversationHistory);
+
+        // DYNAMISCHE SYSTEM INSTRUCTION: Nur beim ersten Aufruf mitsenden!
+        String systemInstructionPart = "";
+        if (isInitial != null) {
+            systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
+        }
+
+        // KORREKTUR: systemInstructionPart wird jetzt korrekt eingebunden und tools (Google Search) bleibt aktiv
         return "{"
-                + "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},"
-                + "\"contents\": [" + String.join(",", conversationHistory) + "],"
+                + systemInstructionPart
+                + "\"tools\": [{\"google_search\": {}}],"
+                + "\"contents\": [" + historyArray + "],"
                 + "\"generationConfig\": {"
                 + "  \"temperature\": " + temp + ","
                 + "  \"maxOutputTokens\": " + maxTokens + ","
@@ -345,29 +390,46 @@ public class GeminiExplanationService implements ExplanationService {
 
     private String loadLatestExportedJson() {
         try {
-            File exportDir = new File(getBaseDirectory(), "data_extraction" + File.separator + "raw_model_data");
-            if (!exportDir.exists()) return "Error: Export directory not found at " + exportDir.getAbsolutePath();
+            File pluginDir = getBaseDirectory();
+            File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
 
-            File[] files = exportDir.listFiles((d, name) -> name.endsWith(".json"));
-            if (files == null || files.length == 0) return "Error: No model JSON files found.";
+            if (!exportDir.exists() || !exportDir.isDirectory()) {
+                return "Error: Export directory not found at " + exportDir.getAbsolutePath();
+            }
 
-            File newest = files[0];
-            for (File f : files) if (f.lastModified() > newest.lastModified()) newest = f;
-            return Files.readString(newest.toPath());
+            File[] files = exportDir.listFiles((dir, name) -> name.endsWith(".json"));
+
+            if (files == null || files.length == 0) {
+                return "Error: No model JSON files found.";
+            }
+
+            File newestFile = files[0];
+            for (File f : files) {
+                if (f.lastModified() > newestFile.lastModified()) {
+                    newestFile = f;
+                }
+            }
+
+            return Files.readString(newestFile.toPath());
+
         } catch (Exception e) {
             return "Error reading exported model data: " + e.getMessage();
         }
     }
 
+    @SuppressWarnings("DuplicatedCode")
     private File getBaseDirectory() {
         String PLUGIN_ID = "com.schroedingersblock.plugin";
         try {
             for (Plugin plugin : PluginUtils.getPlugins()) {
                 PluginDescriptor descriptor = plugin.getDescriptor();
-                if (descriptor != null && PLUGIN_ID.equals(descriptor.getID()))
+                if (descriptor != null && PLUGIN_ID.equals(descriptor.getID())) {
                     return descriptor.getPluginDirectory();
+                }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            //Ignored
+        }
         return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
 
@@ -376,7 +438,11 @@ public class GeminiExplanationService implements ExplanationService {
     private void log(String msg) {
         String prefixed = "[GeminiExplanationService] " + msg;
         try {
-            Application.getInstance().getGUILog().log(prefixed);
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                try {
+                    Application.getInstance().getGUILog().log(prefixed);
+                } catch (Throwable ignored) {}
+            });
         } catch (Throwable t) {
             System.out.println(prefixed);
         }
@@ -390,50 +456,67 @@ public class GeminiExplanationService implements ExplanationService {
                    .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
-    String extractTextFromJson(String json) {
+    private String extractTextFromJson(String json) {
         try {
+            StringBuilder fullText = new StringBuilder();
             String marker = "\"text\": \"";
-            int start = json.indexOf(marker);
-            if (start == -1) return "Could not find text in response.";
-            start += marker.length();
-            StringBuilder result = new StringBuilder();
-            int i = start;
-            while (i < json.length()) {
-                char c = json.charAt(i);
-                if (c == '\\' && i + 1 < json.length()) {
-                    char next = json.charAt(i + 1);
-                    switch (next) {
-                        case 'n':  result.append('\n'); break;
-                        case 't':  result.append('\t'); break;
-                        case 'r':  result.append('\r'); break;
-                        case '"':  result.append('"');  break;
-                        case '\\': result.append('\\'); break;
-                        default:   result.append(next);
+            int currentPos = 0;
+
+            while (true) {
+                int start = json.indexOf(marker, currentPos);
+                if (start == -1) break;
+                start += marker.length();
+
+                int end = json.indexOf("\"", start);
+                while (end != -1 && json.charAt(end - 1) == '\\') {
+                    int backslashCount = 0;
+                    int i = end - 1;
+                    while (i >= start && json.charAt(i) == '\\') {
+                        backslashCount++;
+                        i--;
                     }
-                    i += 2;
-                } else if (c == '"') {
-                    break;
-                } else {
-                    result.append(c);
-                    i++;
+                    if (backslashCount % 2 == 1) {
+                        end = json.indexOf("\"", end + 1);
+                    } else {
+                        break;
+                    }
                 }
+
+                if (end == -1) break;
+
+                String partText = json.substring(start, end)
+                        .replace("\\n", "\n")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\")
+                        .replace("\\t", "\t");
+
+                fullText.append(partText);
+                currentPos = end + 1;
             }
-            return result.toString();
+
+            if (fullText.isEmpty()) return "Could not find text in response.";
+            return fullText.toString();
         } catch (Exception e) {
             return "Error extracting text from response.";
         }
     }
 
-    private String extractErrorMessage(String json) {
+    private String extractErrorMessageFromJson(String json) {
         try {
             String marker = "\"message\": \"";
             int start = json.indexOf(marker);
             if (start == -1) return json;
+
             start += marker.length();
             int end = json.indexOf("\"", start);
-            while (end != -1 && json.charAt(end - 1) == '\\') end = json.indexOf("\"", end + 1);
+
+            while (end != -1 && json.charAt(end - 1) == '\\') {
+                end = json.indexOf("\"", end + 1);
+            }
+
             if (end == -1) return json;
-            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"");
+
+            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
         } catch (Exception e) {
             return json;
         }
