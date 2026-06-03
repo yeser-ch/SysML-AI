@@ -1,0 +1,178 @@
+{
+  "global_context": {
+    "project_name": "$!project.name",
+    "export_info": "SysML Flat Graph Export for AI (v7.2 - Stable Parser & Single-Line Formatting)"
+  },
+  "elements": [
+#set($isFirst = true)##
+##
+## ====================================================================
+## MAKRO: HAUPT-VERARBEITUNG JEDES ELEMENTS
+## ====================================================================
+#macro(processElement $elem)##
+#set($type = "")#if($elem.humanType)#set($type = $elem.humanType)#end##
+#set($t = $type.replace(" ", ""))##
+#set($qName = "")#if($elem.qualifiedName)#set($qName = $elem.qualifiedName)#end##
+##
+## --- 1. SYSTEM-FILTER ---
+#set($isSystem = false)##
+#if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $elem.ID.contains("_180beta"))##
+#set($isSystem = true)##
+#end##
+##
+## --- 2. SYSML v1 WHITELIST ---
+#set($isValidType = false)##
+#if($t == "Block" || $t == "ValueType" || $t == "ConstraintBlock" || 
+    $t == "Port" || $t == "ProxyPort" || $t == "FullPort" || $t == "FlowPort" || 
+    $t == "PartProperty" || $t == "ValueProperty" || $t == "ReferenceProperty" || $t == "ConstraintProperty" || $t == "Property" || $t == "FlowProperty" || 
+    $t == "Connector" || $t == "BindingConnector" || $t == "ItemFlow" ||
+    $t == "Association" || $t == "AssociationClass" || $t == "InterfaceRealization" || $t == "Usage" ||
+    $t == "Requirement" || $t == "TestCase" || $t == "UseCase" || $t == "Actor" ||
+    $t == "Activity" || $t.contains("Action") || $t.contains("Node") || 
+    $t == "ControlFlow" || $t == "ObjectFlow" || $t == "ActivityPartition" || $t == "Pin" ||
+    $t == "StateMachine" || $t == "Region" || $t == "State" || $t == "Pseudostate" || 
+    $t == "FinalState" || $t == "Transition" || $t == "Trigger" || $t == "Event" ||
+    $t == "Interaction" || $t == "Lifeline" || $t == "Message" || 
+    $t == "ExecutionSpecification" || $t == "CombinedFragment" || $t == "InteractionOperand" ||
+    $t == "Package" || $t == "Model" || $t == "View" || $t == "Viewpoint" || 
+    $t == "Rationale" || $t == "Problem")##
+#set($isValidType = true)##
+#end##
+##
+## ====================================================================
+## 3. JSON EXPORT-LOGIK
+## ====================================================================
+#if($isValidType && !$isSystem)##
+#if(!$isFirst),
+#end##
+#set($isFirst = false)##
+{"id":"$elem.ID","name":"$!elem.name.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')","type":"$type"##
+,"stereotypes":[#set($isFirstSt=true)##
+#foreach($st in $elem.appliedStereotype)##
+#if(!$isFirstSt),#end#set($isFirstSt=false)##
+"$st.name"##
+#end]##
+,"owner_id":"$!elem.owner.ID"##
+,"documentation":"$!elem.documentation.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"##
+##
+## --- A. WERTE & TEXTE ---
+#if($t == "Requirement" && $elem.text)##
+,"requirement_text":"$!elem.text.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"##
+#end##
+##
+#if($t == "ConstraintBlock" || $t == "ConstraintProperty")##
+#if($elem.specification && $elem.specification.body.size() > 0)##
+,"constraint_equation":"$!elem.specification.body.get(0).replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"##
+#end##
+#end##
+##
+#if($elem.defaultValue)##
+,"default_value":"$!elem.defaultValue.value.toString().replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"##
+#end##
+##
+,"tagged_values":{##
+#set($isFirstTag = true)##
+#foreach($st in $elem.appliedStereotype)##
+#foreach($tagProp in $st.attribute)##
+#set($tagValue = $elem.getValue($st, $tagProp.name))##
+#if($tagValue)##
+#set($tagStr = $tagValue.toString())##
+#if($tagStr != "" && $tagStr != "[]")##
+#if(!$isFirstTag),#end#set($isFirstTag = false)##
+"$tagProp.name":"$!tagStr.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')"##
+#end##
+#end##
+#end##
+#end##
+}##
+##
+## --- B. STRUKTUR & TYPISIERUNG ---
+#if($elem.type)##
+,"property_type_id":"$!elem.type.ID","property_type_name":"$!elem.type.name.replace('"', '\"')"##
+#end##
+##
+#if($t == "PartProperty" || $t == "ReferenceProperty" || $t == "Property" || $t == "FlowProperty")##
+,"aggregation":"$!elem.aggregation.name()"##
+#end##
+##
+#if($elem.lowerValue || $elem.upperValue)##
+,"multiplicity":{"lower":"$!elem.lower","upper":"$!elem.upper"}##
+#end##
+##
+## --- C. SCHNITTSTELLEN & FLÜSSE ---
+#if($t == "FlowProperty" || $t.contains("Port"))##
+,"direction":"$!elem.direction.name()"##
+#end##
+##
+#if($t == "ItemFlow")##
+,"item_flow_details":{"conveyed_id":"#if($elem.itemProperty)$!elem.itemProperty.ID#end","realizing_connector_id":"#if($elem.realizingConnector.size() > 0)$!elem.realizingConnector.get(0).ID#end"}##
+#end##
+##
+## --- D. ALLOKATIONEN & VERHALTEN ---
+#if($t == "ActivityPartition")##
+,"represents_block_id":"#if($elem.represents)$!elem.represents.ID#end"##
+#end##
+##
+#if($t.contains("Flow") || $t == "Transition" || $t == "Message" || $t == "InterfaceRealization" || $t == "Usage")##
+,"routing_details":{"source_id":"$!elem.source.ID","target_id":"$!elem.target.ID"}##
+#end##
+##
+## --- E. ASSOZIATIONEN & VERBINDUNGEN ---
+#if($t == "Association" || $t == "AssociationClass")##
+,"association_ends":[#set($isFirstEnd = true)##
+#foreach($end in $elem.memberEnd)##
+#if(!$isFirstEnd),#end#set($isFirstEnd = false)##
+{"property_id":"$!end.ID","property_type_id":"$!end.type.ID"}##
+#end]##
+#end##
+##
+#if($type == "Connector" || $type == "Binding Connector")##
+,"connector_details":[#set($isFirstConn = true)##
+#foreach($end in $elem.end)##
+#if(!$isFirstConn),#end#set($isFirstConn = false)##
+{"role_name":"$!end.role.name.replace('"', '\"')","role_id":"$!end.role.ID","part_id":"#if($end.partWithPort)$!end.partWithPort.ID#end"}##
+#end]##
+#end##
+##
+## --- F. AUSGEHENDE BEZIEHUNGEN ---
+,"outgoing_relations":[##
+#set($isFirstRel = true)##
+#foreach($rel in $elem.clientDependency)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"$rel.humanType","relation_stereotypes":[#set($isFirstRelSt=true)##
+#foreach($st in $rel.appliedStereotype)##
+#if(!$isFirstRelSt),#end#set($isFirstRelSt=false)##
+"$st.name"##
+#end],"target_id":"#if($rel.supplier.size() > 0)$!rel.supplier.get(0).ID#end"}##
+#end##
+#foreach($inc in $elem.include)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Include","relation_stereotypes":[],"target_id":"$!inc.addition.ID"}##
+#end##
+#foreach($ext in $elem.extend)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Extend","relation_stereotypes":[],"target_id":"$!ext.extendedCase.ID"}##
+#end##
+#foreach($gen in $elem.generalization)##
+#if(!$isFirstRel),#end#set($isFirstRel = false)##
+{"relation_type":"Generalization","relation_stereotypes":[],"target_id":"$!gen.general.ID"}##
+#end##
+]}##
+#end##
+##
+## ====================================================================
+## 4. REKURSION
+## ====================================================================
+#if(!$isSystem)##
+#foreach($child in $elem.ownedElement)##
+#processElement($child)##
+#end##
+#end##
+#end##
+##
+## --- START DER GENERIERUNG ---
+#foreach($root in $project.primaryModel.ownedElement)##
+#processElement($root)##
+#end##
+  ]
+}
