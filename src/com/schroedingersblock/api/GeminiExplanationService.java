@@ -204,7 +204,7 @@ public class GeminiExplanationService implements ExplanationService {
             }
         }
 
-        String prompt = PromptLoader.buildPrompt(currentDetailLevel, elementName, elementType, ownerName, exportedJson);
+        String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, elementName, elementType, ownerName, exportedJson);
         log("Prompt generiert: " + String.format("%.2f", prompt.length() / 1024.0) + " KB");
 
         return callGemini(prompt, currentDetailLevel, fileUri);
