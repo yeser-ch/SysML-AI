@@ -6,7 +6,9 @@ out/
 *.iml
 .idea/
 gen/
-
+.txt
+src/com/schroedingersblock/api/ApiKeyManager.java
+expert_prompt_ChangeImpact
 ### Eclipse ###
 .apt_generated
 .classpath
