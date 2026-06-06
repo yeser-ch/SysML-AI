@@ -17,6 +17,9 @@ import java.nio.file.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.prefs.Preferences;
+import java.io.File;
+import java.nio.file.Files;
+import java.util.Collections;
 
 public class GeminiExplanationService implements ExplanationService {
 
@@ -166,16 +169,16 @@ public class GeminiExplanationService implements ExplanationService {
 
     private static final String SYSTEM_INSTRUCTION =
             "You are a SysML model analysis assistant embedded in CATIA Magic Systems. "
-            + "ONLY answer questions about SysML, systems engineering, model elements, "
-            + "ports, flows, constraints, requirements, and the current model under analysis. "
-            + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
-            + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
-            + "IMPORTANT: Always finish your last sentence completely. "
-            + "Never stop mid-sentence. If you are running out of space, wrap up your "
-            + "answer early but always end on a complete sentence with a full stop.";
+                    + "ONLY answer questions about SysML, systems engineering, model elements, "
+                    + "ports, flows, constraints, requirements, and the current model under analysis. "
+                    + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
+                    + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
+                    + "IMPORTANT: Always finish your last sentence completely. "
+                    + "Never stop mid-sentence. If you are running out of space, wrap up your "
+                    + "answer early but always end on a complete sentence with a full stop.";
 
-    // ─── Conversation state ───────────────────────────────────────────────────
-    private final List<String> conversationHistory = new ArrayList<>();
+    // ─── Conversation State ────────────────────────────────────────────────────
+    private final List<String> conversationHistory = Collections.synchronizedList(new ArrayList<>());
     private String currentDetailLevel = "Basic";
 
     // ─── ExplanationService interface ─────────────────────────────────────────
@@ -298,8 +301,24 @@ public class GeminiExplanationService implements ExplanationService {
                 log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
                 CIRCUIT.recordFailure(model);
 
+                // --- OPTIMIERTES ERROR-CATCHING FÜR PRÄZISE SYSTEMDIAGNOSE ---
+            } catch (java.net.http.HttpConnectTimeoutException e) {
+                log("Network connection timeout (No Internet / DNS fail): " + e.getMessage());
+                conversationHistory.remove(conversationHistory.size() - 1);
+                return "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
+
+            } catch (java.net.http.HttpTimeoutException e) {
+                log("API Response Timeout (Server-side lag): " + e.getMessage());
+                conversationHistory.remove(conversationHistory.size() - 1);
+                return "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von Gemini hat das Zeitlimit überschritten.";
+
+            } catch (java.net.UnknownHostException | java.net.ConnectException e) {
+                log("Direct network failure: " + e.getMessage());
+                conversationHistory.remove(conversationHistory.size() - 1);
+                return "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
+
             } catch (Exception e) {
-                log("Network/Connection error or timeout on " + model + ": " + e.getMessage());
+                log("Unexpected fallback error on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
             }
         }
@@ -458,25 +477,29 @@ public class GeminiExplanationService implements ExplanationService {
 
     private String extractTextFromJson(String json) {
         try {
+            // VERDOPPLUNGS-SCHUTZ: Wir ignorieren alles, was nach den eigentlichen Text-Candidates kommt
+            int metaIndex = json.indexOf("\"groundingMetadata\"");
+            String searchScope = (metaIndex != -1) ? json.substring(0, metaIndex) : json;
+
             StringBuilder fullText = new StringBuilder();
             String marker = "\"text\": \"";
             int currentPos = 0;
 
             while (true) {
-                int start = json.indexOf(marker, currentPos);
+                int start = searchScope.indexOf(marker, currentPos);
                 if (start == -1) break;
                 start += marker.length();
 
-                int end = json.indexOf("\"", start);
-                while (end != -1 && json.charAt(end - 1) == '\\') {
+                int end = searchScope.indexOf("\"", start);
+                while (end != -1 && searchScope.charAt(end - 1) == '\\') {
                     int backslashCount = 0;
                     int i = end - 1;
-                    while (i >= start && json.charAt(i) == '\\') {
+                    while (i >= start && searchScope.charAt(i) == '\\') {
                         backslashCount++;
                         i--;
                     }
                     if (backslashCount % 2 == 1) {
-                        end = json.indexOf("\"", end + 1);
+                        end = searchScope.indexOf("\"", end + 1);
                     } else {
                         break;
                     }
@@ -484,7 +507,7 @@ public class GeminiExplanationService implements ExplanationService {
 
                 if (end == -1) break;
 
-                String partText = json.substring(start, end)
+                String partText = searchScope.substring(start, end)
                         .replace("\\n", "\n")
                         .replace("\\\"", "\"")
                         .replace("\\\\", "\\")
@@ -494,7 +517,7 @@ public class GeminiExplanationService implements ExplanationService {
                 currentPos = end + 1;
             }
 
-            if (fullText.isEmpty()) return "Could not find text in response.";
+            if (fullText.length() == 0) return "Could not find text in response.";
             return fullText.toString();
         } catch (Exception e) {
             return "Error extracting text from response.";

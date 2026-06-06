@@ -119,7 +119,7 @@ public class ExplanationDialog extends JFrame {
 
         add(bottomPanel, BorderLayout.SOUTH);
 
-        // Logik für den RUN Button ---
+        // Logik für den RUN Button (Korrekt innerhalb von buildUI platziert!)
         runBtn.setToolTipText("Start AI analysis.");
         runBtn.addActionListener(e -> {
             apiService.setDetailLevel((String) levelBox.getSelectedItem());
@@ -131,7 +131,9 @@ public class ExplanationDialog extends JFrame {
             inputField.setEnabled(false);
             sendBtn.setEnabled(false);
 
-            fetchData(mode, true);
+            // --- NEU: Startzeit direkt beim Klick auf RUN erfassen und 3 Argumente übergeben ---
+            long startTime = System.currentTimeMillis();
+            fetchData(mode, true, startTime);
         });
     }
 
@@ -142,16 +144,19 @@ public class ExplanationDialog extends JFrame {
             inputField.setText("");
             addMessage("AI", "Processing\u00A0...");
 
-            // Felder sperren, während die KI die Antwort generiert
+            // Felder sperren
             inputField.setEnabled(false);
             sendBtn.setEnabled(false);
             runBtn.setEnabled(false);
 
-            fetchData(text, false);
+            // --- NEU: Startzeit direkt beim Klick/Senden erfassen ---
+            long startTime = System.currentTimeMillis();
+            fetchData(text, false, startTime);
         }
     }
 
-    private void fetchData(String query, boolean isInitial) {
+    // --- REFACTORING: Im Untergrund arbeitende Methode für den KI-Request ---
+    private void fetchData(String query, boolean isInitial, long startTime) {
         SwingWorker<String, Void> worker = new SwingWorker<>() {
             @Override
             protected String doInBackground() {
@@ -166,16 +171,39 @@ public class ExplanationDialog extends JFrame {
             protected void done() {
                 try {
                     removeLastMessage(); // Entfernt "Processing..."
-                    addMessage("AI", get());
+                    String aiResponse = get();
+
+                    // --- NEU: Performance-Timer berechnen ---
+                    long durationMs = System.currentTimeMillis() - startTime;
+                    double durationSec = durationMs / 1000.0;
+                    Application.getInstance().getGUILog().log(
+                            "[Schrödinger's Block] Performance-Info: Interaktion für '" + query + "' dauerte " + String.format("%.2f", durationSec) + " Sekunden."
+                    );
+
+                    // --- HIER SUBTIL EINGEBAUT: convertMarkdownToHtml umschließt die Antwort ---
+                    addMessage("AI", convertMarkdownToHtml(aiResponse));
+
                 } catch (Exception e) {
-                    addMessage("System", "Error: Connection failed.");
+                    removeLastMessage(); // Entfernt "Processing..." im Fehlerfall
+
+                    // --- NEU: Fehlerverschluckung verhindern (Detaillierte Ursache ermitteln) ---
+                    Throwable cause = e.getCause();
+                    String detailedReason = (cause != null) ? cause.getMessage() : e.getMessage();
+                    if (detailedReason == null || detailedReason.isEmpty()) {
+                        detailedReason = "Timeout oder Verbindungsabbruch.";
+                    }
+
+                    String errorMessage = "Error: Connection failed. (" + detailedReason + ")";
+
+                    // Fehlermeldung in den Chat UND ins GUI-Log schreiben
+                    addMessage("System", errorMessage);
+                    Application.getInstance().getGUILog().log("[Schrödinger's Block] Fehler bei KI-Anfrage: " + errorMessage);
+
                 } finally {
-                    // Alles wieder freischalten, wenn die KI fertig ist!
+                    // Alles wieder freischalten
                     runBtn.setEnabled(true);
                     inputField.setEnabled(true);
                     sendBtn.setEnabled(true);
-
-                    // Optional: Cursor direkt wieder ins Textfeld setzen
                     inputField.requestFocusInWindow();
                 }
             }
@@ -217,8 +245,7 @@ public class ExplanationDialog extends JFrame {
                 Project project = Application.getInstance().getProject();
                 if (project == null) return false;
 
-                // Deine Export-Logik bleibt hier genau wie von dir vorgegeben!
-                boolean isElementView = "Model View".equals(mode) ? false : true;
+                boolean isElementView = !"Model View".equals(mode);
                 return DataExtractionService.executeJsonExport(project, targetElement, isElementView);
             }
 
@@ -281,6 +308,24 @@ public class ExplanationDialog extends JFrame {
         textPane.setOpaque(false);
         textPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         return textPane;
+    }
+
+    // Hilfsmethode zum Rendern von Google-Markdown-Strukturen in HTML
+    private String convertMarkdownToHtml(String markdown) {
+        if (markdown == null) return "";
+        String html = markdown;
+
+        // 1. Überschriften formatieren (### Überschrift)
+        html = html.replaceAll("(?m)^###\\s+(.+)$", "<h4 style='margin: 0; padding-top: 5px; color: #2C3E50;'>$1</h4>");
+        html = html.replaceAll("(?m)^##\\s+(.+)$", "<h3 style='margin: 0; padding-top: 8px; color: #2C3E50;'>$1</h3>");
+
+        // 2. Fettdruck formatieren (**text**)
+        html = html.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
+
+        // 3. Spiegelstriche / Bulletpoints formatieren (* punkt)
+        html = html.replaceAll("(?m)^\\*\\s+(.+)$", "<span style='padding-left: 10px;'>• $1</span>");
+
+        return html;
     }
 
     private static class ScrollablePanel extends JPanel implements Scrollable {
