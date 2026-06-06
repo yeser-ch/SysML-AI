@@ -171,14 +171,17 @@ public class ExplanationDialog extends JFrame {
             protected void done() {
                 try {
                     removeLastMessage(); // Entfernt "Processing..."
-                    addMessage("AI", get());
+                    String aiResponse = get();
 
-                    // --- NEU: Performance-Timer berechnen und NUR im MagicDraw GUI-Log ausgeben ---
+                    // --- NEU: Performance-Timer berechnen ---
                     long durationMs = System.currentTimeMillis() - startTime;
                     double durationSec = durationMs / 1000.0;
                     Application.getInstance().getGUILog().log(
                             "[Schrödinger's Block] Performance-Info: Interaktion für '" + query + "' dauerte " + String.format("%.2f", durationSec) + " Sekunden."
                     );
+
+                    // --- HIER SUBTIL EINGEBAUT: convertMarkdownToHtml umschließt die Antwort ---
+                    addMessage("AI", convertMarkdownToHtml(aiResponse));
 
                 } catch (Exception e) {
                     removeLastMessage(); // Entfernt "Processing..." im Fehlerfall
@@ -305,6 +308,24 @@ public class ExplanationDialog extends JFrame {
         textPane.setOpaque(false);
         textPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         return textPane;
+    }
+
+    // Hilfsmethode zum Rendern von Google-Markdown-Strukturen in HTML
+    private String convertMarkdownToHtml(String markdown) {
+        if (markdown == null) return "";
+        String html = markdown;
+
+        // 1. Überschriften formatieren (### Überschrift)
+        html = html.replaceAll("(?m)^###\\s+(.+)$", "<h4 style='margin: 0; padding-top: 5px; color: #2C3E50;'>$1</h4>");
+        html = html.replaceAll("(?m)^##\\s+(.+)$", "<h3 style='margin: 0; padding-top: 8px; color: #2C3E50;'>$1</h3>");
+
+        // 2. Fettdruck formatieren (**text**)
+        html = html.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
+
+        // 3. Spiegelstriche / Bulletpoints formatieren (* punkt)
+        html = html.replaceAll("(?m)^\\*\\s+(.+)$", "<span style='padding-left: 10px;'>• $1</span>");
+
+        return html;
     }
 
     private static class ScrollablePanel extends JPanel implements Scrollable {
