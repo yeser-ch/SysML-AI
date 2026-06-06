@@ -222,16 +222,24 @@ public class GeminiExplanationService implements ExplanationService {
                 log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
                 CIRCUIT.recordFailure(model);
 
-            } catch (java.net.UnknownHostException | java.net.ConnectException e) {
-                log("Network error detected (No Internet): " + e.getMessage());
+                // --- OPTIMIERTES ERROR-CATCHING FÜR PRÄZISE SYSTEMDIAGNOSE ---
+            } catch (java.net.http.HttpConnectTimeoutException e) {
+                log("Network connection timeout (No Internet / DNS fail): " + e.getMessage());
                 conversationHistory.remove(conversationHistory.size() - 1);
-                return "⚠️ Connection Error: Keine Internetverbindung erkannt. Bitte prüfe dein Netzwerk und versuche es erneut.";
+                return "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
+
             } catch (java.net.http.HttpTimeoutException e) {
-                log("API Timeout: " + e.getMessage());
+                log("API Response Timeout (Server-side lag): " + e.getMessage());
                 conversationHistory.remove(conversationHistory.size() - 1);
-                return "⚠️ Timeout Error: Die Anfrage an Gemini hat zu lange gedauert.";
+                return "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von Gemini hat das Zeitlimit überschritten.";
+
+            } catch (java.net.UnknownHostException | java.net.ConnectException e) {
+                log("Direct network failure: " + e.getMessage());
+                conversationHistory.remove(conversationHistory.size() - 1);
+                return "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
+
             } catch (Exception e) {
-                log("Network/Connection error or timeout on " + model + ": " + e.getMessage());
+                log("Unexpected fallback error on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
             }
         }

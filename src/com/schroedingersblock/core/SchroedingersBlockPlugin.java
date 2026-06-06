@@ -119,7 +119,11 @@ public class SchroedingersBlockPlugin extends Plugin {
                 if (files != null) {
                     for (File file : files) {
                         if (file.getName().endsWith(".json")) {
-                            file.delete(); // Löscht alle alten Exporte beim Schließen
+                            // KORREKTUR: Rückgabewert auswerten, um die IDE-Warnung zu beheben
+                            boolean deleted = file.delete();
+                            if (!deleted) {
+                                System.err.println("[Schrödinger's Block] Warning: File could not be deleted: " + file.getName());
+                            }
                         }
                     }
                 }
