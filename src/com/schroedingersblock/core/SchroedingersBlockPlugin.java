@@ -9,6 +9,7 @@ package com.schroedingersblock.core;
 import com.nomagic.actions.AMConfigurator;
 import com.nomagic.actions.ActionsCategory;
 import com.nomagic.actions.ActionsManager;
+import java.io.File;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.actions.ActionsConfiguratorsManager;
 import com.schroedingersblock.ui.OpenSettingsAction;
@@ -107,7 +108,28 @@ public class SchroedingersBlockPlugin extends Plugin {
     }
 
     @Override
-    public boolean close() { return true; }
+    public boolean close() {
+        try {
+            // Pfad zum raw_model_data Ordner ermitteln
+            File pluginDir = new File(System.getProperty("user.dir"), "plugins" + File.separator + "com.schroedingersblock.plugin");
+            File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
+
+            if (exportDir.exists() && exportDir.isDirectory()) {
+                File[] files = exportDir.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (file.getName().endsWith(".json")) {
+                            file.delete(); // Löscht alle alten Exporte beim Schließen
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Loggen, aber Schließen des Plugins nicht blockieren
+            System.err.println("Cleanup failed: " + e.getMessage());
+        }
+        return true;
+    }
     @Override
     public boolean isSupported() { return true; }
 }
