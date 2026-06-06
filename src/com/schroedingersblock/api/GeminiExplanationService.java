@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.prefs.Preferences;
 import java.io.File;
 import java.nio.file.Files;
+import java.util.Collections;
 
 public class GeminiExplanationService implements ExplanationService {
 
@@ -83,7 +84,7 @@ public class GeminiExplanationService implements ExplanationService {
                     + "answer early but always end on a complete sentence with a full stop.";
 
     // ─── Conversation State ────────────────────────────────────────────────────
-    private final List<String> conversationHistory = new ArrayList<>();
+    private final List<String> conversationHistory = Collections.synchronizedList(new ArrayList<>());
     private String currentDetailLevel = "Basic";
 
     @Override
