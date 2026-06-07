@@ -7,35 +7,42 @@ import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.time.Instant;
-import java.util.*;
-import java.util.prefs.Preferences;
-import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.prefs.Preferences;
 
 public class GeminiExplanationService implements ExplanationService {
 
-// ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
+    // ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    // ─── Model cascade (tried in order) ──────────────────────────────────────
+    // ─── Modell-Kaskade (Bereinigte IDs aus eurer AI Studio Übersicht) ──────────
     private static final String[] MODELS = {
             "gemini-2.5-flash",       // Primäres Standardmodell
             "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
             "gemini-2.5-flash-lite",  // Offizielles Flash-Lite Modell
-            "gemini-1.5-flash" // Zuverlässiger, klassischer Fallback-Knoten
+            "gemini-1.5-flash"        // Zuverlässiger, klassischer Fallback-Knoten
     };
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
-    // Static so circuit state persists across all requests in the same session
+    // Statisch, damit der Schalter-Zustand für die gesamte Sitzung erhalten bleibt
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
 
     // ─── Circuit Breaker (inner class) ───────────────────────────────────────
@@ -68,7 +75,7 @@ public class GeminiExplanationService implements ExplanationService {
 
             retryAtMap.put(model, System.currentTimeMillis() + lockDurationMs);
             // Konsolen-Log für das Teampanel beim Debuggen
-            System.out.println("[CircuitBreaker] " + model + " temporaer gesperrt fuer " + (lockDurationMs / 1000) + " Sekunden.");
+            System.out.println("[CircuitBreaker] " + model + " temporär gesperrt für " + (lockDurationMs / 1000) + " Sekunden.");
         }
     }
 
@@ -81,6 +88,10 @@ public class GeminiExplanationService implements ExplanationService {
                 System.getProperty("user.home"),
                 "Documents", "SchroedingersBlock-MaxWorkspace", "gemini_file_cache.properties");
 
+        // Wiederverwendbarer statischer Client zur Vermeidung von Warnungen bezüglich try-with-resources
+        private static final HttpClient FILE_HTTP_CLIENT = HttpClient.newHttpClient();
+
+        @SuppressWarnings("unused")
         static String upload(String jsonContent, String apiKey) throws IOException {
             String boundary = "sb_upload_boundary";
             String CRLF = "\r\n";
@@ -97,8 +108,7 @@ public class GeminiExplanationService implements ExplanationService {
                         .header("Content-Type", "multipart/related; boundary=" + boundary)
                         .POST(HttpRequest.BodyPublishers.ofByteArray(body.getBytes(StandardCharsets.UTF_8)))
                         .build();
-                HttpResponse<String> resp = HttpClient.newHttpClient()
-                        .send(req, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = FILE_HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() != 200)
                     throw new IOException("Upload failed (HTTP " + resp.statusCode() + "): " + resp.body());
                 String uri        = extractField(resp.body(), "\"uri\"");
@@ -156,6 +166,7 @@ public class GeminiExplanationService implements ExplanationService {
     }
 
     // ─── Public upload entry point ────────────────────────────────────────────
+    @SuppressWarnings("unused")
     public static String uploadModel(String jsonContent, String apiKey) throws IOException {
         return FileManager.upload(jsonContent, apiKey);
     }
@@ -195,7 +206,7 @@ public class GeminiExplanationService implements ExplanationService {
         String ownerName   = (targetElement != null && targetElement.getOwner() != null)
                 ? targetElement.getOwner().getHumanName() : "root";
 
-        log("Starte Analyse fuer Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
+        log("Starte Analyse für Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
         log("Detail-Level: " + currentDetailLevel);
 
         String fileUri = FileManager.getValidUri();
@@ -215,14 +226,14 @@ public class GeminiExplanationService implements ExplanationService {
 
         String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, elementName, elementType, ownerName, exportedJson);
         double promptKb = prompt.length() / 1024.0;
-        log("System-Prompt generiert. Payload-Gesamtgroesse (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
+        log("System-Prompt generiert. Payload-Gesamtgröße (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
         return callGemini(prompt, currentDetailLevel, fileUri);
     }
 
     @Override
     public String fetchFollowUp(String question) {
-        log("Sende Follow-Up Frage...");
+        log("Sende Follow-Up Frage\u00A0...");
         return callGemini(question, currentDetailLevel);
     }
 
@@ -247,6 +258,9 @@ public class GeminiExplanationService implements ExplanationService {
         conversationHistory.add(userJson);
         String requestBody = buildRequestBody(mode, fileUri);
 
+        // Variable, um die Fehlermeldung des letzten Versuchs zu speichern, falls alle Modelle fehlschlagen
+        String fallbackErrorMessage = "❌ Service unreachable: All Gemini models are currently unavailable.";
+
         for (String model : MODELS) {
             if (!CIRCUIT.isAvailable(model)) {
                 log("Skipping " + model + " (Circuit is OPEN due to previous failure)");
@@ -262,7 +276,7 @@ public class GeminiExplanationService implements ExplanationService {
                     .timeout(java.time.Duration.ofSeconds(3)) // 3s Timeout gegen Kaskaden-Lags
                     .build();
 
-            log("Sending HTTP POST to " + model + "...");
+            log("Sending HTTP POST to " + model + "\u00A0...");
             long startTime = System.currentTimeMillis();
 
             try {
@@ -275,10 +289,11 @@ public class GeminiExplanationService implements ExplanationService {
                     log("API response received successfully from " + model + " (HTTP 200 OK | Duration: " + duration + "ms)");
 
                     String responseText = extractTextFromJson(response.body());
-                    String modelJson = "{\"role\": \"model\", \"parts\": [{\"text\": \"" + escapeJson(responseText) + "\"}]}";
+                    // KORREKTUR: Verwende buildMessageJson zur Serialisierung, um Parameter-Warnung zu beheben
+                    String modelJson = buildMessageJson("model", responseText, null);
                     conversationHistory.add(modelJson);
 
-                    return responseText;
+                    return responseText; // Erfolgreicher Ausstieg!
                 }
 
                 if (response.statusCode() == 400 || response.statusCode() == 403) {
@@ -300,71 +315,40 @@ public class GeminiExplanationService implements ExplanationService {
 
                 log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
                 CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ API error (HTTP " + response.statusCode() + "): Modelle temporär überlastet.";
 
-                // --- OPTIMIERTES ERROR-CATCHING FÜR PRÄZISE SYSTEMDIAGNOSE ---
+                // --- KORREKTUR: Kein "return" mehr in den Schleifen-Exceptions! Wir loggen, sperren den Circuit und machen weiter (continue) ---
             } catch (java.net.http.HttpConnectTimeoutException e) {
-                log("Network connection timeout (No Internet / DNS fail): " + e.getMessage());
-                conversationHistory.remove(conversationHistory.size() - 1);
-                return "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
+                log("Network connection timeout on " + model + ": " + e.getMessage());
+                CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
 
             } catch (java.net.http.HttpTimeoutException e) {
-                log("API Response Timeout (Server-side lag): " + e.getMessage());
-                conversationHistory.remove(conversationHistory.size() - 1);
-                return "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von Gemini hat das Zeitlimit überschritten.";
+                log("API Response Timeout on " + model + ": " + e.getMessage());
+                CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von " + model + " hat das Zeitlimit überschritten.";
 
             } catch (java.net.UnknownHostException | java.net.ConnectException e) {
-                log("Direct network failure: " + e.getMessage());
-                conversationHistory.remove(conversationHistory.size() - 1);
-                return "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
+                log("Direct network failure on " + model + ": " + e.getMessage());
+                CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
 
             } catch (Exception e) {
                 log("Unexpected fallback error on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "❌ Unexpected Error: " + e.getMessage();
             }
         }
 
+        // Wenn der Code hier ankommt, sind alle Modelle in der Kaskade fehlgeschlagen
         conversationHistory.remove(conversationHistory.size() - 1);
-        return "❌ Service unreachable: All Gemini models are currently unavailable due to high server load.\n"
-             + "Please wait a few minutes and try again.";
-    }
-
-    // ─── HTTP helper ──────────────────────────────────────────────────────────
-
-    private HttpResponse<String> sendRequest(String model, String apiKey, String body) {
-        try {
-            String url = API_BASE + model + ":generateContent?key=" + apiKey;
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .build();
-            return HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            log("Request failed: " + e.getMessage());
-            return null;
-        }
-    }
-
-    private boolean isSuccess(HttpResponse<String> r)   { return r != null && r.statusCode() == 200; }
-    private boolean isOverloaded(HttpResponse<String> r) {
-        if (r == null) return true;
-        int c = r.statusCode();
-        return c == 404 || c == 429 || c == 500 || c == 503;
-    }
-    private String formatError(HttpResponse<String> r) {
-        if (r == null) return "❌ No response from server.";
-        return "⚠️ API error (HTTP " + r.statusCode() + "):\n" + extractErrorMessageFromJson(r.body());
-    }
-    private String extractAndSave(String body) {
-        String text = extractTextFromJson(body);
-        conversationHistory.add(buildMessageJson("model", text));
-        return text;
+        return fallbackErrorMessage;
     }
 
     // ─── Request builders ─────────────────────────────────────────────────────
 
     private String buildRequestBody(String mode, String isInitial) {
-        
+
         boolean isExpert = "Expert".equalsIgnoreCase(mode);
         int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
         double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
@@ -388,10 +372,6 @@ public class GeminiExplanationService implements ExplanationService {
                 + "  \"topP\": 0.9"
                 + "}"
                 + "}";
-    }
-
-    private String buildMessageJson(String role, String text) {
-        return buildMessageJson(role, text, null);
     }
 
     private String buildMessageJson(String role, String text, String fileUri) {
@@ -472,12 +452,12 @@ public class GeminiExplanationService implements ExplanationService {
     private String escapeJson(String text) {
         if (text == null) return "";
         return text.replace("\\", "\\\\").replace("\"", "\\\"")
-                   .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private String extractTextFromJson(String json) {
         try {
-            // VERDOPPLUNGS-SCHUTZ: Wir ignorieren alles, was nach den eigentlichen Text-Candidates kommt
+            // Verdopplungsschutz: Wir ignorieren alles, was nach den eigentlichen Text-Candidates kommt
             int metaIndex = json.indexOf("\"groundingMetadata\"");
             String searchScope = (metaIndex != -1) ? json.substring(0, metaIndex) : json;
 
@@ -517,7 +497,7 @@ public class GeminiExplanationService implements ExplanationService {
                 currentPos = end + 1;
             }
 
-            if (fullText.length() == 0) return "Could not find text in response.";
+            if (fullText.isEmpty()) return "Could not find text in response.";
             return fullText.toString();
         } catch (Exception e) {
             return "Error extracting text from response.";
