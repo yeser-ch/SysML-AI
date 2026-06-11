@@ -33,24 +33,30 @@ public class GeminiExplanationService implements ExplanationService {
     // ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    // ─── Modell-Kaskade (Bereinigte IDs aus eurer AI Studio Übersicht) ──────────
+    // ─── ERWEITERTE MODELL-KASKADE: Vollständige Integration nach Vorgabe von Nikolai ────────
     private static final String[] MODELS = {
-            "gemini-2.5-flash",       // Primäres Standardmodell
-            "gemini-3.1-flash-lite",  // Schneller Retter bei Quota-Limits
-            "gemini-2.5-flash-lite",  // Offizielles Flash-Lite Modell
-            "gemini-1.5-flash"        // Zuverlässiger, klassischer Fallback-Knoten
+            "gemini-3.1-flash-live-preview",
+            "gemini-3.5-flash",       // Next-Gen Flash
+            "gemini-3.1-flash-lite",  // Ultra-schnelles Flash-Lite
+            "gemini-2.0-flash-lite",  // Leichtgewichtiges v2-Lite
+            "gemini-2.0-flash",       // Schnelles v2-Flash
+            "gemini-2.5-pro",         // Hochpräzises Pro-Fallback für komplexe Modelle
+            "gemini-3-flash",         // Standard v3-Flash
+            "gemini-3.1-pro",          // Maximales v3-Pro-Sicherheitsnetz
+            "gemini-2.5-flash",       // Standard-Flash
+            "gemini-2.5-flash-lite" // Klassisches Flash-Lite
     };
+
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
     // Statisch, damit der Schalter-Zustand für die gesamte Sitzung erhalten bleibt
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
 
-    // ─── Circuit Breaker (inner class) ───────────────────────────────────────
+    // ─── Circuit Breaker Pattern (Leitungsschutzschalter) ──────────────────────
     private static class CircuitBreaker {
         private final Map<String, Integer> failureCounts = new HashMap<>();
         private final Map<String, Long>  retryAtMap    = new HashMap<>();
 
-        // Prüft thread-sicher, ob die dynamische Sperre eines Modells abgelaufen ist
         synchronized boolean isAvailable(String model) {
             long retryAt = retryAtMap.getOrDefault(model, 0L);
             return System.currentTimeMillis() >= retryAt;
@@ -65,20 +71,16 @@ public class GeminiExplanationService implements ExplanationService {
             int failures = failureCounts.getOrDefault(model, 0) + 1;
             failureCounts.put(model, failures);
 
-            // Dynamische Berechnung: 1. Fehler = 5s, 2. Fehler = 15s, 3. Fehler = 45s...
             long lockDurationMs = (long) Math.pow(3, failures - 1) * 5 * 1000;
 
-            // Deckelung bei maximal 5 Minuten, um ein Modell im Free-Tier nicht ewig zu blockieren
             if (lockDurationMs > 5 * 60 * 1000) {
                 lockDurationMs = 5 * 60 * 1000;
             }
 
             retryAtMap.put(model, System.currentTimeMillis() + lockDurationMs);
-            // Konsolen-Log für das Teampanel beim Debuggen
             System.out.println("[CircuitBreaker] " + model + " temporär gesperrt für " + (lockDurationMs / 1000) + " Sekunden.");
         }
     }
-
 
     // ─── File Manager (inner class) ──────────────────────────────────────────
     private static class FileManager {
@@ -88,7 +90,6 @@ public class GeminiExplanationService implements ExplanationService {
                 System.getProperty("user.home"),
                 "Documents", "SchroedingersBlock-MaxWorkspace", "gemini_file_cache.properties");
 
-        // Wiederverwendbarer statischer Client zur Vermeidung von Warnungen bezüglich try-with-resources
         private static final HttpClient FILE_HTTP_CLIENT = HttpClient.newHttpClient();
 
         @SuppressWarnings("unused")
@@ -171,7 +172,7 @@ public class GeminiExplanationService implements ExplanationService {
         return FileManager.upload(jsonContent, apiKey);
     }
 
-    // ─── Mode configuration ───────────────────────────────────────────────────
+    // ─── Modus & System-Konfiguration ──────────────────────────────────────────
     private static final int    EXPERT_MAX_TOKENS  = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
 
@@ -191,8 +192,6 @@ public class GeminiExplanationService implements ExplanationService {
     // ─── Conversation State ────────────────────────────────────────────────────
     private final List<String> conversationHistory = Collections.synchronizedList(new ArrayList<>());
     private String currentDetailLevel = "Basic";
-
-    // ─── ExplanationService interface ─────────────────────────────────────────
 
     @Override
     public void setDetailLevel(String level) {
@@ -237,8 +236,6 @@ public class GeminiExplanationService implements ExplanationService {
         return callGemini(question, currentDetailLevel);
     }
 
-    // ─── Internal LLM call with circuit breaker cascade ──────────────────────
-
     private String callGemini(String userMessage, String mode) {
         return callGemini(userMessage, mode, null);
     }
@@ -252,14 +249,16 @@ public class GeminiExplanationService implements ExplanationService {
             return "⚠️ Error: No API key found. Please enter a valid Gemini API key.";
         }
 
-        // Only attach fileUri to the very first message of the session
-        String userJson = buildMessageJson("user", userMessage,
-                conversationHistory.isEmpty() ? fileUri : null);
-        conversationHistory.add(userJson);
-        String requestBody = buildRequestBody(mode, fileUri);
+        // --- REPARATUR: Dynamische Erkennung des initialen Zustands ---
+        boolean isInitial = conversationHistory.isEmpty();
 
-        // Variable, um die Fehlermeldung des letzten Versuchs zu speichern, falls alle Modelle fehlschlagen
-        String fallbackErrorMessage = "❌ Service unreachable: All Gemini models are currently unavailable.";
+        String userJson = buildMessageJson("user", userMessage, isInitial ? fileUri : null);
+        conversationHistory.add(userJson);
+
+        // REPARATUR: isInitial-Boolean wird jetzt korrekt an den Body-Builder gereicht
+        String requestBody = buildRequestBody(mode, isInitial);
+
+        String fallbackErrorMessage = "⚠️ All Gemini models are currently overloaded. Please try again in a moment.";
 
         for (String model : MODELS) {
             if (!CIRCUIT.isAvailable(model)) {
@@ -269,11 +268,12 @@ public class GeminiExplanationService implements ExplanationService {
 
             String url = API_BASE + model + ":generateContent?key=" + apiKey;
 
+            // 10 Sekunden pro Modellaufruf ---
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(java.time.Duration.ofSeconds(3)) // 3s Timeout gegen Kaskaden-Lags
+                    .timeout(java.time.Duration.ofSeconds(10)) ///Hier dauer pro Modell
                     .build();
 
             log("Sending HTTP POST to " + model + "\u00A0...");
@@ -289,11 +289,10 @@ public class GeminiExplanationService implements ExplanationService {
                     log("API response received successfully from " + model + " (HTTP 200 OK | Duration: " + duration + "ms)");
 
                     String responseText = extractTextFromJson(response.body());
-                    // KORREKTUR: Verwende buildMessageJson zur Serialisierung, um Parameter-Warnung zu beheben
                     String modelJson = buildMessageJson("model", responseText, null);
                     conversationHistory.add(modelJson);
 
-                    return responseText; // Erfolgreicher Ausstieg!
+                    return responseText;
                 }
 
                 if (response.statusCode() == 400 || response.statusCode() == 403) {
@@ -315,39 +314,33 @@ public class GeminiExplanationService implements ExplanationService {
 
                 log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
                 CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ API error (HTTP " + response.statusCode() + "): Modelle temporär überlastet.";
 
-                // --- KORREKTUR: Kein "return" mehr in den Schleifen-Exceptions! Wir loggen, sperren den Circuit und machen weiter (continue) ---
             } catch (java.net.http.HttpConnectTimeoutException e) {
                 log("Network connection timeout on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
 
             } catch (java.net.http.HttpTimeoutException e) {
                 log("API Response Timeout on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von " + model + " hat das Zeitlimit überschritten.";
 
             } catch (java.net.UnknownHostException | java.net.ConnectException e) {
                 log("Direct network failure on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
 
             } catch (Exception e) {
                 log("Unexpected fallback error on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "❌ Unexpected Error: " + e.getMessage();
             }
         }
 
-        // Wenn der Code hier ankommt, sind alle Modelle in der Kaskade fehlgeschlagen
+        // Wenn der Code hier ankommt, haben alle Modelle in der Kaskade innerhalb der Fristen versagt
         conversationHistory.remove(conversationHistory.size() - 1);
         return fallbackErrorMessage;
     }
 
     // ─── Request builders ─────────────────────────────────────────────────────
 
-    private String buildRequestBody(String mode, String isInitial) {
+    private String buildRequestBody(String mode, boolean isInitial) {
 
         boolean isExpert = "Expert".equalsIgnoreCase(mode);
         int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
@@ -355,13 +348,11 @@ public class GeminiExplanationService implements ExplanationService {
 
         String historyArray = String.join(",", conversationHistory);
 
-        // DYNAMISCHE SYSTEM INSTRUCTION: Nur beim ersten Aufruf mitsenden!
         String systemInstructionPart = "";
-        if (isInitial != null) {
+        if (isInitial) {
             systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
         }
 
-        // KORREKTUR: systemInstructionPart wird jetzt korrekt eingebunden und tools (Google Search) bleibt aktiv
         return "{"
                 + systemInstructionPart
                 + "\"tools\": [{\"google_search\": {}}],"
@@ -384,8 +375,6 @@ public class GeminiExplanationService implements ExplanationService {
         }
         return "{\"role\": \"" + role + "\", \"parts\": [{\"text\": \"" + escapeJson(text) + "\"}]}";
     }
-
-    // ─── JSON model loader ────────────────────────────────────────────────────
 
     private String loadLatestExportedJson() {
         try {
@@ -432,8 +421,6 @@ public class GeminiExplanationService implements ExplanationService {
         return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
     }
 
-    // ─── Logging (Cameo GUILog with System.out fallback for tests) ───────────
-
     private void log(String msg) {
         String prefixed = "[GeminiExplanationService] " + msg;
         try {
@@ -447,8 +434,6 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
-    // ─── JSON utilities ───────────────────────────────────────────────────────
-
     private String escapeJson(String text) {
         if (text == null) return "";
         return text.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -457,7 +442,6 @@ public class GeminiExplanationService implements ExplanationService {
 
     private String extractTextFromJson(String json) {
         try {
-            // Verdopplungsschutz: Wir ignorieren alles, was nach den eigentlichen Text-Candidates kommt
             int metaIndex = json.indexOf("\"groundingMetadata\"");
             String searchScope = (metaIndex != -1) ? json.substring(0, metaIndex) : json;
 
