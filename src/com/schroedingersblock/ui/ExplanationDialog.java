@@ -239,21 +239,30 @@ public class ExplanationDialog extends JFrame {
     }
 
     private void runExportTask() {
-        SwingWorker<Boolean, Void> exportWorker = new SwingWorker<>() {
+        // Returns: 0 = export failed, 1 = export ok / upload failed, 2 = export + upload ok
+        SwingWorker<Integer, Void> exportWorker = new SwingWorker<>() {
             @Override
-            protected Boolean doInBackground() {
+            protected Integer doInBackground() {
                 Project project = Application.getInstance().getProject();
-                if (project == null) return false;
+                if (project == null) return 0;
 
                 boolean isElementView = !"Model View".equals(mode);
-                return DataExtractionService.executeJsonExport(project, targetElement, isElementView);
+                boolean exportOk = DataExtractionService.executeJsonExport(project, targetElement, isElementView);
+                if (!exportOk) return 0;
+
+                boolean uploadOk = apiService.uploadModelData();
+                return uploadOk ? 2 : 1;
             }
 
             @Override
             protected void done() {
                 try {
-                    if (get()) {
+                    int result = get();
+                    if (result >= 1) {
                         addMessage("System", "Model data successfully exported.");
+                        if (result == 2) {
+                            addMessage("System", "Model context uploaded to Gemini Files API.");
+                        }
                         addMessage("System", "Select detail level and press <b>RUN</b>.");
                         runBtn.setEnabled(true);
                     } else {
