@@ -172,6 +172,35 @@ public class GeminiExplanationService implements ExplanationService {
         return FileManager.upload(jsonContent, apiKey);
     }
 
+    /**
+     * Reads the latest exported model JSON from disk, uploads it to the Gemini Files API,
+     * and caches the returned URI for subsequent generateContent calls.
+     * Intended to be called from a background thread (e.g. inside SwingWorker.doInBackground).
+     *
+     * @return true if the upload succeeded; false if skipped or failed (inline-JSON fallback applies).
+     */
+    public boolean uploadModelData() {
+        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
+        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+        if (apiKey.isEmpty()) {
+            log("Upload skipped: No API key configured.");
+            return false;
+        }
+        String jsonContent = loadLatestExportedJson();
+        if (jsonContent.startsWith("Error")) {
+            log("Upload skipped: " + jsonContent);
+            return false;
+        }
+        try {
+            String uri = FileManager.upload(jsonContent, apiKey);
+            log("Model uploaded to Files API. URI: " + uri);
+            return true;
+        } catch (IOException e) {
+            log("Upload failed — will fall back to inline JSON: " + e.getMessage());
+            return false;
+        }
+    }
+
     // ─── Modus & System-Konfiguration ──────────────────────────────────────────
     private static final int    EXPERT_MAX_TOKENS  = 9000;
     private static final double EXPERT_TEMPERATURE = 0.0;
