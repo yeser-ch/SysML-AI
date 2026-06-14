@@ -16,6 +16,8 @@
 #set($MAX_DEPENDENCY_DEPTH = $maxDependencyDepth)##
 # Maximum depth for sibling element collection (horizontal expansion via parent)
 #set($MAX_SIBLING_DEPTH = $maxSiblingDepth)##
+# Maximum depth for collecting owned child elements of siblings (0 = siblings only, no children)
+#set($MAX_SIBLING_OWNED_DEPTH = $maxSiblingOwnedDepth)##
 # Include owned child elements (downward parent-child hierarchy)
 #set($INCLUDE_OWN_ELEMENTS = true)##
 # Include owner hierarchy (upward parent-child hierarchy)
@@ -108,6 +110,9 @@
 #if(!$visitedIndex.containsKey($sibling.ID))##
 #set($void = $visitedIndex.put($sibling.ID, true))##
 #set($void = $collectedElements.put($sibling.ID, {"element": $sibling, "depth": $currentDepth, "source": "sibling_via_parent"}))##
+#if($MAX_SIBLING_OWNED_DEPTH > 0)##
+#collectOwnedElements($sibling $MAX_SIBLING_OWNED_DEPTH 1)##
+#end##if($MAX_SIBLING_OWNED_DEPTH > 0)##
 #end##if(!$visitedIndex.containsKey($sibling.ID))##
 #end##if($sibling.ID != $elem.ID)##
 #end##foreach($sibling in $parentElem.ownedElement)##
