@@ -26,6 +26,7 @@ public class DataExtractionService {
     private static final String TARGET_SUBDIR = "raw_model_data";
     private static int MAX_DEPENDENCY_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
     private static int MAX_SIBLING_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
+    private static int MAX_SIBLING_OWNED_DEPTH_EXPORT = 0; // 0 = Geschwister ohne Kinder; >0 = owned Elements der Geschwister bis dieser Tiefe
 
     /**
      * Führt den JSON-Export über die ReportWizard API (ITemplateEngine) aus.
@@ -53,6 +54,7 @@ public class DataExtractionService {
             // - exportScope != null: Element View → sysml_partial_export.vm
             MAX_DEPENDENCY_DEPTH_EXPORT = isElementView ? 2 : 5; // Beispielwerte, können auch über UI einstellbar gemacht werden
             MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 5; //
+            MAX_SIBLING_OWNED_DEPTH_EXPORT = isElementView ? 0 : 0; // 0 = keine owned Elements der Geschwister
             String selectedTemplate = TEMPLATE_NAME_PARTIAL;
             log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View (partial)" : "Model View (flat)"));
 
@@ -108,6 +110,7 @@ public class DataExtractionService {
                 // Suchgrenzen für partial Export setzen (Fallback-Defaults)
                 engine.addContext("maxDependencyDepth", MAX_DEPENDENCY_DEPTH_EXPORT);
                 engine.addContext("maxSiblingDepth", MAX_SIBLING_DEPTH_EXPORT);
+                engine.addContext("maxSiblingOwnedDepth", MAX_SIBLING_OWNED_DEPTH_EXPORT);
                 
                 // Template erstellen (nach Context-Setup)
                 Template template = engine.createTemplate(templateFile, outputFile);
