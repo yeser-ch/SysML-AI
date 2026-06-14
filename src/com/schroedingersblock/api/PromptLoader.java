@@ -12,15 +12,15 @@ import java.nio.file.Files;
 public class PromptLoader {
 
     private static final String PROMPT_DIR = "prompts";
-    private static final String EXPERT_FILE = "expert_prompt.txt";
-    private static final String BASIC_FILE  = "basic_prompt.txt";
+    // (Niko) 4er-Prompt-Struktur: Modus (Basic/Expert) x Ansicht (Element/Model View), als LLM-optimierte .md
 
     /**
      * Loads the correct prompt template based on mode,
      * then fills in elementName, elementType, ownerName, and exportedXML.
      *
      * @param baseDir     Plugin installation directory (contains the prompts/ subfolder)
-     * @param mode        "EXPERT" or "BASIC" (case-insensitive)
+     * @param detailLevel "EXPERT" or "BASIC" (case-insensitive)
+     * @param view        "Model View" or "Element View" (anything != "Model View" = Element View)
      * @param elementName Human-readable name of the Cameo element
      * @param elementType Human-readable type of the Cameo element
      * @param ownerName   Name of the owning element, or "root"
@@ -28,19 +28,23 @@ public class PromptLoader {
      * @return            Fully resolved prompt string ready to send to the LLM
      */
     public static String buildPrompt(File baseDir,
-                                     String mode,
+                                     String detailLevel,
+                                     String view,
                                      String elementName,
                                      String elementType,
                                      String ownerName,
                                      String exportedXml) {
 
-        String fileName = mode.equalsIgnoreCase("EXPERT") ? EXPERT_FILE : BASIC_FILE;
+        // (Niko) Datei je Modus x Ansicht: z.B. Expert_ElementView.md
+        boolean expert    = "EXPERT".equalsIgnoreCase(detailLevel);
+        boolean modelView = "Model View".equalsIgnoreCase(view); // alles andere = Element View (konsistent mit ExplanationDialog)
+        String fileName = (expert ? "Expert" : "Basic") + "_" + (modelView ? "ModelView" : "ElementView") + ".md";
         String template = loadTemplate(baseDir, fileName);
         return template
                 .replace("{elementName}", elementName)
                 .replace("{elementType}", elementType)
                 .replace("{ownerName}",   ownerName)
-                .replace("{exportedXML}", exportedXml != null ? exportedXml : "No XML available.");
+                .replace("{exportedJson}", exportedXml != null ? exportedXml : "No model data available."); // (Niko) JSON, nicht XML
     }
 
     private static String loadTemplate(File baseDir, String fileName) {
