@@ -313,8 +313,11 @@ public class installer_main extends JFrame {
                 File promptsDir = new File(myPluginDir, "prompts");
                 if (!promptsDir.exists()) promptsDir.mkdirs();
 
-                copyRes("basic_prompt.txt", new File(promptsDir, "basic_prompt.txt"));
-                copyRes("expert_prompt.txt", new File(promptsDir, "expert_prompt.txt"));
+                // (Niko) 4er-Prompt-Struktur (Modus x Ansicht) als .md statt der alten 2 .txt
+                copyRes("Basic_ElementView.md",  new File(promptsDir, "Basic_ElementView.md"));
+                copyRes("Basic_ModelView.md",    new File(promptsDir, "Basic_ModelView.md"));
+                copyRes("Expert_ElementView.md", new File(promptsDir, "Expert_ElementView.md"));
+                copyRes("Expert_ModelView.md",   new File(promptsDir, "Expert_ModelView.md"));
 
                 log(lang.equals("EN") ? "--- Installation successful! ---" : "--- Installation erfolgreich! ---");
 

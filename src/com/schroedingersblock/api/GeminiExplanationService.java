@@ -262,7 +262,7 @@ public class GeminiExplanationService implements ExplanationService {
             }
         }
 
-        String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, elementName, elementType, ownerName, exportedJson);
+        String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, mode, elementName, elementType, ownerName, exportedJson); // (Niko) mode = Ansicht (Element/Model View) für 4er-Prompt-Auswahl
         double promptKb = prompt.length() / 1024.0;
         log("System-Prompt generiert. Payload-Gesamtgröße (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
 
