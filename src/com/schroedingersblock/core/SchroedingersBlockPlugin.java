@@ -28,6 +28,9 @@ public class SchroedingersBlockPlugin extends Plugin {
     public void init() {
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class); //zum speichern des Datenschutz
 
+        // (Niko) Grounding bei jedem Plugin-Start zwingend auf "aus" — darf nie persistent aktiviert bleiben
+        prefs.putBoolean(GROUNDING_PREF, false);
+
         // Beim ersten Start nach Datenschutz fragen
         if ("UNKNOWN".equals(prefs.get(PRIVACY_KEY, "UNKNOWN"))) {
             askPrivacyConsent(prefs);

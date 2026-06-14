@@ -216,6 +216,15 @@ public class GeminiExplanationService implements ExplanationService {
         log("Detail-Level: " + currentDetailLevel);
 
         String fileUri = FileManager.getValidUri();
+
+        // (Niko) Grounding nur inline: hochgeladene Datei (fileData) + google_search → HTTP 500.
+        // (Niko) Bei aktivem Grounding den Upload ignorieren, damit das Modell inline mitgeht.
+        boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
+                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+        if (grounding) {
+            fileUri = null;
+        }
+
         String exportedJson;
 
         if (fileUri != null) {
@@ -393,16 +402,11 @@ public class GeminiExplanationService implements ExplanationService {
         return fallbackErrorMessage;
     }
 
-    // (Niko) Liefert die Modell-Reihenfolge. Bei aktivem Grounding zuerst das grounding-fähige 2.5-Modell,
-    // (Niko) danach die übrigen als Fallback (3.5/3.1 unterstützen Grounding im Free Tier nicht → HTTP 429).
+    // (Niko) Bei aktivem Grounding NUR das grounding-fähige 2.5-Modell — kein Fallback auf 3.5/3.1,
+    // (Niko) die im Free Tier kein Grounding können (sonst sinnloses 429-Durchlaufen der Kaskade).
     private String[] resolveModelCascade(boolean grounding) {
         if (!grounding) return MODELS;
-        List<String> ordered = new ArrayList<>();
-        ordered.add(GROUNDING_MODEL);
-        for (String m : MODELS) {
-            if (!m.equals(GROUNDING_MODEL)) ordered.add(m);
-        }
-        return ordered.toArray(new String[0]);
+        return new String[]{ GROUNDING_MODEL };
     }
 
     // ─── Request builders ─────────────────────────────────────────────────────
