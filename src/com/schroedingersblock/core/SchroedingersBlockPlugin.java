@@ -21,6 +21,8 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static final String PRIVACY_KEY = "data_privacy_accepted";
     public static final String API_KEY_PREF = "gemini_api_key";
     public static final String DEFAULT_MODE_PREF = "schroedingersblock_default_mode";
+    // (Niko) Schalter für Google-Search-Grounding (Default aus; auf Free Tier nur mit gemini-2.5 nutzbar)
+    public static final String GROUNDING_PREF = "schroedingersblock_grounding_enabled";
 
     @Override
     public void init() {
