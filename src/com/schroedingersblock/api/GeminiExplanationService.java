@@ -35,19 +35,18 @@ public class GeminiExplanationService implements ExplanationService {
 
     // ─── ERWEITERTE MODELL-KASKADE: Vollständige Integration nach Vorgabe von Nikolai ────────
     private static final String[] MODELS = {
-            "gemini-3.1-flash-live-preview",
-            "gemini-3.5-flash",       // Next-Gen Flash
-            "gemini-3.1-flash-lite",  // Ultra-schnelles Flash-Lite
-            "gemini-2.0-flash-lite",  // Leichtgewichtiges v2-Lite
-            "gemini-2.0-flash",       // Schnelles v2-Flash
-            "gemini-2.5-pro",         // Hochpräzises Pro-Fallback für komplexe Modelle
-            "gemini-3-flash",         // Standard v3-Flash
-            "gemini-3.1-pro",          // Maximales v3-Pro-Sicherheitsnetz
-            "gemini-2.5-flash",       // Standard-Flash
-            "gemini-2.5-flash-lite" // Klassisches Flash-Lite
+            "gemini-3.5-flash",       // (Niko) Primär — Ziel-Modell (GA, free-tier-fähig)
+            "gemini-3.1-flash-lite",  // (Niko) Fallback 1 — günstig, höhere Free-Limits
+            "gemini-2.5-flash-lite"   // (Niko) Fallback 2 — stabiler Rückfall
+            // (Niko) entfernt: gemini-2.5-flash (Abschaltung ~17.06.2026) + gemini-1.5-flash (tot) → vermeidet 404
     };
-
+    // (Niko) Einziges grounding-fähiges Modell im Free Tier — wird bei aktivem Grounding nach vorn sortiert
+    private static final String GROUNDING_MODEL = "gemini-2.5-flash-lite";
     private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+    // (Niko) Konfiguration für typ-spezifisches 429-Handling (Rate-Limit)
+    private static final int MAX_429_RETRIES = 2;       // (Niko) max. Wiederholungen am selben Modell bei HTTP 429
+    private static final int MAX_RETRY_WAIT_SEC = 20;   // (Niko) längere RetryInfo-Delays = Tageslimit → nicht warten, Modell wechseln
 
     // Statisch, damit der Schalter-Zustand für die gesamte Sitzung erhalten bleibt
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
@@ -71,10 +70,12 @@ public class GeminiExplanationService implements ExplanationService {
             int failures = failureCounts.getOrDefault(model, 0) + 1;
             failureCounts.put(model, failures);
 
-            long lockDurationMs = (long) Math.pow(3, failures - 1) * 5 * 1000;
+            // (Niko) Dynamische Berechnung (Verdopplung): 1. Fehler = 5s, 2. = 10s, 3. = 20s, 4. = 40s ...
+            long lockDurationMs = (long) Math.pow(2, failures - 1) * 5 * 1000;
 
-            if (lockDurationMs > 5 * 60 * 1000) {
-                lockDurationMs = 5 * 60 * 1000;
+            // (Niko) Deckelung bei maximal 60 Sekunden
+            if (lockDurationMs > 60 * 1000) {
+                lockDurationMs = 60 * 1000;
             }
 
             retryAtMap.put(model, System.currentTimeMillis() + lockDurationMs);
@@ -238,6 +239,15 @@ public class GeminiExplanationService implements ExplanationService {
         log("Detail-Level: " + currentDetailLevel);
 
         String fileUri = FileManager.getValidUri();
+
+        // (Niko) Grounding nur inline: hochgeladene Datei (fileData) + google_search → HTTP 500.
+        // (Niko) Bei aktivem Grounding den Upload ignorieren, damit das Modell inline mitgeht.
+        boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
+                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+        if (grounding) {
+            fileUri = null;
+        }
+
         String exportedJson;
 
         if (fileUri != null) {
@@ -289,7 +299,11 @@ public class GeminiExplanationService implements ExplanationService {
 
         String fallbackErrorMessage = "⚠️ All Gemini models are currently overloaded. Please try again in a moment.";
 
-        for (String model : MODELS) {
+        // (Niko) Bei aktivem Grounding zuerst das grounding-fähige 2.5-Modell, 3.5/3.1 nur als Fallback
+        boolean grounding = prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+        String[] models = resolveModelCascade(grounding);
+
+        for (String model : models) {
             if (!CIRCUIT.isAvailable(model)) {
                 log("Skipping " + model + " (Circuit is OPEN due to previous failure)");
                 continue;
@@ -302,8 +316,13 @@ public class GeminiExplanationService implements ExplanationService {
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(java.time.Duration.ofSeconds(10)) ///Hier dauer pro Modell
+                    .timeout(java.time.Duration.ofSeconds(30)) // (Niko) 3s war zu kurz für Flash + ~12 KB Payload
                     .build();
+
+            // (Niko) Innere Retry-Schleife: bei HTTP 429 warten + Retry am SELBEN Modell statt rotieren (Free-Limits sind projektweit)
+            boolean moveToNext = false; // (Niko) true = dieses Modell aufgeben, nächstes versuchen
+            int attempt429 = 0;         // (Niko) Zähler für 429-Wiederholungen an diesem Modell
+            while (!moveToNext) {
 
             log("Sending HTTP POST to " + model + "\u00A0...");
             long startTime = System.currentTimeMillis();
@@ -341,30 +360,76 @@ public class GeminiExplanationService implements ExplanationService {
                     }
                 }
 
-                log("Model " + model + " failed with HTTP " + response.statusCode() + ". Triggering Circuit Breaker.");
-                CIRCUIT.recordFailure(model);
-
+                // (Niko) Typ-spezifische Behandlung der HTTP-Statuscodes
+                int status = response.statusCode(); // (Niko)
+                if (status == 404) { // (Niko) Modell-ID aktuell nicht verfügbar → temporär sperren (Backoff), später erneut probieren
+                    log("Model " + model + " returned HTTP 404 (not found). Temporarily skipping, will retry after backoff."); // (Niko)
+                    CIRCUIT.recordFailure(model); // (Niko) kein Permanent-Lock mehr → Modell rotiert nach Backoff zurück
+                    fallbackErrorMessage = "⚠️ API error (HTTP 404): Modell '" + model + "' aktuell nicht verfügbar."; // (Niko)
+                    moveToNext = true; // (Niko)
+                } else if (status == 429) { // (Niko) Rate-Limit → warten + Retry am SELBEN Modell, nicht rotieren
+                    int waitSec = extractRetryDelaySeconds(response.body()); // (Niko) Googles RetryInfo, falls vorhanden
+                    attempt429++; // (Niko)
+                    if (attempt429 <= MAX_429_RETRIES && waitSec <= MAX_RETRY_WAIT_SEC) { // (Niko) zumutbares Delay → warten und nochmal
+                        log("Model " + model + " rate-limited (HTTP 429). Waiting " + waitSec + "s, retry " + attempt429 + "/" + MAX_429_RETRIES + " on same model."); // (Niko)
+                        try { // (Niko)
+                            Thread.sleep(waitSec * 1000L); // (Niko) blockiert nur den SwingWorker-Hintergrundthread, UI bleibt frei
+                        } catch (InterruptedException ie) { // (Niko)
+                            Thread.currentThread().interrupt(); // (Niko) Interrupt-Flag wiederherstellen
+                            CIRCUIT.recordFailure(model); // (Niko)
+                            fallbackErrorMessage = "⚠️ Abgebrochen während Rate-Limit-Wartezeit."; // (Niko)
+                            moveToNext = true; // (Niko)
+                        }
+                        // (Niko) bei Erfolg kein moveToNext → while wiederholt denselben Request am selben Modell
+                    } else { // (Niko) Delay zu groß (= Tageslimit) oder Versuche erschöpft → Circuit + nächstes Modell
+                        log("Model " + model + " still rate-limited (HTTP 429, suggested wait " + waitSec + "s). Giving up on this model."); // (Niko)
+                        CIRCUIT.recordFailure(model); // (Niko)
+                        fallbackErrorMessage = "⚠️ API error (HTTP 429): Rate-Limit erreicht (Free Tier). Bitte später erneut versuchen."; // (Niko)
+                        moveToNext = true; // (Niko)
+                    }
+                } else { // (Niko) sonstige Fehler (z.B. 5xx) → transient behandeln, nächstes Modell
+                    log("Model " + model + " failed with HTTP " + status + ". Triggering Circuit Breaker."); // (Niko)
+                    CIRCUIT.recordFailure(model);
+                    fallbackErrorMessage = "⚠️ API error (HTTP " + status + "): Modelle temporär überlastet.";
+                    moveToNext = true; // (Niko)
+                }
             } catch (java.net.http.HttpConnectTimeoutException e) {
                 log("Network connection timeout on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
+                moveToNext = true; // (Niko)
 
             } catch (java.net.http.HttpTimeoutException e) {
                 log("API Response Timeout on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von " + model + " hat das Zeitlimit überschritten.";
+                moveToNext = true; // (Niko)
 
             } catch (java.net.UnknownHostException | java.net.ConnectException e) {
                 log("Direct network failure on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
+                moveToNext = true; // (Niko)
 
             } catch (Exception e) {
                 log("Unexpected fallback error on " + model + ": " + e.getMessage());
                 CIRCUIT.recordFailure(model);
+                fallbackErrorMessage = "❌ Unexpected Error: " + e.getMessage();
+                moveToNext = true; // (Niko)
             }
+            } // (Niko) Ende innere Retry-Schleife
         }
 
         // Wenn der Code hier ankommt, haben alle Modelle in der Kaskade innerhalb der Fristen versagt
         conversationHistory.remove(conversationHistory.size() - 1);
         return fallbackErrorMessage;
+    }
+
+    // (Niko) Bei aktivem Grounding NUR das grounding-fähige 2.5-Modell — kein Fallback auf 3.5/3.1,
+    // (Niko) die im Free Tier kein Grounding können (sonst sinnloses 429-Durchlaufen der Kaskade).
+    private String[] resolveModelCascade(boolean grounding) {
+        if (!grounding) return MODELS;
+        return new String[]{ GROUNDING_MODEL };
     }
 
     // ─── Request builders ─────────────────────────────────────────────────────
@@ -382,9 +447,15 @@ public class GeminiExplanationService implements ExplanationService {
             systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
         }
 
+        // (Niko) Grounding (google_search) nur senden, wenn im Settings-Dialog aktiviert (Default aus).
+        // (Niko) Auf Free Tier funktioniert google_search nur mit gemini-2.5 (3.5/3.1 → HTTP 429); aus = umgeht zudem den fragilen groundingMetadata-Parserpfad.
+        boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
+                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+        String toolsPart = grounding ? "\"tools\": [{\"google_search\": {}}]," : "";
+
         return "{"
                 + systemInstructionPart
-                + "\"tools\": [{\"google_search\": {}}],"
+                + toolsPart // (Niko) ersetzt das vormals fest aktivierte google_search
                 + "\"contents\": [" + historyArray + "],"
                 + "\"generationConfig\": {"
                 + "  \"temperature\": " + temp + ","
@@ -535,6 +606,30 @@ public class GeminiExplanationService implements ExplanationService {
             return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
         } catch (Exception e) {
             return json;
+        }
+    }
+
+    // (Niko) Liest das RetryInfo-Feld ("retryDelay": "27s") aus einer 429-Antwort und gibt die Sekunden zurück.
+    // (Niko) Fehlt das Feld oder ist es unparsbar, wird ein konservativer Default (10s) geliefert.
+    private int extractRetryDelaySeconds(String json) {
+        try {
+            String marker = "\"retryDelay\"";
+            int start = json.indexOf(marker);
+            if (start == -1) return 10;
+            int quote = json.indexOf("\"", start + marker.length());
+            if (quote == -1) return 10;
+            int endQuote = json.indexOf("\"", quote + 1);
+            if (endQuote == -1) return 10;
+            String value = json.substring(quote + 1, endQuote).trim(); // z.B. "27s" oder "27.5s"
+            StringBuilder digits = new StringBuilder();
+            for (char c : value.toCharArray()) {
+                if (Character.isDigit(c)) digits.append(c);
+                else break;
+            }
+            if (digits.length() == 0) return 10;
+            return Integer.parseInt(digits.toString());
+        } catch (Exception e) {
+            return 10;
         }
     }
 }
