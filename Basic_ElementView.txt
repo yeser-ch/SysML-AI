@@ -23,10 +23,10 @@ Owner: {ownerName}
 - Reply in English
 - Max 3 short paragraphs, no bullet points
 - Plain language — no unnecessary jargon
-- Do not restate information that is already obvious from the element
-  specification (such as plain port lists). Add interpretation, not a copy
-- Only mention that something is missing if its absence is a real problem.
-  Never report "no ports" or "no constraints" for an element type where these
+- Do not restate information already obvious from the element specification
+  (such as plain port lists); add interpretation, not a copy
+- Only mention that something is missing if its absence is a real problem;
+  never report "no ports" or "no constraints" for an element type where these
   do not apply
 - No introduction, no closing sentence
 - Never finish mid-sentence
