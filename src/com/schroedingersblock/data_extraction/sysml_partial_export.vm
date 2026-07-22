@@ -1,35 +1,35 @@
-# ========================================================================
-# VELOCITY TEMPLATE: Partial SysML Model Export
-# ========================================================================
-# Exports a subset of model elements centered around a user-selected element.
-# Traverses relationships bidirectionally with configurable relationship types.
-# ========================================================================
-# ========================================================================
-# SECTION 1: CONFIGURATION (Must be before any output)
-# ========================================================================
-# Center element from Java context (provided by DataExtractionService)
+## ========================================================================
+## VELOCITY TEMPLATE: Partial SysML Model Export
+## ========================================================================
+## Exports a subset of model elements centered around a user-selected element.
+## Traverses relationships bidirectionally with configurable relationship types.
+## ========================================================================
+## ========================================================================
+## SECTION 1: CONFIGURATION (Must be before any output)
+## ========================================================================
+## Center element from Java context (provided by DataExtractionService)
 #set($CENTER_ELEMENT = $!centerElement)##
 #set($IS_CENTER_SET = ($CENTER_ELEMENT != ""))##
-# Enable partial export mode
+## Enable partial export mode
 #set($PARTIAL_EXPORT_ENABLED = $IS_CENTER_SET)##
-# Traversal depth limit (prevent infinite loops in cyclic dependencies)
+## Traversal depth limit (prevent infinite loops in cyclic dependencies)
 #set($MAX_DEPENDENCY_DEPTH = $maxDependencyDepth)##
-# Maximum depth for sibling element collection (horizontal expansion via parent)
+## Maximum depth for sibling element collection (horizontal expansion via parent)
 #set($MAX_SIBLING_DEPTH = $maxSiblingDepth)##
-# Maximum depth for collecting owned child elements of siblings (0 = siblings only, no children)
+## Maximum depth for collecting owned child elements of siblings (0 = siblings only, no children)
 #set($MAX_SIBLING_OWNED_DEPTH = $maxSiblingOwnedDepth)##
-# Include owned child elements (downward parent-child hierarchy)
+## Include owned child elements (downward parent-child hierarchy)
 #set($INCLUDE_OWN_ELEMENTS = true)##
-# Include owner hierarchy (upward parent-child hierarchy)
+## Include owner hierarchy (upward parent-child hierarchy)
 #set($INCLUDE_PARENT_HIERARCHY = true)##
-# ========================================================================
-# Relationship Traversal: Type-dependent flags set per element in macro
-# ========================================================================
-# Note: $SEARCH_* flags are determined by element type in collectDependencyLinks()
-# No global INCLUDE_* flags needed anymore
-# ========================================================================
-# Global Data Structures (O(1) cycle detection with HashMap)
-# ========================================================================
+## ========================================================================
+## Relationship Traversal: Type-dependent flags set per element in macro
+## ========================================================================
+## Note: $SEARCH_* flags are determined by element type in collectDependencyLinks()
+## No global INCLUDE_* flags needed anymore
+## ========================================================================
+## Global Data Structures (O(1) cycle detection with HashMap)
+## ========================================================================
 #set($collectedElements = {})##
 #set($visitedIndex = {})##
 #set($SEARCH_DEPENDENCIES = false)##
@@ -41,9 +41,9 @@
 #set($SEARCH_INTERFACE_REALIZATION = false)##
 #set($SEARCH_ACTIVITY_STRUCTURE = false)##
 #set($SEARCH_BEHAVIOR_CALLS = false)##
-# ========================================================================
-# SECTION 2: JSON OUTPUT STRUCTURE
-# ========================================================================
+## ========================================================================
+## SECTION 2: JSON OUTPUT STRUCTURE
+## ========================================================================
 {
   "global_context": {
     "project_name": "$!project.name",
