@@ -1,35 +1,42 @@
-# ========================================================================
-# VELOCITY TEMPLATE: Partial SysML Model Export
-# ========================================================================
-# Exports a subset of model elements centered around a user-selected element.
-# Traverses relationships bidirectionally with configurable relationship types.
-# ========================================================================
-# ========================================================================
-# SECTION 1: CONFIGURATION (Must be before any output)
-# ========================================================================
-# Center element from Java context (provided by DataExtractionService)
+## ========================================================================
+## VELOCITY TEMPLATE: Partial SysML Model Export
+## ========================================================================
+## Exports a subset of model elements centered around a user-selected element.
+## Traverses relationships bidirectionally with configurable relationship types.
+## ========================================================================
+## ========================================================================
+## SECTION 1: CONFIGURATION (Must be before any output)
+## ========================================================================
+## Center element from Java context (provided by DataExtractionService)
 #set($CENTER_ELEMENT = $!centerElement)##
 #set($IS_CENTER_SET = ($CENTER_ELEMENT != ""))##
-# Enable partial export mode
+## Enable partial export mode
 #set($PARTIAL_EXPORT_ENABLED = $IS_CENTER_SET)##
-# Traversal depth limit (prevent infinite loops in cyclic dependencies)
+## Traversal depth limit (prevent infinite loops in cyclic dependencies)
 #set($MAX_DEPENDENCY_DEPTH = $maxDependencyDepth)##
-# Maximum depth for sibling element collection (horizontal expansion via parent)
+## Maximum depth for sibling element collection (horizontal expansion via parent)
 #set($MAX_SIBLING_DEPTH = $maxSiblingDepth)##
-# Include owned child elements (downward parent-child hierarchy)
+## Maximum depth for collecting owned child elements of siblings (0 = siblings only, no children)
+#set($MAX_SIBLING_OWNED_DEPTH = $maxSiblingOwnedDepth)##
+## Include owned child elements (downward parent-child hierarchy)
 #set($INCLUDE_OWN_ELEMENTS = true)##
-# Include owner hierarchy (upward parent-child hierarchy)
+## Include owner hierarchy (upward parent-child hierarchy)
 #set($INCLUDE_PARENT_HIERARCHY = true)##
-# ========================================================================
-# Relationship Traversal: Type-dependent flags set per element in macro
-# ========================================================================
-# Note: $SEARCH_* flags are determined by element type in collectDependencyLinks()
-# No global INCLUDE_* flags needed anymore
-# ========================================================================
-# Global Data Structures (O(1) cycle detection with HashMap)
-# ========================================================================
+## ========================================================================
+## Relationship Traversal: Type-dependent flags set per element in macro
+## ========================================================================
+## Note: $SEARCH_* flags are determined by element type in collectDependencyLinks()
+## No global INCLUDE_* flags needed anymore
+## ========================================================================
+## Global Data Structures (O(1) cycle detection with HashMap)
+## ========================================================================
 #set($collectedElements = {})##
-#set($visitedIndex = {})##
+## Separate visited sets per traversal direction, so one direction claiming
+## an element doesn't stop another direction from exploring further from it.
+## Ownership hierarchy (owned/parent/sibling) is a strict tree in SysML and
+## cannot cycle; only the dependency graph needs cycle protection.
+#set($structuralVisited = {})##
+#set($dependencyVisited = {})##
 #set($SEARCH_DEPENDENCIES = false)##
 #set($SEARCH_ASSOCIATIONS = false)##
 #set($SEARCH_GENERALIZATIONS = false)##
@@ -39,9 +46,9 @@
 #set($SEARCH_INTERFACE_REALIZATION = false)##
 #set($SEARCH_ACTIVITY_STRUCTURE = false)##
 #set($SEARCH_BEHAVIOR_CALLS = false)##
-# ========================================================================
-# SECTION 2: JSON OUTPUT STRUCTURE
-# ========================================================================
+## ========================================================================
+## SECTION 2: JSON OUTPUT STRUCTURE
+## ========================================================================
 {
   "global_context": {
     "project_name": "$!project.name",
@@ -69,12 +76,12 @@
 #macro(collectOwnedElements $elem $maxDepth $currentDepth)##
 #if($currentDepth <= $maxDepth)##
 #foreach($child in $elem.ownedElement)##
-#if(!$visitedIndex.containsKey($child.ID))##
-#set($void = $visitedIndex.put($child.ID, true))##
+#if(!$structuralVisited.containsKey($child.ID))##
+#set($void = $structuralVisited.put($child.ID, true))##
 #set($void = $collectedElements.put($child.ID, {"element": $child, "depth": $currentDepth, "source": "owned_element"}))##
 #set($nextDepth = $currentDepth + 1)##
 #collectOwnedElements($child $maxDepth $nextDepth)##
-#end##if(!visitedIndex.containsKey($child.ID))##
+#end##if(!$structuralVisited.containsKey($child.ID))##
 #end##foreach($child in $elem.ownedElement)##
 #end##if($currentDepth <= $maxDepth)##
 #end##macro(collectOwnedElements)##
@@ -96,8 +103,8 @@
 #if($currentDepth <= $maxDepth)##
 #if($elem.owner)##
 #set($parentElem = $elem.owner)##
-#if(!$visitedIndex.containsKey($parentElem.ID))##
-#set($void = $visitedIndex.put($parentElem.ID, true))##
+#if(!$structuralVisited.containsKey($parentElem.ID))##
+#set($void = $structuralVisited.put($parentElem.ID, true))##
 #set($void = $collectedElements.put($parentElem.ID, {"element": $parentElem, "depth": $currentDepth, "source": "parent_hierarchy"}))##
 ## ========================================================================
 ## SIBLING EXPANSION: VOR rekursivem Aufruf - auf dieser Tiefe Geschwister sammeln
@@ -105,17 +112,20 @@
 #if($currentDepth <= $MAX_SIBLING_DEPTH)##
 #foreach($sibling in $parentElem.ownedElement)##
 #if($sibling.ID != $elem.ID)##
-#if(!$visitedIndex.containsKey($sibling.ID))##
-#set($void = $visitedIndex.put($sibling.ID, true))##
+#if(!$structuralVisited.containsKey($sibling.ID))##
+#set($void = $structuralVisited.put($sibling.ID, true))##
 #set($void = $collectedElements.put($sibling.ID, {"element": $sibling, "depth": $currentDepth, "source": "sibling_via_parent"}))##
-#end##if(!$visitedIndex.containsKey($sibling.ID))##
+#if($MAX_SIBLING_OWNED_DEPTH > 0)##
+#collectOwnedElements($sibling $MAX_SIBLING_OWNED_DEPTH 1)##
+#end##if($MAX_SIBLING_OWNED_DEPTH > 0)##
+#end##if(!$structuralVisited.containsKey($sibling.ID))##
 #end##if($sibling.ID != $elem.ID)##
 #end##foreach($sibling in $parentElem.ownedElement)##
 #end##if($currentDepth <= $MAX_SIBLING_DEPTH)##
 ## DANACH rekursiver Aufruf aufwärts
 #set($nextDepth = $currentDepth + 1)##
 #collectParentElements($parentElem $maxDepth $nextDepth)##
-#end##if(!$visitedIndex.containsKey($parentElem.ID))##
+#end##if(!$structuralVisited.containsKey($parentElem.ID))##
 #end##if($elem.owner)##
 #end##if($currentDepth <= $maxDepth)##
 #end##macro(collectParentElements)##
@@ -188,23 +198,23 @@
 #foreach($rel in $elem.clientDependency)
 #if($rel.supplier.size() > 0)
 #set($targetElem = $rel.supplier.get(0))
-#if(!$visitedIndex.containsKey($targetElem.ID))
-#set($void = $visitedIndex.put($targetElem.ID, true))
+#if(!$dependencyVisited.containsKey($targetElem.ID))
+#set($void = $dependencyVisited.put($targetElem.ID, true))
 #set($void = $collectedElements.put($targetElem.ID, {"element": $targetElem, "depth": $currentDepth, "source": "dependency_outgoing"}))
 #set($nextDepth = $currentDepth + 1)##
 #collectDependencyLinks($targetElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($targetElem.ID))
+#end##if(!$dependencyVisited.containsKey($targetElem.ID))
 #end##if($rel.supplier.size() > 0)
 #end##foreach($rel in $elem.clientDependency)
 #foreach($rel in $elem.supplierDependency)
 #if($rel.client.size() > 0)
 #set($sourceElem = $rel.client.get(0))
-#if(!$visitedIndex.containsKey($sourceElem.ID))
-#set($void = $visitedIndex.put($sourceElem.ID, true))
+#if(!$dependencyVisited.containsKey($sourceElem.ID))
+#set($void = $dependencyVisited.put($sourceElem.ID, true))
 #set($void = $collectedElements.put($sourceElem.ID, {"element": $sourceElem, "depth": $currentDepth, "source": "dependency_incoming"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($sourceElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($sourceElem.ID))
+#end##if(!$dependencyVisited.containsKey($sourceElem.ID))
 #end##if($rel.client.size() > 0)
 #end##foreach($rel in $elem.supplierDependency)
 #end##if($SEARCH_DEPENDENCIES)##
@@ -214,12 +224,12 @@
 #foreach($end in $assoc.memberEnd)
 #if($end.type && $end.type != $elem)
 #set($targetType = $end.type)
-#if(!$visitedIndex.containsKey($targetType.ID))
-#set($void = $visitedIndex.put($targetType.ID, true))
+#if(!$dependencyVisited.containsKey($targetType.ID))
+#set($void = $dependencyVisited.put($targetType.ID, true))
 #set($void = $collectedElements.put($targetType.ID, {"element": $targetType, "depth": $currentDepth, "source": "association"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($targetType $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($targetType.ID))
+#end##if(!$dependencyVisited.containsKey($targetType.ID))
 #end##if($end.type && $end.type != $elem)
 #end##foreach($end in $assoc.memberEnd)
 #end##foreach($assoc in $elem.association)
@@ -229,23 +239,23 @@
 #foreach($gen in $elem.generalization)
 #if($gen.general)
 #set($superElem = $gen.general)
-#if(!$visitedIndex.containsKey($superElem.ID))
-#set($void = $visitedIndex.put($superElem.ID, true))
+#if(!$dependencyVisited.containsKey($superElem.ID))
+#set($void = $dependencyVisited.put($superElem.ID, true))
 #set($void = $collectedElements.put($superElem.ID, {"element": $superElem, "depth": $currentDepth, "source": "generalization_super"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($superElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($superElem.ID))
+#end##if(!$dependencyVisited.containsKey($superElem.ID))
 #end##if($gen.general)
 #end##foreach($gen in $elem.generalization)
 #foreach($spec in $elem.specialization)
 #if($spec.specific)
 #set($subElem = $spec.specific)
-#if(!$visitedIndex.containsKey($subElem.ID))
-#set($void = $visitedIndex.put($subElem.ID, true))
+#if(!$dependencyVisited.containsKey($subElem.ID))
+#set($void = $dependencyVisited.put($subElem.ID, true))
 #set($void = $collectedElements.put($subElem.ID, {"element": $subElem, "depth": $currentDepth, "source": "generalization_sub"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($subElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($subElem.ID))
+#end##if(!$dependencyVisited.containsKey($subElem.ID))
 #end##if($spec.specific)
 #end##foreach($spec in $elem.specialization)
 #end##if($SEARCH_GENERALIZATIONS)##
@@ -254,12 +264,12 @@
 #foreach($attr in $elem.ownedAttribute)
 #if($attr.type)
 #set($typeElem = $attr.type)
-#if(!$visitedIndex.containsKey($typeElem.ID))
-#set($void = $visitedIndex.put($typeElem.ID, true))
+#if(!$dependencyVisited.containsKey($typeElem.ID))
+#set($void = $dependencyVisited.put($typeElem.ID, true))
 #set($void = $collectedElements.put($typeElem.ID, {"element": $typeElem, "depth": $currentDepth, "source": "property_type"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($typeElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($typeElem.ID))
+#end##if(!$dependencyVisited.containsKey($typeElem.ID))
 #end##if($attr.type)
 #end##foreach($attr in $elem.ownedAttribute)
 #end##if($SEARCH_PROPERTIES)##
@@ -268,12 +278,12 @@
 #foreach($port in $elem.ownedPort)
 #if($port.type)
 #set($portType = $port.type)
-#if(!$visitedIndex.containsKey($portType.ID))
-#set($void = $visitedIndex.put($portType.ID, true))
+#if(!$dependencyVisited.containsKey($portType.ID))
+#set($void = $dependencyVisited.put($portType.ID, true))
 #set($void = $collectedElements.put($portType.ID, {"element": $portType, "depth": $currentDepth, "source": "port_type"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($portType $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($portType.ID))
+#end##if(!$dependencyVisited.containsKey($portType.ID))
 #end##if($port.type)
 #end##foreach($port in $elem.ownedPort)
 #end##if($SEARCH_PORTS)##
@@ -283,10 +293,10 @@
 #foreach($end in $connector.end)
 #if($end.role)
 #set($roleElem = $end.role)
-#if(!$visitedIndex.containsKey($roleElem.ID))
-#set($void = $visitedIndex.put($roleElem.ID, true))
+#if(!$dependencyVisited.containsKey($roleElem.ID))
+#set($void = $dependencyVisited.put($roleElem.ID, true))
 #set($void = $collectedElements.put($roleElem.ID, {"element": $roleElem, "depth": $currentDepth, "source": "connector"}))
-#end##if(!$visitedIndex.containsKey($roleElem.ID))
+#end##if(!$dependencyVisited.containsKey($roleElem.ID))
 #end##if($end.role)
 #end##foreach($end in $connector.end)
 #end##foreach($connector in $elem.ownedConnector)
@@ -296,12 +306,12 @@
 #foreach($ifaceReal in $elem.interfaceRealization)
 #if($ifaceReal.interface)
 #set($ifaceElem = $ifaceReal.interface)
-#if(!$visitedIndex.containsKey($ifaceElem.ID))
-#set($void = $visitedIndex.put($ifaceElem.ID, true))
+#if(!$dependencyVisited.containsKey($ifaceElem.ID))
+#set($void = $dependencyVisited.put($ifaceElem.ID, true))
 #set($void = $collectedElements.put($ifaceElem.ID, {"element": $ifaceElem, "depth": $currentDepth, "source": "interface_realization"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($ifaceElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($ifaceElem.ID))
+#end##if(!$dependencyVisited.containsKey($ifaceElem.ID))
 #end##if($ifaceReal.interface)
 #end##foreach($ifaceReal in $elem.interfaceRealization)
 #end##if($SEARCH_INTERFACE_REALIZATION)##
@@ -310,32 +320,32 @@
 ## Activity Nodes (CallBehaviorAction instances, etc.) und ihre ControlFlows/ObjectFlows
 ## ControlFlows sind auf den Nodes als incoming/outgoing, nicht auf der Activity selbst!
 #foreach($node in $elem.node)
-#if(!$visitedIndex.containsKey($node.ID))
-#set($void = $visitedIndex.put($node.ID, true))
+#if(!$dependencyVisited.containsKey($node.ID))
+#set($void = $dependencyVisited.put($node.ID, true))
 #set($void = $collectedElements.put($node.ID, {"element": $node, "depth": $currentDepth, "source": "activity_node"}))
-#end##if(!$visitedIndex.containsKey($node.ID))
+#end##if(!$dependencyVisited.containsKey($node.ID))
 ## Traverse outgoing ControlFlows/ObjectFlows von diesem Node
 #foreach($flow in $node.outgoing)##
 #if($flow.target)##
 #set($targetNode = $flow.target)##
-#if(!$visitedIndex.containsKey($targetNode.ID))##
-#set($void = $visitedIndex.put($targetNode.ID, true))##
+#if(!$dependencyVisited.containsKey($targetNode.ID))##
+#set($void = $dependencyVisited.put($targetNode.ID, true))##
 #set($void = $collectedElements.put($targetNode.ID, {"element": $targetNode, "depth": $currentDepth, "source": "activity_flow_target"}))##
 #set($nextDepth = $currentDepth + 1)##
 #collectDependencyLinks($targetNode $maxDepth $nextDepth)##
-#end##if(!$visitedIndex.containsKey($targetNode.ID))##
+#end##if(!$dependencyVisited.containsKey($targetNode.ID))##
 #end##if($flow.target)##
 #end##foreach($flow in $node.outgoing)##
 ## Traverse incoming ControlFlows/ObjectFlows (bidirectional)
 #foreach($flow in $node.incoming)##
 #if($flow.source)##
 #set($sourceNode = $flow.source)##
-#if(!$visitedIndex.containsKey($sourceNode.ID))##
-#set($void = $visitedIndex.put($sourceNode.ID, true))##
+#if(!$dependencyVisited.containsKey($sourceNode.ID))##
+#set($void = $dependencyVisited.put($sourceNode.ID, true))##
 #set($void = $collectedElements.put($sourceNode.ID, {"element": $sourceNode, "depth": $currentDepth, "source": "activity_flow_source"}))##
 #set($nextDepth = $currentDepth + 1)##
 #collectDependencyLinks($sourceNode $maxDepth $nextDepth)##
-#end##if(!$visitedIndex.containsKey($sourceNode.ID))##
+#end##if(!$dependencyVisited.containsKey($sourceNode.ID))##
 #end##if($flow.source)##
 #end##foreach($flow in $node.incoming)##
 #end##foreach($node in $elem.node)##
@@ -344,12 +354,12 @@
 #if($SEARCH_BEHAVIOR_CALLS)##
 #if($elem.behavior)
 #set($behaviorElem = $elem.behavior)
-#if(!$visitedIndex.containsKey($behaviorElem.ID))
-#set($void = $visitedIndex.put($behaviorElem.ID, true))
+#if(!$dependencyVisited.containsKey($behaviorElem.ID))
+#set($void = $dependencyVisited.put($behaviorElem.ID, true))
 #set($void = $collectedElements.put($behaviorElem.ID, {"element": $behaviorElem, "depth": $currentDepth, "source": "behavior_call"}))
 #set($nextDepth = $currentDepth + 1)
 #collectDependencyLinks($behaviorElem $maxDepth $nextDepth)
-#end##if(!$visitedIndex.containsKey($behaviorElem.ID))##
+#end##if(!$dependencyVisited.containsKey($behaviorElem.ID))##
 #end##if($elem.behavior)##
 #end##if($SEARCH_BEHAVIOR_CALLS)##
 #end##if($currentDepth <= $maxDepth)##
@@ -407,7 +417,8 @@ $!txt##
 ##
 #macro(initializePartialExport)##
 #if($CENTER_ELEMENT)##
-#set($void = $visitedIndex.put($CENTER_ELEMENT.ID, true))##
+#set($void = $structuralVisited.put($CENTER_ELEMENT.ID, true))##
+#set($void = $dependencyVisited.put($CENTER_ELEMENT.ID, true))##
 #set($void = $collectedElements.put($CENTER_ELEMENT.ID, {"element": $CENTER_ELEMENT, "depth": 0, "source": "center"}))##
 #if($INCLUDE_OWN_ELEMENTS)##
 #collectOwnedElements($CENTER_ELEMENT $MAX_DEPENDENCY_DEPTH 1)##
@@ -420,60 +431,12 @@ $!txt##
 #end##macro(initializePartialExport)##
 ##
 ## ====================================================================
-## MACRO: exportCollectedElements
-## ====================================================================
-## Generate JSON for all collected elements
-##
-## Features:
-##   - Filters system library elements (SysML, UML, StandardProfile, etc.)
-##   - Only exports whitelisted SysML v1 element types
-##   - Includes traversal metadata (depth, source)
-##   - Proper JSON comma handling
-##
-## Output: Comma-separated JSON objects (no array brackets)
-##         Caller must wrap in [ ] brackets
-##
-#macro(exportCollectedElements)##
-#set($sortedIds = $collectedElements.keySet())##
-#set($isFirstOut = true)##
-#foreach($elemId in $sortedIds)##
-#set($collectionData = $collectedElements.get($elemId))##
-#set($elem = $collectionData.get("element"))##
-#set($depth = $collectionData.get("depth"))##
-#set($source = $collectionData.get("source"))##
-#set($type = "")##
-#if($elem.humanType)##
-#set($type = $elem.humanType)##
-#end##if($elem.humanType)##
-#set($t = $type.replace(" ", ""))##
-#set($qName = "")##
-#if($elem.qualifiedName)##
-#set($qName = $elem.qualifiedName)##
-#end##if($elem.qualifiedName)##
-#set($isSystem = false)##
-#if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $elem.ID.contains("_180beta"))##
-#set($isSystem = true)##
-#end##if($qName.startsWith("SysML") || ...)##
-#set($isValidType = false)##
-#if($t == "Block" || $t == "ValueType" || $t == "ConstraintBlock" || $t == "Port" || $t == "ProxyPort" || $t == "FullPort" || $t == "FlowPort" || $t == "PartProperty" || $t == "ValueProperty" || $t == "ReferenceProperty" || $t == "ConstraintProperty" || $t == "Property" || $t == "FlowProperty" || $t == "Connector" || $t == "BindingConnector" || $t == "ItemFlow" || $t == "Association" || $t == "AssociationClass" || $t == "InterfaceRealization" || $t == "Usage" || $t == "Requirement" || $t == "TestCase" || $t == "UseCase" || $t == "Actor" || $t == "Activity" || $t.contains("Action") || $t.contains("Node") || $t == "ControlFlow" || $t == "ObjectFlow" || $t == "ActivityPartition" || $t == "Pin" || $t == "StateMachine" || $t == "Region" || $t == "State" || $t == "Pseudostate" || $t == "FinalState" || $t == "Transition" || $t == "Trigger" || $t == "Event" || $t == "Interaction" || $t == "Lifeline" || $t == "Message" || $t == "ExecutionSpecification" || $t == "CombinedFragment" || $t == "InteractionOperand" || $t == "Package" || $t == "Model" || $t == "View" || $t == "Viewpoint" || $t == "Rationale" || $t == "Problem")##
-#set($isValidType = true)##
-#end##if($t == "Block" || ...)##
-#if($isValidType && !$isSystem)##
-#if(!$isFirstOut),
-#end##
-#set($isFirstOut = false)##
-#exportElementFull($elem)##
-#end##if($isValidType && !$isSystem)##
-#end##foreach($elemId in $sortedIds)##
-#end##macro(exportCollectedElements)##
-##
-## ====================================================================
 ## MACRO: exportElementFull (adapted from sysml_flat_export)
 ## ====================================================================
 ## Export complete element data with all supported fields
 ## NO RECURSION - processes single element only
 ##
-#macro(exportElementFull $elem)##
+#macro(exportElementFull $elem $depth $source)##
 #set($type = "")#if($elem.humanType)#set($type = $elem.humanType)#end##
 #set($t = $type.replace(" ", ""))##
 ##
@@ -595,4 +558,24 @@ $!txt##
 ]}##
 #end##macro(exportElementFull)##
 ##
+## ====================================================================
+## MACRO: exportCollectedElements
+## ====================================================================
+## Iterate collected elements and export each with full data
+## Uses exportElementFull for comprehensive JSON export
+##
+#macro(exportCollectedElements)##
+#set($sortedIds = $collectedElements.keySet())##
+#set($isFirst = true)##
+#foreach($elemId in $sortedIds)##
+#set($entry = $collectedElements.get($elemId))##
+#set($elem = $entry.element)##
+#set($elemDepth = $entry.depth)##
+#set($elemSource = $entry.source)##
+#if(!$isFirst),
+#end##
+#set($isFirst = false)##
+#exportElementFull($elem $elemDepth $elemSource)##
+#end##foreach($elemId in $sortedIds)##
+#end##macro(exportCollectedElements)##
 }
