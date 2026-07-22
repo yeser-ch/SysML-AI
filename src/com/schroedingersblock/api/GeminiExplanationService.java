@@ -243,7 +243,7 @@ public class GeminiExplanationService implements ExplanationService {
         // (Niko) Grounding nur inline: hochgeladene Datei (fileData) + google_search → HTTP 500.
         // (Niko) Bei aktivem Grounding den Upload ignorieren, damit das Modell inline mitgeht.
         boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
-                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true);
         if (grounding) {
             fileUri = null;
         }
@@ -300,7 +300,7 @@ public class GeminiExplanationService implements ExplanationService {
         String fallbackErrorMessage = "⚠️ All Gemini models are currently overloaded. Please try again in a moment.";
 
         // (Niko) Bei aktivem Grounding zuerst das grounding-fähige 2.5-Modell, 3.5/3.1 nur als Fallback
-        boolean grounding = prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+        boolean grounding = prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true);
         String[] models = resolveModelCascade(grounding);
 
         for (String model : models) {
@@ -447,10 +447,10 @@ public class GeminiExplanationService implements ExplanationService {
             systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
         }
 
-        // (Niko) Grounding (google_search) nur senden, wenn im Settings-Dialog aktiviert (Default aus).
-        // (Niko) Auf Free Tier funktioniert google_search nur mit gemini-2.5 (3.5/3.1 → HTTP 429); aus = umgeht zudem den fragilen groundingMetadata-Parserpfad.
+        // (Niko) Grounding (google_search) nur senden, wenn im Settings-Dialog aktiviert (Default an).
+        // (Niko) Auf Free Tier funktioniert google_search nur mit gemini-2.5 (3.5/3.1 → HTTP 429).
         boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
-                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false);
+                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true);
         String toolsPart = grounding ? "\"tools\": [{\"google_search\": {}}]," : "";
 
         return "{"

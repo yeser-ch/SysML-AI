@@ -21,7 +21,6 @@ public class DataExtractionService {
 
     private static final String PLUGIN_ID = "com.schroedingersblock.plugin";
     private static final String DATA_EXTRACTION_DIR = "data_extraction";
-    private static final String TEMPLATE_NAME_FLAT = "sysml_flat_export.vm";
     private static final String TEMPLATE_NAME_PARTIAL = "sysml_partial_export.vm";
     private static final String TARGET_SUBDIR = "raw_model_data";
     private static int MAX_DEPENDENCY_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
@@ -49,14 +48,11 @@ public class DataExtractionService {
             // 1. Basis-Verzeichnis ermitteln (Plugin-Verzeichnis)
             File baseDir = getBaseDirectory(currentProject);
 
-            // 2. Template-Auswahl basierend auf exportScope
-            // - exportScope == null: Model View → sysml_flat_export.vm
-            // - exportScope != null: Element View → sysml_partial_export.vm
             MAX_DEPENDENCY_DEPTH_EXPORT = isElementView ? 2 : 5; // Beispielwerte, können auch über UI einstellbar gemacht werden
-            MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 5; //
+            MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 3; //
             MAX_SIBLING_OWNED_DEPTH_EXPORT = isElementView ? 0 : 0; // 0 = keine owned Elements der Geschwister
             String selectedTemplate = TEMPLATE_NAME_PARTIAL;
-            log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View (partial)" : "Model View (flat)"));
+            log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View" : "Model View"));
 
             // 3. Template-Pfad prüfen
             File templateFile = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + selectedTemplate);

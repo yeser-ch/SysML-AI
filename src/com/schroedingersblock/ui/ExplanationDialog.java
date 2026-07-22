@@ -239,30 +239,21 @@ public class ExplanationDialog extends JFrame {
     }
 
     private void runExportTask() {
-        // Returns: 0 = export failed, 1 = export ok / upload failed, 2 = export + upload ok
-        SwingWorker<Integer, Void> exportWorker = new SwingWorker<>() {
+        SwingWorker<Boolean, Void> exportWorker = new SwingWorker<>() {
             @Override
-            protected Integer doInBackground() {
+            protected Boolean doInBackground() {
                 Project project = Application.getInstance().getProject();
-                if (project == null) return 0;
+                if (project == null) return false;
 
                 boolean isElementView = !"Model View".equals(mode);
-                boolean exportOk = DataExtractionService.executeJsonExport(project, targetElement, isElementView);
-                if (!exportOk) return 0;
-
-                boolean uploadOk = apiService.uploadModelData();
-                return uploadOk ? 2 : 1;
+                return DataExtractionService.executeJsonExport(project, targetElement, isElementView);
             }
 
             @Override
             protected void done() {
                 try {
-                    int result = get();
-                    if (result >= 1) {
+                    if (get()) {
                         addMessage("System", "Model data successfully exported.");
-                        if (result == 2) {
-                            addMessage("System", "Model context uploaded to Gemini Files API.");
-                        }
                         addMessage("System", "Select detail level and press <b>RUN</b>.");
                         runBtn.setEnabled(true);
                     } else {
@@ -276,16 +267,18 @@ public class ExplanationDialog extends JFrame {
         exportWorker.execute();
     }
 
-    private String getTargetDisplayName() {
-        String type = (targetElement != null) ? targetElement.getHumanType() : "Unknown";
-        String name = "";
+    private String getTargetName() {
         if (targetElement instanceof NamedElement) {
             String tempName = ((NamedElement) targetElement).getName();
             if (tempName != null && !tempName.isEmpty()) {
-                name = " '" + tempName + "'";
+                return tempName;
             }
         }
-        return type + name;
+        return "Unnamed Element"; // Fallback, falls der Nutzer einem Knoten keinen Namen gegeben hat
+    }
+
+    private String getTargetType() {
+        return (targetElement != null) ? targetElement.getHumanType() : "Unknown Type";
     }
 
     private JPanel createTitleArea() {
@@ -297,10 +290,17 @@ public class ExplanationDialog extends JFrame {
         titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
         titleArea.add(titleLabel);
 
-        JLabel subtitleLabel = new JLabel("Target: " + getTargetDisplayName());
-        subtitleLabel.setFont(new Font("Arial", Font.ITALIC, 12));
-        subtitleLabel.setForeground(Color.GRAY);
-        titleArea.add(subtitleLabel);
+        // 1. Zeile: Target Name (oder "Unnamed Element")
+        JLabel nameLabel = new JLabel("Target: " + getTargetName());
+        nameLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+        nameLabel.setForeground(Color.DARK_GRAY); // Etwas dunkler zur Abgrenzung
+        titleArea.add(nameLabel);
+
+        // 2. Zeile: Typ-Deklaration direkt darunter
+        JLabel typeLabel = new JLabel("ofType: " + getTargetType());
+        typeLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+        typeLabel.setForeground(Color.GRAY);
+        titleArea.add(typeLabel);
 
         return titleArea;
     }
