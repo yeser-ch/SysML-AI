@@ -307,7 +307,6 @@ public class installer_main extends JFrame {
                 File dataExtractionDir = new File(myPluginDir, "data_extraction");
                 if (!dataExtractionDir.exists()) dataExtractionDir.mkdirs();
 
-                copyRes("sysml_flat_export.vm", new File(dataExtractionDir, "sysml_flat_export.vm"));
                 copyRes("sysml_partial_export.vm", new File(dataExtractionDir, "sysml_partial_export.vm"));
 
                 File promptsDir = new File(myPluginDir, "prompts");
