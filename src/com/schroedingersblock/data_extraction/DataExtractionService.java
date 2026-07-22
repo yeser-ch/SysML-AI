@@ -53,7 +53,7 @@ public class DataExtractionService {
             // - exportScope == null: Model View → sysml_flat_export.vm
             // - exportScope != null: Element View → sysml_partial_export.vm
             MAX_DEPENDENCY_DEPTH_EXPORT = isElementView ? 2 : 5; // Beispielwerte, können auch über UI einstellbar gemacht werden
-            MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 5; //
+            MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 3; //
             MAX_SIBLING_OWNED_DEPTH_EXPORT = isElementView ? 0 : 0; // 0 = keine owned Elements der Geschwister
             String selectedTemplate = TEMPLATE_NAME_PARTIAL;
             log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View (partial)" : "Model View (flat)"));
