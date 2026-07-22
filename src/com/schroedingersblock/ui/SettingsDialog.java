@@ -83,7 +83,7 @@ public class SettingsDialog extends JFrame {
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         apiKeyField.setText(prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, ""));
         defaultModeBox.setSelectedItem(prefs.get(SchroedingersBlockPlugin.DEFAULT_MODE_PREF, "Basic"));
-        groundingBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false)); // (Niko) Default aus
+        groundingBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true)); // (Niko) Default an
     }
 
     private void saveSettings() {
