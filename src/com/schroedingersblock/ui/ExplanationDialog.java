@@ -4,7 +4,9 @@
  * Ablauf:
  * 1. Beim Öffnen wird das Modell exportiert (Standard: ganzes Modell).
  * 2. Der Nutzer tippt eine Frage oder wählt eine Schnellfrage und drückt "Send".
- * 3. Jede Antwort wird mit allen Einstellungen ins Evaluations-Log (CSV) geschrieben.
+ *    Optional wird jede Frage mehrfach gestellt (Repetitions) und auf erfundene Element-IDs geprüft.
+ * 3. "Run test suite…" arbeitet eine CSV mit Testfällen automatisch ab (auch für mehrere Modelle).
+ * 4. Jede Antwort wird mit dem kompletten Versuchsaufbau protokolliert (siehe EvaluationLog).
  */
 
 package com.schroedingersblock.ui;
@@ -14,21 +16,27 @@ import com.nomagic.magicdraw.core.Project;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.NamedElement;
 import com.schroedingersblock.api.AskSettings;
+import com.schroedingersblock.api.Evaluation;
 import com.schroedingersblock.api.EvaluationLog;
+import com.schroedingersblock.api.EvaluationRecord;
 import com.schroedingersblock.api.ExplanationService;
 import com.schroedingersblock.api.GeminiExplanationService;
+import com.schroedingersblock.api.ModelExport;
+import com.schroedingersblock.api.TestSuite;
 import com.schroedingersblock.core.SchroedingersBlockPlugin;
 import com.schroedingersblock.data_extraction.DataExtractionService;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.prefs.Preferences;
 
 public class ExplanationDialog extends JFrame {
@@ -60,10 +68,13 @@ public class ExplanationDialog extends JFrame {
     private JComboBox<String> scopeBox;
     private JSpinner temperatureSpinner;
     private JSpinner maxTokensSpinner;
+    private JSpinner repetitionsSpinner;
     private JCheckBox groundingBox;
     private JCheckBox freshChatBox;
     private JCheckBox fallbackBox;
+    private JCheckBox requireIdsBox;
     private JLabel exportStatusLabel;
+    private JButton suiteBtn;
 
     // Chat
     private JPanel chatPanel;
@@ -71,16 +82,18 @@ public class ExplanationDialog extends JFrame {
     private JTextArea inputArea;
     private JButton sendBtn;
 
-    // Modelldaten
-    private volatile String modelJson;
-    private volatile File exportFile;
+    // Zustand
+    private volatile ModelExport export;
     private boolean busy = false;
+    private boolean suiteRunning = false;
+    private volatile boolean cancelRequested = false;
+    private boolean loading = false;
 
     public ExplanationDialog(Element focusElement) {
         this.focusElement = focusElement;
 
         setTitle("Schrödinger's Block – Ask the model");
-        setSize(780, 860);
+        setSize(800, 900);
         setLocationRelativeTo(null);
         setAlwaysOnTop(true);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -89,6 +102,12 @@ public class ExplanationDialog extends JFrame {
         buildUI();
         loadSettings();
         runExport();
+    }
+
+    @Override
+    public void dispose() {
+        cancelRequested = true; // laufenden Testlauf beim Schließen beenden
+        super.dispose();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -157,9 +176,10 @@ public class ExplanationDialog extends JFrame {
         JPanel modelRow = new JPanel(new BorderLayout(4, 0));
         modelRow.add(modelBox, BorderLayout.CENTER);
         modelRow.add(refreshBtn, BorderLayout.EAST);
-        addRow(p, c, 0, "AI model:", modelRow, "Answer style:", styleBox = new JComboBox<>(new String[]{"Basic", "Expert"}));
+        styleBox = new JComboBox<>(new String[]{"Basic", "Expert"});
         styleBox.setToolTipText("Basic: short, plain language. Expert: detailed, names the model elements.");
         styleBox.addActionListener(e -> saveSettings());
+        addRow(p, c, 0, "AI model:", modelRow, "Answer style:", styleBox);
 
         // Zeile 1: Kontext + Temperatur
         scopeBox = new JComboBox<>(focusElement == null ? new String[]{SCOPE_FULL} : new String[]{SCOPE_FULL, SCOPE_FOCUS});
@@ -169,9 +189,9 @@ public class ExplanationDialog extends JFrame {
         temperatureSpinner.addChangeListener(e -> saveSettings());
         addRow(p, c, 1, "Context:", scopeBox, "Temperature:", temperatureSpinner);
 
-        // Zeile 2: Checkboxen + Max Tokens
-        groundingBox = new JCheckBox("Google Search grounding");
-        groundingBox.setToolTipText("Lets the AI use Google Search. Off for evaluation: answers should come from the model only. "
+        // Zeile 2: Optionen + Max Tokens
+        groundingBox = new JCheckBox("Grounding");
+        groundingBox.setToolTipText("Google Search grounding. Off for evaluation: answers should come from the model only. "
                 + "Not every model supports it on the free tier.");
         freshChatBox = new JCheckBox("New chat per question");
         freshChatBox.setToolTipText("On: every question is answered independently (recommended for tests). Off: follow-up questions keep the conversation.");
@@ -189,30 +209,58 @@ public class ExplanationDialog extends JFrame {
         maxTokensSpinner.addChangeListener(e -> saveSettings());
         addRow(p, c, 2, "Options:", checks, "Max tokens:", maxTokensSpinner);
 
-        // Zeile 3: Status + Buttons
+        // Zeile 3: Evaluation – ID-Check, Testlauf, Wiederholungen
+        requireIdsBox = new JCheckBox("Cite element IDs (hallucination check)");
+        requireIdsBox.setToolTipText("Adds an instruction to the system prompt: the AI must give the id of every element it mentions. "
+                + "The plugin then checks whether these ids exist in the model. Changes the prompt – keep it constant within an experiment.");
+        requireIdsBox.addActionListener(e -> saveSettings());
+        suiteBtn = new JButton("Run test suite…");
+        suiteBtn.setToolTipText("Load a CSV with test cases (test_id;category;question;expected_answer) and run all of them automatically.");
+        suiteBtn.addActionListener(e -> {
+            if (suiteRunning) {
+                cancelRequested = true;
+                suiteBtn.setText("Stopping…");
+                suiteBtn.setEnabled(false);
+            } else {
+                startTestSuite();
+            }
+        });
+        JPanel evalRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        evalRow.add(requireIdsBox);
+        evalRow.add(Box.createHorizontalStrut(12));
+        evalRow.add(suiteBtn);
+        repetitionsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 20, 1));
+        repetitionsSpinner.setToolTipText("How often each question is asked (each time in a new chat). >1 shows how consistent the answers are.");
+        repetitionsSpinner.addChangeListener(e -> saveSettings());
+        addRow(p, c, 3, "Evaluation:", evalRow, "Repetitions:", repetitionsSpinner);
+
+        // Zeile 4: Status + Buttons
         exportStatusLabel = new JLabel("Exporting model …");
         exportStatusLabel.setForeground(Color.DARK_GRAY);
         JButton reexportBtn = new JButton("Re-export model");
         reexportBtn.setToolTipText("Export again after you changed the model in CATIA.");
-        reexportBtn.addActionListener(e -> runExport());
+        reexportBtn.addActionListener(e -> {
+            if (!busy) runExport();
+        });
         JButton apiKeyBtn = new JButton("API key…");
         apiKeyBtn.addActionListener(e -> new SettingsDialog().setVisible(true));
-        JButton logBtn = new JButton("Open log");
-        logBtn.setToolTipText("Opens the CSV with all questions, answers and settings: " + EvaluationLog.getLogFile().getAbsolutePath());
-        logBtn.addActionListener(e -> openLog());
+        JButton logBtn = new JButton("Open results");
+        logBtn.setToolTipText("Opens the results folder (log, test runs, archived prompts and exports): "
+                + EvaluationLog.getBaseDir().getAbsolutePath());
+        logBtn.addActionListener(e -> openResultsFolder());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         buttons.add(reexportBtn);
         buttons.add(apiKeyBtn);
         buttons.add(logBtn);
 
-        c.gridy = 3; c.gridx = 0; c.gridwidth = 2; c.weightx = 1;
+        c.gridy = 4; c.gridx = 0; c.gridwidth = 2; c.weightx = 1;
         p.add(exportStatusLabel, c);
         c.gridx = 2; c.gridwidth = 2; c.weightx = 0;
         p.add(buttons, c);
         c.gridwidth = 1;
 
         scopeBox.addActionListener(e -> {
-            if (loading) return;
+            if (loading || busy) return;
             saveSettings();
             runExport();
         });
@@ -251,7 +299,6 @@ public class ExplanationDialog extends JFrame {
         inputArea.setLineWrap(true);
         inputArea.setWrapStyleWord(true);
         inputArea.setToolTipText("Type your question. Enter = send, Shift+Enter = new line.");
-        // Enter = senden, Shift+Enter = Zeilenumbruch
         InputMap im = inputArea.getInputMap(JComponent.WHEN_FOCUSED);
         ActionMap am = inputArea.getActionMap();
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "send");
@@ -268,6 +315,7 @@ public class ExplanationDialog extends JFrame {
         JButton newChatBtn = new JButton("New chat");
         newChatBtn.setToolTipText("Clear the conversation (the model data stays loaded).");
         newChatBtn.addActionListener(e -> {
+            if (busy) return;
             apiService.resetConversation();
             chatPanel.removeAll();
             chatPanel.revalidate();
@@ -288,8 +336,6 @@ public class ExplanationDialog extends JFrame {
     // Einstellungen
     // ═══════════════════════════════════════════════════════════════════════
 
-    private boolean loading = false;
-
     private void loadSettings() {
         loading = true;
         String model = prefs.get(SchroedingersBlockPlugin.MODEL_PREF, GeminiExplanationService.DEFAULT_MODELS[0]);
@@ -300,15 +346,18 @@ public class ExplanationDialog extends JFrame {
         scopeBox.setSelectedItem(focusElement == null ? SCOPE_FULL : scope);
         temperatureSpinner.setValue(prefs.getDouble(SchroedingersBlockPlugin.TEMPERATURE_PREF, 0.0));
         maxTokensSpinner.setValue(prefs.getInt(SchroedingersBlockPlugin.MAX_TOKENS_PREF, 8192));
+        repetitionsSpinner.setValue(Math.max(1, Math.min(20, prefs.getInt(SchroedingersBlockPlugin.REPETITIONS_PREF, 1))));
         groundingBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false));
         freshChatBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.FRESH_CHAT_PREF, true));
         fallbackBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.FALLBACK_PREF, false));
+        requireIdsBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.REQUIRE_IDS_PREF, false));
         loading = false;
     }
 
     private void saveSettings() {
-        if (loading || modelBox == null || scopeBox == null || temperatureSpinner == null || maxTokensSpinner == null
-                || groundingBox == null || freshChatBox == null || fallbackBox == null) {
+        if (loading || modelBox == null || styleBox == null || scopeBox == null || temperatureSpinner == null
+                || maxTokensSpinner == null || repetitionsSpinner == null || groundingBox == null
+                || freshChatBox == null || fallbackBox == null || requireIdsBox == null) {
             return;
         }
         prefs.put(SchroedingersBlockPlugin.MODEL_PREF, currentModel());
@@ -316,14 +365,20 @@ public class ExplanationDialog extends JFrame {
         if (focusElement != null) prefs.put(SchroedingersBlockPlugin.SCOPE_PREF, (String) scopeBox.getSelectedItem());
         prefs.putDouble(SchroedingersBlockPlugin.TEMPERATURE_PREF, ((Number) temperatureSpinner.getValue()).doubleValue());
         prefs.putInt(SchroedingersBlockPlugin.MAX_TOKENS_PREF, ((Number) maxTokensSpinner.getValue()).intValue());
+        prefs.putInt(SchroedingersBlockPlugin.REPETITIONS_PREF, ((Number) repetitionsSpinner.getValue()).intValue());
         prefs.putBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, groundingBox.isSelected());
         prefs.putBoolean(SchroedingersBlockPlugin.FRESH_CHAT_PREF, freshChatBox.isSelected());
         prefs.putBoolean(SchroedingersBlockPlugin.FALLBACK_PREF, fallbackBox.isSelected());
+        prefs.putBoolean(SchroedingersBlockPlugin.REQUIRE_IDS_PREF, requireIdsBox.isSelected());
     }
 
     private String currentModel() {
         Object v = modelBox.isEditable() ? modelBox.getEditor().getItem() : modelBox.getSelectedItem();
-        String s = v == null ? "" : v.toString().trim();
+        return normalizeModelId(v == null ? "" : v.toString());
+    }
+
+    private static String normalizeModelId(String raw) {
+        String s = raw.trim();
         if (s.startsWith("models/")) s = s.substring("models/".length());
         return s.isEmpty() ? GeminiExplanationService.DEFAULT_MODELS[0] : s;
     }
@@ -337,6 +392,8 @@ public class ExplanationDialog extends JFrame {
         s.grounding = groundingBox.isSelected();
         s.freshChat = freshChatBox.isSelected();
         s.allowFallback = fallbackBox.isSelected();
+        s.requireIds = requireIdsBox.isSelected();
+        s.repetitions = ((Number) repetitionsSpinner.getValue()).intValue();
         s.scope = isFullScope() ? "FULL_MODEL" : "FOCUS_NEIGHBOURHOOD";
         return s;
     }
@@ -376,58 +433,60 @@ public class ExplanationDialog extends JFrame {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Export & Fragen
+    // Export
     // ═══════════════════════════════════════════════════════════════════════
 
     private void runExport() {
         final boolean full = isFullScope();
         busy = true;
-        updateSendState();
+        updateControls();
         exportStatusLabel.setText("Exporting " + (full ? "whole model" : "element surroundings") + " …");
         addMessage("System", "Exporting " + (full ? "the whole model" : "the surroundings of the selected element") + " …");
 
-        new SwingWorker<File, Void>() {
+        new SwingWorker<ModelExport, Void>() {
             @Override
-            protected File doInBackground() throws Exception {
+            protected ModelExport doInBackground() throws Exception {
                 Project project = Application.getInstance().getProject();
                 if (project == null) return null;
                 File f = DataExtractionService.exportModel(project, focusElement,
                         full ? DataExtractionService.Scope.FULL_MODEL : DataExtractionService.Scope.FOCUS_NEIGHBOURHOOD);
-                if (f != null) modelJson = Files.readString(f.toPath(), StandardCharsets.UTF_8);
-                return f;
+                return f == null ? null : ModelExport.fromFile(f);
             }
 
             @Override
             protected void done() {
                 busy = false;
                 try {
-                    File f = get();
-                    if (f == null) {
+                    ModelExport ex = get();
+                    if (ex == null) {
                         exportStatusLabel.setText("Export failed – see CATIA log.");
                         addMessage("System", "Error: model export failed (see CATIA log window).");
                     } else {
-                        exportFile = f;
+                        export = ex;
                         apiService.resetConversation(); // neue Modelldaten -> neuer Chat
-                        int elements = countOccurrences(modelJson, "\"owner_id\"");
-                        long approxTokens = modelJson.length() / 4; // grobe Faustregel: ~4 Zeichen pro Token
-                        String info = String.format("Model ready: %d elements · %.0f KB · ~%,d tokens (estimate)",
-                                elements, f.length() / 1024.0, approxTokens);
+                        String info = String.format("Model ready: %d elements · %d relations · %.0f KB · ~%,d tokens · export %s",
+                                ex.elementCount, ex.relationCount, ex.sizeKb(), ex.approxTokens(), ex.sha);
                         exportStatusLabel.setText(info);
-                        addMessage("System", info + "<br>Type a question below or pick a quick question.");
+                        addMessage("System", escapeHtml(info) + "<br>Type a question below or pick a quick question.");
                     }
-                } catch (Exception ex) {
+                } catch (Exception e) {
                     exportStatusLabel.setText("Export failed.");
-                    addMessage("System", "Critical error during export: " + escapeHtml(String.valueOf(ex.getMessage())));
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    addMessage("System", "Critical error during export: " + escapeHtml(String.valueOf(cause.getMessage())));
                 }
-                updateSendState();
+                updateControls();
             }
         }.execute();
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Einzelne Frage (mit Wiederholungen)
+    // ═══════════════════════════════════════════════════════════════════════
+
     private void sendQuestion() {
         String question = inputArea.getText().trim();
         if (question.isEmpty() || busy) return;
-        if (modelJson == null) {
+        if (export == null) {
             addMessage("System", "The model has not been exported yet.");
             return;
         }
@@ -440,51 +499,261 @@ public class ExplanationDialog extends JFrame {
 
         final AskSettings settings = currentSettings();
         final String focusInfo = buildFocusInfo();
-        final String json = modelJson;
-        final File usedExport = exportFile;
+        final ModelExport ex = export;
+        final int reps = settings.repetitions;
 
-        addMessage("You", escapeHtml(question));
+        addMessage("You", escapeHtml(question) + (reps > 1 ? " <i>(× " + reps + ")</i>" : ""));
         inputArea.setText("");
         addMessage("System", "Waiting for " + escapeHtml(settings.model) + " …");
         busy = true;
-        updateSendState();
+        cancelRequested = false;
+        updateControls();
 
-        new SwingWorker<ExplanationService.Answer, Void>() {
+        new SwingWorker<Void, EvaluationRecord>() {
             @Override
-            protected ExplanationService.Answer doInBackground() {
-                return apiService.ask(question, json, focusInfo, settings);
+            protected Void doInBackground() {
+                for (int rep = 1; rep <= reps && !cancelRequested; rep++) {
+                    publish(Evaluation.run(apiService, settings, ex, question, focusInfo, null, "chat", rep, null));
+                }
+                return null;
+            }
+
+            @Override
+            protected void process(List<EvaluationRecord> chunks) {
+                for (EvaluationRecord r : chunks) {
+                    removeLastMessage(); // "Waiting …"
+                    showRecord(r, reps);
+                    if (r.repetition < reps) addMessage("System", "Waiting for repetition " + (r.repetition + 1) + "/" + reps + " …");
+                }
             }
 
             @Override
             protected void done() {
-                removeLastMessage();
                 busy = false;
                 try {
-                    ExplanationService.Answer a = get();
-                    EvaluationLog.append(question, focusInfo, a, settings, usedExport);
-                    if (a.success) {
-                        String meta = escapeHtml(a.modelUsed)
-                                + String.format(" · %.1f s", a.durationMs / 1000.0)
-                                + (a.promptTokens >= 0 ? String.format(" · %,d → %,d tokens", a.promptTokens, a.answerTokens) : "");
-                        if (!a.modelUsed.equals(settings.model)) meta += " · <b>fallback model!</b>";
-                        addMessage("AI <span style='color:gray;font-weight:normal'>(" + meta + ")</span>",
-                                convertMarkdownToHtml(a.text));
-                    } else {
-                        addMessage("System", "⚠ " + escapeHtml(a.text));
-                    }
-                } catch (Exception ex) {
-                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                    get();
+                } catch (Exception e) {
+                    removeLastMessage();
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
                     addMessage("System", "⚠ Error: " + escapeHtml(String.valueOf(cause.getMessage())));
                 }
-                updateSendState();
+                updateControls();
                 inputArea.requestFocusInWindow();
             }
         }.execute();
     }
 
-    private void updateSendState() {
-        sendBtn.setEnabled(!busy && modelJson != null);
+    // ═══════════════════════════════════════════════════════════════════════
+    // Testlauf aus CSV
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private void startTestSuite() {
+        if (busy || export == null) {
+            addMessage("System", "Wait until the model export is finished.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser(prefs.get("schroedingersblock_last_suite_dir", System.getProperty("user.home")));
+        chooser.setDialogTitle("Choose test cases (CSV)");
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV test cases", "csv", "txt"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        File file = chooser.getSelectedFile();
+        if (file.getParentFile() != null) prefs.put("schroedingersblock_last_suite_dir", file.getParentFile().getAbsolutePath());
+
+        TestSuite suite;
+        try {
+            suite = TestSuite.load(file);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Could not read the test cases:\n" + e.getMessage(),
+                    "Test suite", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Bestätigungsdialog: Modelle, Pause, Aufwand
+        AskSettings base = currentSettings();
+        JTextField modelsField = new JTextField(base.model, 30);
+        modelsField.setToolTipText("Several models separated by commas, e.g. gemini-3.5-flash, gemini-3.1-flash-lite");
+        JSpinner pauseSpinner = new JSpinner(new SpinnerNumberModel(prefs.getInt(SchroedingersBlockPlugin.PAUSE_PREF, 10), 0, 600, 5));
+        pauseSpinner.setToolTipText("Wait time between requests. Free tier: with the whole model (~100k+ tokens) per request, use 30–60 s.");
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(3, 3, 3, 3);
+        c.anchor = GridBagConstraints.WEST;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.gridx = 0; c.gridy = 0; c.gridwidth = 2;
+        form.add(new JLabel("<html><b>" + suite.cases.size() + " test cases</b> loaded (" + escapeHtml(suite.categorySummary())
+                + ")<br>File: " + escapeHtml(file.getName()) + "</html>"), c);
+        c.gridy = 1; c.gridwidth = 1;
+        form.add(new JLabel("Models:"), c);
+        c.gridx = 1;
+        form.add(modelsField, c);
+        c.gridx = 0; c.gridy = 2;
+        form.add(new JLabel("Pause between requests (s):"), c);
+        c.gridx = 1;
+        form.add(pauseSpinner, c);
+        c.gridx = 0; c.gridy = 3; c.gridwidth = 2;
+        form.add(new JLabel("<html>Uses the current settings (style, temperature, max tokens, grounding, ID check).<br>"
+                + "Repetitions per question: <b>" + base.repetitions + "</b> · every question in a new chat.<br>"
+                + "Each request sends the model data: ~" + String.format("%,d", export.approxTokens()) + " tokens.</html>"), c);
+
+        int ok = JOptionPane.showConfirmDialog(this, form, "Run test suite", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (ok != JOptionPane.OK_OPTION) return;
+
+        List<String> models = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String m : modelsField.getText().split(",")) {
+            if (m.isBlank()) continue;
+            String id = normalizeModelId(m);
+            if (seen.add(id)) models.add(id);
+        }
+        if (models.isEmpty()) models.add(base.model);
+        int pauseSec = ((Number) pauseSpinner.getValue()).intValue();
+        prefs.putInt(SchroedingersBlockPlugin.PAUSE_PREF, pauseSec);
+
+        int total = suite.cases.size() * models.size() * base.repetitions;
+        long tokens = total * export.approxTokens();
+        if (total > 1) {
+            int go = JOptionPane.showConfirmDialog(this,
+                    String.format("This will send %d requests (≈ %,d input tokens in total).%nStart now?", total, tokens),
+                    "Run test suite", JOptionPane.YES_NO_OPTION);
+            if (go != JOptionPane.YES_OPTION) return;
+        }
+        runTestSuite(suite, models, base, pauseSec, total);
+    }
+
+    private void runTestSuite(TestSuite suite, List<String> models, AskSettings base, int pauseSec, int total) {
+        final String runId = EvaluationLog.newRunId();
+        final File runFile = EvaluationLog.newRunFile(runId);
+        final ModelExport ex = export;
+
+        busy = true;
+        suiteRunning = true;
+        cancelRequested = false;
+        updateControls();
+        addMessage("System", "<b>Test run " + runId + " started</b>: " + suite.cases.size() + " cases × "
+                + models.size() + " model(s) × " + base.repetitions + " repetition(s) = " + total + " requests.<br>"
+                + "Results: " + escapeHtml(runFile.getAbsolutePath()));
+
+        new SwingWorker<int[], String>() {
+            @Override
+            protected int[] doInBackground() throws Exception {
+                int done = 0, ok = 0, unknownIdAnswers = 0;
+                outer:
+                for (String model : models) {
+                    AskSettings s = base.copy();
+                    s.model = model;
+                    s.freshChat = true;   // Testfälle immer unabhängig
+                    s.allowFallback = false; // keine vermischten Modelle im Testlauf
+                    for (TestSuite.TestCase tc : suite.cases) {
+                        for (int rep = 1; rep <= s.repetitions; rep++) {
+                            if (cancelRequested) break outer;
+                            if (done > 0 && pauseSec > 0) {
+                                for (int w = 0; w < pauseSec * 10 && !cancelRequested; w++) Thread.sleep(100);
+                                if (cancelRequested) break outer;
+                            }
+                            EvaluationRecord r = Evaluation.run(apiService, s, ex, tc.question, null, tc, runId, rep, runFile);
+                            done++;
+                            if (r.answer.success) ok++;
+                            if (r.idCheck != null && !r.idCheck.unknown.isEmpty()) unknownIdAnswers++;
+                            publish(progressLine(done, total, model, tc, rep, s.repetitions, r));
+                        }
+                    }
+                }
+                return new int[]{done, ok, unknownIdAnswers};
+            }
+
+            @Override
+            protected void process(List<String> lines) {
+                for (String l : lines) addMessage("Run", l);
+            }
+
+            @Override
+            protected void done() {
+                busy = false;
+                suiteRunning = false;
+                try {
+                    int[] res = get();
+                    addMessage("System", "<b>Test run " + runId + (cancelRequested ? " stopped" : " finished") + "</b>: "
+                            + res[0] + "/" + total + " requests, " + res[1] + " successful, "
+                            + res[2] + " answer(s) with unknown IDs.<br>Open the results file to rate the answers "
+                            + "(columns <i>rating</i> and <i>rating_notes</i>).");
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    addMessage("System", "⚠ Test run aborted: " + escapeHtml(String.valueOf(cause.getMessage())));
+                }
+                cancelRequested = false;
+                updateControls();
+            }
+        }.execute();
+    }
+
+    private String progressLine(int done, int total, String model, TestSuite.TestCase tc, int rep, int reps, EvaluationRecord r) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(done).append("/").append(total).append(" · ").append(escapeHtml(tc.id));
+        if (!tc.category.isBlank()) sb.append(" [").append(escapeHtml(tc.category)).append("]");
+        if (reps > 1) sb.append(" · rep ").append(rep).append("/").append(reps);
+        sb.append(" · ").append(escapeHtml(model)).append(" · ");
+        if (r.answer.success) {
+            sb.append("<span style='color:#1E7B34'>ok</span>")
+                    .append(String.format(" %.1f s", r.answer.durationMs / 1000.0));
+            sb.append(idCheckHtml(r));
+            String preview = r.answer.text.replaceAll("\\s+", " ").trim();
+            if (preview.length() > 140) preview = preview.substring(0, 140) + " …";
+            sb.append("<br><span style='color:gray'>").append(escapeHtml(preview)).append("</span>");
+        } else {
+            sb.append("<span style='color:#B00020'>failed</span>: ").append(escapeHtml(r.answer.text));
+        }
+        return sb.toString();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Anzeige
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private void showRecord(EvaluationRecord r, int reps) {
+        ExplanationService.Answer a = r.answer;
+        if (!a.success) {
+            addMessage("System", "⚠ " + escapeHtml(a.text));
+            return;
+        }
+        StringBuilder meta = new StringBuilder();
+        if (reps > 1) meta.append("rep ").append(r.repetition).append("/").append(reps).append(" · ");
+        meta.append(escapeHtml(a.modelUsed)).append(String.format(" · %.1f s", a.durationMs / 1000.0));
+        if (a.promptTokens >= 0) meta.append(String.format(" · %,d → %,d tokens", a.promptTokens, a.answerTokens));
+        if (!a.modelUsed.equals(r.settings.model)) meta.append(" · <b>fallback model!</b>");
+
+        String body = convertMarkdownToHtml(a.text);
+        String ids = idCheckHtml(r);
+        if (!ids.isEmpty()) body += "<br><span style='font-size:10px'>ID check" + ids + "</span>";
+        addMessage("AI <span style='color:gray;font-weight:normal'>(" + meta + ")</span>", body);
+    }
+
+    /** Kurzbeschreibung des ID-Checks, z. B. " · 6 IDs cited, all found" oder " · 2 of 5 IDs unknown: …". */
+    private String idCheckHtml(EvaluationRecord r) {
+        if (r.idCheck == null) return "";
+        int cited = r.idCheck.cited.size();
+        if (cited == 0) {
+            return r.settings.requireIds ? " · <span style='color:#9A6700'>no IDs cited</span>" : "";
+        }
+        if (r.idCheck.unknown.isEmpty()) {
+            return " · <span style='color:#1E7B34'>" + cited + " IDs cited, all found in model</span>";
+        }
+        List<String> shown = r.idCheck.unknown.subList(0, Math.min(5, r.idCheck.unknown.size()));
+        return " · <span style='color:#B00020'>" + r.idCheck.unknown.size() + " of " + cited
+                + " IDs NOT in model: " + escapeHtml(String.join(", ", shown))
+                + (r.idCheck.unknown.size() > 5 ? " …" : "") + "</span>";
+    }
+
+    private void updateControls() {
+        sendBtn.setEnabled(!busy && export != null);
         sendBtn.setText(busy ? "Busy…" : "Send");
+        if (suiteRunning) {
+            suiteBtn.setText(cancelRequested ? "Stopping…" : "Stop test run");
+            suiteBtn.setEnabled(!cancelRequested);
+        } else {
+            suiteBtn.setText("Run test suite…");
+            suiteBtn.setEnabled(!busy && export != null);
+        }
+        scopeBox.setEnabled(!busy);
     }
 
     private void insertQuickQuestion(String template) {
@@ -497,7 +766,6 @@ public class ExplanationDialog extends JFrame {
         }
         inputArea.setText(text);
         inputArea.requestFocusInWindow();
-        // ersten Platzhalter markieren, damit man ihn direkt überschreiben kann
         int start = text.indexOf('<');
         int end = text.indexOf('>', start);
         if (start >= 0 && end > start) {
@@ -507,16 +775,13 @@ public class ExplanationDialog extends JFrame {
         }
     }
 
-    private void openLog() {
-        File f = EvaluationLog.getLogFile();
-        if (!f.exists()) {
-            addMessage("System", "No log yet. It is created with the first answer: " + escapeHtml(f.getAbsolutePath()));
-            return;
-        }
+    private void openResultsFolder() {
+        File dir = EvaluationLog.getBaseDir();
+        if (!dir.exists()) dir.mkdirs();
         try {
-            Desktop.getDesktop().open(f);
+            Desktop.getDesktop().open(dir);
         } catch (Exception ex) {
-            addMessage("System", "Log file: " + escapeHtml(f.getAbsolutePath()));
+            addMessage("System", "Results folder: " + escapeHtml(dir.getAbsolutePath()));
         }
     }
 
@@ -537,13 +802,6 @@ public class ExplanationDialog extends JFrame {
         String owner = focusElement.getOwner() != null ? focusElement.getOwner().getHumanName() : "root";
         return getFocusName() + " [type: " + focusElement.getHumanType() + ", id: " + focusElement.getID()
                 + ", owner: " + owner + "]";
-    }
-
-    private static int countOccurrences(String s, String sub) {
-        if (s == null) return 0;
-        int count = 0, i = 0;
-        while ((i = s.indexOf(sub, i)) != -1) { count++; i += sub.length(); }
-        return count;
     }
 
     private void addMessage(String sender, String htmlMessage) {

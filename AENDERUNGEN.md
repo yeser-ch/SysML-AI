@@ -13,7 +13,10 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 | Grounding standardmäßig an, erzwingt `gemini-2.5-flash-lite` | Grounding standardmäßig **aus**, erzwingt kein Modell |
 | Stiller Wechsel auf andere Modelle bei Überlastung | Nur wenn „Fallback model“ angehakt; antwortendes Modell wird immer angezeigt |
 | – | **Schnellfragen** nach Kategorien A–D (Retrieval, Struktur, Semantik, Unsicherheit) |
-| – | **Evaluations-Log**: jede Frage/Antwort mit Einstellungen, Tokens, Dauer in `Dokumente/SchroedingersBlock/answers_log.csv` |
+| – | **Evaluations-Log** mit vollständigem Versuchsaufbau (Prüfsummen von Prompt, Export, Antwort; Archiv) in `Dokumente/SchroedingersBlock/` |
+| – | **Testläufe aus CSV** („Run test suite…“), auch für mehrere Modelle nacheinander, mit Pause gegen Rate-Limits |
+| – | **Wiederholungen** pro Frage (Konsistenz-Messung) |
+| – | **ID-Check**: KI nennt Element-IDs, Plugin erkennt erfundene IDs |
 | – | „Refresh“ lädt alle für den API-Key verfügbaren Gemini-Modelle (für den Vergleich der Modellgrößen) |
 
 ## Geänderte Dateien
@@ -22,8 +25,13 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 - `ui/SettingsDialog.java` – nur noch API-Key
 - `api/GeminiExplanationService.java`, `api/ExplanationService.java`, `api/PromptLoader.java` – überarbeitet
 - `api/AskSettings.java`, `api/EvaluationLog.java` – neu
+- `api/Evaluation.java`, `api/EvaluationRecord.java`, `api/ModelExport.java`, `api/IdChecker.java`, `api/TestSuite.java`, `api/Hashing.java` – neu (Evaluation)
+- `evaluation/README.md`, `evaluation/testcases_template.csv` – Anleitung und Vorlage für Testfälle
 - `data_extraction/DataExtractionService.java` – `exportModel(...)` mit Scope ganzes Modell / Umgebung
 - `installer/ressources/` – `System_Prompt.md` und `sysml_flat_export.vm` neu, 4 alte Prompt-Dateien entfernt; Installer kopiert die neuen Dateien
+
+## Evaluation
+Siehe [`evaluation/README.md`](evaluation/README.md).
 
 ## Zum Bauen/Testen (in CATIA nötig)
 1. Plugin-JAR neu bauen und nach `installer/ressources/schroedingers-block.jar` kopieren (die mitgelieferte JAR ist noch die alte!).
