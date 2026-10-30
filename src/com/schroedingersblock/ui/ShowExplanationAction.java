@@ -1,6 +1,6 @@
 /**
- * Benutzerinteraktion beim Klick auf einen Plugin-Menüeintrag.
- * Überprüft vor dem Start der Systemanalyse die vorliegende Datenschutz-Zustimmung und öffnet das Chat-Interface.
+ * Benutzerinteraktion beim Klick auf den Plugin-Menüeintrag "Ask the model".
+ * Überprüft Datenschutz-Zustimmung und API-Key und öffnet dann das Frage-Fenster.
  */
 
 package com.schroedingersblock.ui;
@@ -15,29 +15,33 @@ import java.util.prefs.Preferences;
 import com.nomagic.magicdraw.core.Application;
 
 public class ShowExplanationAction extends MDAction { //MagicDraw-Button
-    private final String mode;
-    private final Element targetElement;
+    private final Element focusElement;
 
-    public ShowExplanationAction(String mode, Element targetElement) {
-        //Dynamische Tooltips je nach Modus generieren ---
-        super("EXPL_" + mode.toUpperCase().replace(" ", "_"), mode, null, null);
-        this.mode = mode;
-        this.targetElement = targetElement;
-
-        if ("Element View".equals(mode)) {
-            setDescription("Short, concise explanations.");
-        } else if ("Model View".equals(mode)) {
-            setDescription("Long, detailed explanations.");
-        }
-    }//Tastenkürzel und Icon wären noch möglich
+    /**
+     * @param focusElement Element, auf das der Nutzer geklickt hat (darf null sein, z. B. aus dem Tools-Menü).
+     *                     Es dient nur als Fokus/Hinweis – exportiert wird standardmäßig das ganze Modell.
+     */
+    public ShowExplanationAction(Element focusElement) {
+        super(focusElement == null ? "SCHROEDINGER_ASK_MODEL_TOOLS" : "SCHROEDINGER_ASK_MODEL",
+                focusElement == null ? "Schrödinger's Block – Ask the model..." : "Ask the model...",
+                null, null);
+        this.focusElement = focusElement;
+        setDescription("Ask the AI any question about the SysML model.");
+    }
 
     @Override
     public void actionPerformed(ActionEvent e) { //Bei Klick auf das Menü
+        if (Application.getInstance().getProject() == null) {
+            JOptionPane.showMessageDialog(null, "Open a project first.", "Schrödinger's Block",
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
         String consent = prefs.get(SchroedingersBlockPlugin.PRIVACY_KEY, "UNKNOWN"); //aktuelle Datenschutzpräferenz
 
         if ("ACCEPTED".equals(consent)) { //wenn zugestimmt
-            checkApiKeyAndOpenDialog(prefs); // NEU: Ausgelagerte Logik
+            checkApiKeyAndOpenDialog(prefs);
         } else { // Wenn der Nutzer abgelehnt hat --> erneute Prüfung
             int choice = JOptionPane.showConfirmDialog(null,
                     "Access Denied: You declined the Data Privacy Policy.\nReview and accept now?",
@@ -48,9 +52,8 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
             if (choice == JOptionPane.YES_OPTION) {
                 SchroedingersBlockPlugin.askPrivacyConsent(prefs);
 
-                // Wenn jetzt zugestimmt, API Key prüfen und Dialog öffnen
                 if ("ACCEPTED".equals(prefs.get(SchroedingersBlockPlugin.PRIVACY_KEY, "UNKNOWN"))) {
-                    checkApiKeyAndOpenDialog(prefs); // NEU
+                    checkApiKeyAndOpenDialog(prefs);
                 }
             }
         }
@@ -59,35 +62,15 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
     private void checkApiKeyAndOpenDialog(Preferences prefs) {
         String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
 
-        // Wenn kein Key vorhanden ist, Nutzer fragen
         if (apiKey.isEmpty()) {
             SchroedingersBlockPlugin.askApiKey(prefs);
-            apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, ""); // Key nach Eingabe neu laden
+            apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
         }
 
-        // Nur wenn wir jetzt einen Key haben, öffne Dialog
         if (!apiKey.isEmpty()) {
-            openDialog();
+            new ExplanationDialog(focusElement).setVisible(true);
         } else {
-            Application.getInstance().getGUILog().log("[Schrödinger's Block] Info: Analyse abgebrochen, da kein API-Key hinterlegt wurde.");
+            Application.getInstance().getGUILog().log("[Schrödinger's Block] Info: Abgebrochen, da kein API-Key hinterlegt wurde.");
         }
-    }
-
-    private void openDialog() {
-        // --- NEU: JSON-Export triggern, bevor das Dialog-Fenster öffnet ---
-        //Project project = Application.getInstance().getProject();
-        //if (project != null) {
-        //    // Wenn "Model View" gewählt wurde, Scope null lassen (-> exportiert gesamtes Primärmodell)
-        //    // Wenn "Element View" gewählt wurde, nutzen wir das targetElement als Scope
-        //    Element scope = "Model View".equals(mode) ? null : targetElement;
-        //
-        //    boolean success = DataExtractionService.executeJsonExport(project, scope);
-        //    if (!success) {
-        //        Application.getInstance().getGUILog().log("[Schrödinger's Block] Warnung: JSON-Export fehlgeschlagen.");
-        //}
-    //    }
-        // ------------------------------------------------------------------
-
-        new ExplanationDialog(mode, targetElement).setVisible(true); //modus und aktuelles Element weitergeben und chatfenster aktivieren
     }
 }

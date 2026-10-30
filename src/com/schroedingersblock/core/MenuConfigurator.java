@@ -68,8 +68,10 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
 
         category.setDescription("AI-powered SysML analysis tool");
 
-        category.addAction(new ShowExplanationAction("Element View", targetElement));
-        category.addAction(new ShowExplanationAction("Model View", targetElement));
+        // Ein einziger Einstieg: Fenster öffnen, Frage frei eingeben.
+        // Das angeklickte Element wird als "Fokus" mitgegeben (z. B. für Schnellfragen),
+        // standardmäßig wird aber das GANZE Modell an die KI geschickt.
+        category.addAction(new ShowExplanationAction(targetElement));
 
         mngr.addCategory(category);
     }

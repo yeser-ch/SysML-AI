@@ -11,7 +11,6 @@ import com.nomagic.magicdraw.plugins.PluginUtils;
 import com.nomagic.magicreport.engine.ITemplateEngine;
 import com.nomagic.magicreport.engine.velocity.TextEngine;
 import com.nomagic.magicreport.Template;
-import scala.Int;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -23,121 +22,91 @@ public class DataExtractionService {
     private static final String DATA_EXTRACTION_DIR = "data_extraction";
     private static final String TEMPLATE_NAME_PARTIAL = "sysml_partial_export.vm";
     private static final String TARGET_SUBDIR = "raw_model_data";
-    private static int MAX_DEPENDENCY_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
-    private static int MAX_SIBLING_DEPTH_EXPORT = 1; // Standardwert, kann im Template überschrieben werden
-    private static int MAX_SIBLING_OWNED_DEPTH_EXPORT = 0; // 0 = Geschwister ohne Kinder; >0 = owned Elements der Geschwister bis dieser Tiefe
+
+    private static final String TEMPLATE_NAME_FULL = "sysml_flat_export.vm";
+
+    /** Welcher Teil des Modells an die KI geht. */
+    public enum Scope {
+        /** Gesamtes Primärmodell (ohne SysML/UML-Bibliotheken) – Standard. */
+        FULL_MODEL,
+        /** Nur das ausgewählte Element plus Umgebung (alte "Model View"-Tiefen). */
+        FOCUS_NEIGHBOURHOOD
+    }
 
     /**
-     * Führt den JSON-Export über die ReportWizard API (ITemplateEngine) aus.
+     * Exportiert Modelldaten als JSON-Datei.
      *
-     * @param currentProject Das aktuell geöffnete MagicDraw Projekt.
-     * @param exportScope    Das Element, das als Scope dient. Wenn null, wird das Primary Model verwendet.
-     * @return true wenn erfolgreich, false bei einem Fehler.
+     * @param currentProject Das aktuell geöffnete Projekt.
+     * @param focusElement   Ausgewähltes Element (nur für FOCUS_NEIGHBOURHOOD nötig, sonst ignoriert).
+     * @param scope          FULL_MODEL oder FOCUS_NEIGHBOURHOOD.
+     * @return die erzeugte Datei oder null bei einem Fehler.
      */
-    public static boolean executeJsonExport(Project currentProject, Element exportScope, Boolean isElementView) {
+    public static File exportModel(Project currentProject, Element focusElement, Scope scope) {
         GUILog log = Application.getInstance().getGUILog();
 
         if (currentProject == null) {
             log.log("[DataExtractionService] Fehler: Kein aktives Projekt übergeben.");
-            return false;
+            return null;
+        }
+        if (scope == Scope.FOCUS_NEIGHBOURHOOD && focusElement == null) {
+            log.log("[DataExtractionService] Kein Element ausgewählt – exportiere stattdessen das ganze Modell.");
+            scope = Scope.FULL_MODEL;
         }
 
         try {
-            log.log("[DataExtractionService] Starte JSON-Export über ITemplateEngine...");
-
-            // 1. Basis-Verzeichnis ermitteln (Plugin-Verzeichnis)
             File baseDir = getBaseDirectory(currentProject);
+            boolean full = scope == Scope.FULL_MODEL;
+            String selectedTemplate = full ? TEMPLATE_NAME_FULL : TEMPLATE_NAME_PARTIAL;
+            log.log("[DataExtractionService] Starte JSON-Export (" + scope + ", Template " + selectedTemplate + ")");
 
-            MAX_DEPENDENCY_DEPTH_EXPORT = isElementView ? 2 : 5; // Beispielwerte, können auch über UI einstellbar gemacht werden
-            MAX_SIBLING_DEPTH_EXPORT = isElementView ? 1 : 3; //
-            MAX_SIBLING_OWNED_DEPTH_EXPORT = isElementView ? 0 : 0; // 0 = keine owned Elements der Geschwister
-            String selectedTemplate = TEMPLATE_NAME_PARTIAL;
-            log.log("[DataExtractionService] Modus: " + (isElementView ? "Element View" : "Model View"));
-
-            // 3. Template-Pfad prüfen
             File templateFile = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + selectedTemplate);
             if (!templateFile.exists()) {
                 log.log("[DataExtractionService] Fehler: Template nicht gefunden unter: " + templateFile.getAbsolutePath());
-                return false;
+                return null;
             }
 
-            // 4. Ziel-Ordner erstellen, falls nicht vorhanden
             File targetDir = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + TARGET_SUBDIR);
-            if (!targetDir.exists()) {
-                boolean created = targetDir.mkdirs();
-                if (!created) {
-                    log.log("[DataExtractionService] Fehler: Zielordner konnte nicht erstellt werden: " + targetDir.getAbsolutePath());
-                    return false;
-                }
+            if (!targetDir.exists() && !targetDir.mkdirs()) {
+                log.log("[DataExtractionService] Fehler: Zielordner konnte nicht erstellt werden: " + targetDir.getAbsolutePath());
+                return null;
             }
 
-            // 5. Dynamischen Dateinamen mit Zeitstempel generieren
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            String outputFileName = "export_" + timestamp + ".json";
-            File outputFile = new File(targetDir, outputFileName);
+            File outputFile = new File(targetDir, "export_" + (full ? "full_" : "focus_") + timestamp + ".json");
 
-            // 6. Scope festlegen
-            Element scope = (exportScope != null) ? exportScope : currentProject.getPrimaryModel();
-            if (scope == null) {
-                log.log("[DataExtractionService] Fehler: Kein gültiger Scope für den Export gefunden.");
-                return false;
-            }
-
-            // 7. ITemplateEngine Workflow
             ITemplateEngine engine = new TextEngine();
             try {
-                // WICHTIG: Context ZUERST setzen (vor createTemplate)
-                // Manche Template-Engines benötigen den Context beim Parsen
                 engine.addContext("project", currentProject);
-                //engine.addContext("element", scope);
-                
-                // Für partielle Exports: centerElement übergeben (wird von sysml_partial_export.vm genutzt)
-                if (exportScope != null) {
-                    engine.addContext("centerElement", exportScope);
-                    log.log("[DataExtractionService] Center Element für Partial Export gesetzt: " + exportScope.getHumanName());
-                }
-                
-                // String-Utility für Velocity verfügbar machen (für Whitespace-Cleaning)
                 engine.addContext("stringUtil", new StringCleaner());
-                
-                // Debug-Logger für Velocity verfügbar machen (für Template-Debugging)
                 engine.addContext("debugUtil", new DebugLogger(log));
-                
-                // Suchgrenzen für partial Export setzen (Fallback-Defaults)
-                engine.addContext("maxDependencyDepth", MAX_DEPENDENCY_DEPTH_EXPORT);
-                engine.addContext("maxSiblingDepth", MAX_SIBLING_DEPTH_EXPORT);
-                engine.addContext("maxSiblingOwnedDepth", MAX_SIBLING_OWNED_DEPTH_EXPORT);
-                
-                // Template erstellen (nach Context-Setup)
+
+                if (full) {
+                    // Kein "element" im Kontext -> das Flat-Template läuft über das gesamte Primärmodell.
+                    log.log("[DataExtractionService] Scope: gesamtes Modell");
+                } else {
+                    engine.addContext("centerElement", focusElement);
+                    engine.addContext("maxDependencyDepth", 5);
+                    engine.addContext("maxSiblingDepth", 3);
+                    engine.addContext("maxSiblingOwnedDepth", 0);
+                    log.log("[DataExtractionService] Scope: Umgebung von " + focusElement.getHumanName());
+                }
+
                 Template template = engine.createTemplate(templateFile, outputFile);
-                
-                // Encodings setzen
                 engine.setProperty("input.encoding", "UTF-8");
                 engine.setProperty("output.encoding", "UTF-8");
-                
-                // Export synchron ausführen
                 engine.evaluate(template);
 
-                // Dateigröße direkt bestimmen und im log ausgeben
-                long fileSizeInBytes = outputFile.length();
-                double fileSizeInKB = fileSizeInBytes / 1024.0;
-
-                log.log("[DataExtractionService] Erfolgreich! JSON gespeichert unter: " + outputFile.getAbsolutePath());
-                log.log("[DataExtractionService] Exportierte Dateigröße: " + String.format("%.2f", fileSizeInKB) + " KB");
-
+                log.log("[DataExtractionService] Erfolgreich: " + outputFile.getAbsolutePath()
+                        + " (" + String.format("%.2f", outputFile.length() / 1024.0) + " KB)");
             } finally {
-                // Ressourcen nach dem Export freigeben
                 engine.destroy();
             }
-            return true;
+            return outputFile;
 
         } catch (Exception e) {
             log.log("[DataExtractionService] Fehler beim Export: " + e.getMessage());
             e.printStackTrace();
-            for (StackTraceElement ste : e.getStackTrace()) {
-                log.log("\t" + ste.toString());
-            }
-            return false;
+            return null;
         }
     }
 

@@ -1,64 +1,68 @@
 package com.schroedingersblock.api;
 
 import com.nomagic.magicdraw.core.Application;
-import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.schroedingersblock.core.SchroedingersBlockPlugin;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
+import java.util.Set;
 import java.util.prefs.Preferences;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+/**
+ * Anbindung an die Google Gemini API (generateContent).
+ *
+ * Änderungen gegenüber der Vorgängerversion:
+ * - Frage wird frei eingegeben (keine festen Prompt-Templates mehr).
+ * - Modell, Temperatur, Token-Limit und Grounding kommen aus dem UI (AskSettings).
+ * - Kein stilles Wechseln auf andere Modelle mehr (verfälscht Vergleiche zwischen Modellgrößen).
+ *   Fallback nur, wenn im UI ausdrücklich erlaubt – das antwortende Modell wird immer angezeigt.
+ * - Grounding erzwingt kein bestimmtes Modell mehr.
+ * - System-Prompt wird bei JEDER Anfrage mitgesendet (die API ist zustandslos).
+ * - Token-Verbrauch und finishReason werden ausgelesen (für Auswertung/Log).
+ */
 public class GeminiExplanationService implements ExplanationService {
 
-    // ─── PERFORMANCE-BOOST: Globaler HttpClient für Connection Keep-Alive ──────
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-    // ─── ERWEITERTE MODELL-KASKADE: Vollständige Integration nach Vorgabe von Nikolai ────────
-    private static final String[] MODELS = {
-            "gemini-3.5-flash",       // (Niko) Primär — Ziel-Modell (GA, free-tier-fähig)
-            "gemini-3.1-flash-lite",  // (Niko) Fallback 1 — günstig, höhere Free-Limits
-            "gemini-2.5-flash-lite"   // (Niko) Fallback 2 — stabiler Rückfall
-            // (Niko) entfernt: gemini-2.5-flash (Abschaltung ~17.06.2026) + gemini-1.5-flash (tot) → vermeidet 404
+    /** Vorschlagsliste für das Modell-Dropdown (über "Refresh" durch die echte Liste der API ersetzbar). */
+    public static final String[] DEFAULT_MODELS = {
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash-lite"
     };
-    // (Niko) Einziges grounding-fähiges Modell im Free Tier — wird bei aktivem Grounding nach vorn sortiert
-    private static final String GROUNDING_MODEL = "gemini-2.5-flash-lite";
-    private static final String API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
-    // (Niko) Konfiguration für typ-spezifisches 429-Handling (Rate-Limit)
-    private static final int MAX_429_RETRIES = 2;       // (Niko) max. Wiederholungen am selben Modell bei HTTP 429
-    private static final int MAX_RETRY_WAIT_SEC = 20;   // (Niko) längere RetryInfo-Delays = Tageslimit → nicht warten, Modell wechseln
+    private static final int MAX_429_RETRIES = 2;
+    private static final int MAX_RETRY_WAIT_SEC = 20;
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(180); // ganzes Modell -> größere Payload
 
-    // Statisch, damit der Schalter-Zustand für die gesamte Sitzung erhalten bleibt
     private static final CircuitBreaker CIRCUIT = new CircuitBreaker();
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
 
-    // ─── Circuit Breaker Pattern (Leitungsschutzschalter) ──────────────────────
+    // Chatverlauf als fertige JSON-"contents"-Einträge
+    private final List<String> conversationHistory = Collections.synchronizedList(new ArrayList<>());
+
+    // ─── Circuit Breaker (unverändert übernommen) ─────────────────────────────
     private static class CircuitBreaker {
         private final Map<String, Integer> failureCounts = new HashMap<>();
-        private final Map<String, Long>  retryAtMap    = new HashMap<>();
+        private final Map<String, Long> retryAtMap = new HashMap<>();
 
         synchronized boolean isAvailable(String model) {
-            long retryAt = retryAtMap.getOrDefault(model, 0L);
-            return System.currentTimeMillis() >= retryAt;
+            return System.currentTimeMillis() >= retryAtMap.getOrDefault(model, 0L);
         }
 
         synchronized void recordSuccess(String model) {
@@ -69,567 +73,357 @@ public class GeminiExplanationService implements ExplanationService {
         synchronized void recordFailure(String model) {
             int failures = failureCounts.getOrDefault(model, 0) + 1;
             failureCounts.put(model, failures);
-
-            // (Niko) Dynamische Berechnung (Verdopplung): 1. Fehler = 5s, 2. = 10s, 3. = 20s, 4. = 40s ...
-            long lockDurationMs = (long) Math.pow(2, failures - 1) * 5 * 1000;
-
-            // (Niko) Deckelung bei maximal 60 Sekunden
-            if (lockDurationMs > 60 * 1000) {
-                lockDurationMs = 60 * 1000;
-            }
-
-            retryAtMap.put(model, System.currentTimeMillis() + lockDurationMs);
-            System.out.println("[CircuitBreaker] " + model + " temporär gesperrt für " + (lockDurationMs / 1000) + " Sekunden.");
+            long lockMs = Math.min((long) Math.pow(2, failures - 1) * 5000, 60_000);
+            retryAtMap.put(model, System.currentTimeMillis() + lockMs);
         }
     }
 
-    // ─── File Manager (inner class) ──────────────────────────────────────────
-    private static class FileManager {
-        private static final String UPLOAD_URL =
-                "https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=multipart&key=";
-        private static final Path CACHE_FILE = Paths.get(
-                System.getProperty("user.home"),
-                "Documents", "SchroedingersBlock-MaxWorkspace", "gemini_file_cache.properties");
+    // ─── Öffentliche API ───────────────────────────────────────────────────────
 
-        private static final HttpClient FILE_HTTP_CLIENT = HttpClient.newHttpClient();
-
-        @SuppressWarnings("unused")
-        static String upload(String jsonContent, String apiKey) throws IOException {
-            String boundary = "sb_upload_boundary";
-            String CRLF = "\r\n";
-            String body = "--" + boundary + CRLF
-                    + "Content-Type: application/json; charset=UTF-8" + CRLF + CRLF
-                    + "{\"file\":{\"displayName\":\"SysML Model Export\",\"mimeType\":\"application/json\"}}" + CRLF
-                    + "--" + boundary + CRLF
-                    + "Content-Type: application/json" + CRLF + CRLF
-                    + jsonContent + CRLF
-                    + "--" + boundary + "--";
-            try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create(UPLOAD_URL + apiKey))
-                        .header("Content-Type", "multipart/related; boundary=" + boundary)
-                        .POST(HttpRequest.BodyPublishers.ofByteArray(body.getBytes(StandardCharsets.UTF_8)))
-                        .build();
-                HttpResponse<String> resp = FILE_HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
-                if (resp.statusCode() != 200)
-                    throw new IOException("Upload failed (HTTP " + resp.statusCode() + "): " + resp.body());
-                String uri        = extractField(resp.body(), "\"uri\"");
-                String expiration = extractField(resp.body(), "\"expirationTime\"");
-                saveCache(uri, expiration);
-                return uri;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Upload interrupted", e);
-            }
-        }
-
-        static String getValidUri() {
-            try {
-                Properties p = loadCache();
-                String uri   = p.getProperty("uri", "");
-                long expires = Long.parseLong(p.getProperty("expires", "0"));
-                if (!uri.isEmpty() && System.currentTimeMillis() < expires) return uri;
-            } catch (Exception ignored) {}
-            return null;
-        }
-
-        private static void saveCache(String uri, String expirationIso) {
-            try {
-                long ms = (expirationIso != null && !expirationIso.isEmpty())
-                        ? Instant.parse(expirationIso).toEpochMilli()
-                        : System.currentTimeMillis() + 47L * 3600 * 1000;
-                Properties p = new Properties();
-                p.setProperty("uri",     uri);
-                p.setProperty("expires", String.valueOf(ms));
-                Files.createDirectories(CACHE_FILE.getParent());
-                try (Writer w = Files.newBufferedWriter(CACHE_FILE)) { p.store(w, null); }
-            } catch (IOException e) {
-                System.err.println("[GeminiExplanationService] Cache write failed: " + e.getMessage());
-            }
-        }
-
-        private static Properties loadCache() throws IOException {
-            Properties p = new Properties();
-            if (Files.exists(CACHE_FILE)) {
-                try (Reader r = Files.newBufferedReader(CACHE_FILE)) { p.load(r); }
-            }
-            return p;
-        }
-
-        private static String extractField(String json, String key) {
-            String marker = key + ": \"";
-            int start = json.indexOf(marker);
-            if (start == -1) { marker = key + ":\""; start = json.indexOf(marker); }
-            if (start == -1) return "";
-            start += marker.length();
-            int end = json.indexOf("\"", start);
-            return end == -1 ? "" : json.substring(start, end);
-        }
+    @Override
+    public void resetConversation() {
+        conversationHistory.clear();
     }
 
-    // ─── Public upload entry point ────────────────────────────────────────────
-    @SuppressWarnings("unused")
-    public static String uploadModel(String jsonContent, String apiKey) throws IOException {
-        return FileManager.upload(jsonContent, apiKey);
+    @Override
+    public Answer ask(String question, String modelJson, String focusInfo, AskSettings s) {
+        long start = System.currentTimeMillis();
+        String apiKey = getApiKey();
+        if (apiKey.isEmpty()) {
+            return Answer.error("No API key configured. Use \"API key...\" to enter one.", 0);
+        }
+
+        if (s.freshChat) {
+            conversationHistory.clear();
+        }
+        boolean firstMessage = conversationHistory.isEmpty();
+        String userText = firstMessage ? PromptLoader.buildFirstMessage(modelJson, focusInfo, question) : question;
+        conversationHistory.add(contentJson("user", userText));
+
+        String body = buildRequestBody(s);
+        log("Frage gesendet (" + (firstMessage ? "neuer Chat, inkl. Modell" : "Folgefrage") + "), Payload "
+                + String.format("%.1f", body.length() / 1024.0) + " KB");
+
+        List<String> models = new ArrayList<>();
+        models.add(s.model);
+        if (s.allowFallback) {
+            for (String m : DEFAULT_MODELS) if (!m.equals(s.model)) models.add(m);
+        }
+
+        String lastError = "Unknown error.";
+        for (String model : models) {
+            if (s.allowFallback && !CIRCUIT.isAvailable(model)) {
+                log("Überspringe " + model + " (kurzzeitig gesperrt nach Fehler)");
+                continue;
+            }
+            Attempt a = callModel(model, body, apiKey);
+            if (a.answer != null) {
+                conversationHistory.add(contentJson("model", a.answer.text));
+                long duration = System.currentTimeMillis() - start;
+                return new Answer(a.answer.text, model, true, duration,
+                        a.answer.promptTokens, a.answer.answerTokens, a.answer.finishReason);
+            }
+            lastError = a.error;
+            if (a.fatal) break; // z. B. ungültiger API-Key -> anderes Modell hilft nicht
+        }
+
+        // Fehlgeschlagen: Frage wieder aus dem Verlauf nehmen
+        if (!conversationHistory.isEmpty()) conversationHistory.remove(conversationHistory.size() - 1);
+        return Answer.error(lastError, System.currentTimeMillis() - start);
     }
 
     /**
-     * Reads the latest exported model JSON from disk, uploads it to the Gemini Files API,
-     * and caches the returned URI for subsequent generateContent calls.
-     * Intended to be called from a background thread (e.g. inside SwingWorker.doInBackground).
-     *
-     * @return true if the upload succeeded; false if skipped or failed (inline-JSON fallback applies).
+     * Holt die Liste der Modelle, die generateContent unterstützen (für das Dropdown).
+     * Gibt bei Fehlern eine leere Liste zurück.
      */
-    public boolean uploadModelData() {
-        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
-        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
-        if (apiKey.isEmpty()) {
-            log("Upload skipped: No API key configured.");
-            return false;
-        }
-        String jsonContent = loadLatestExportedJson();
-        if (jsonContent.startsWith("Error")) {
-            log("Upload skipped: " + jsonContent);
-            return false;
-        }
+    public List<String> listAvailableModels() {
+        List<String> result = new ArrayList<>();
+        String apiKey = getApiKey();
+        if (apiKey.isEmpty()) return result;
         try {
-            String uri = FileManager.upload(jsonContent, apiKey);
-            log("Model uploaded to Files API. URI: " + uri);
-            return true;
-        } catch (IOException e) {
-            log("Upload failed — will fall back to inline JSON: " + e.getMessage());
-            return false;
-        }
-    }
-
-    // ─── Modus & System-Konfiguration ──────────────────────────────────────────
-    private static final int    EXPERT_MAX_TOKENS  = 9000;
-    private static final double EXPERT_TEMPERATURE = 0.0;
-
-    private static final int    BASIC_MAX_TOKENS   = 4000;
-    private static final double BASIC_TEMPERATURE  = 0.0;
-
-    private static final String SYSTEM_INSTRUCTION =
-            "You are a SysML model analysis assistant embedded in CATIA Magic Systems. "
-                    + "ONLY answer questions about SysML, systems engineering, model elements, "
-                    + "ports, flows, constraints, requirements, and the current model under analysis. "
-                    + "If the user asks about ANYTHING unrelated to SysML or systems engineering, "
-                    + "respond with exactly: \"Fix your Attention Span! Back to the Model!\" "
-                    + "IMPORTANT: Always finish your last sentence completely. "
-                    + "Never stop mid-sentence. If you are running out of space, wrap up your "
-                    + "answer early but always end on a complete sentence with a full stop.";
-
-    // ─── Conversation State ────────────────────────────────────────────────────
-    private final List<String> conversationHistory = Collections.synchronizedList(new ArrayList<>());
-    private String currentDetailLevel = "Basic";
-
-    @Override
-    public void setDetailLevel(String level) {
-        this.currentDetailLevel = level;
-    }
-
-    @Override
-    public String fetchExplanation(Element targetElement, String mode) {
-        String elementName = targetElement != null ? targetElement.getHumanName() : "Unknown element";
-        String elementType = targetElement != null ? targetElement.getHumanType() : "Unknown type";
-        String ownerName   = (targetElement != null && targetElement.getOwner() != null)
-                ? targetElement.getOwner().getHumanName() : "root";
-
-        log("Starte Analyse für Element: '" + elementName + "' [" + elementType + "] | Level: " + currentDetailLevel);
-        log("Detail-Level: " + currentDetailLevel);
-
-        String fileUri = FileManager.getValidUri();
-
-        // (Niko) Grounding nur inline: hochgeladene Datei (fileData) + google_search → HTTP 500.
-        // (Niko) Bei aktivem Grounding den Upload ignorieren, damit das Modell inline mitgeht.
-        boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
-                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true);
-        if (grounding) {
-            fileUri = null;
-        }
-
-        String exportedJson;
-
-        if (fileUri != null) {
-            log("Verwende hochgeladene Modelldatei (Files API).");
-            exportedJson = "[Model context provided as uploaded file]";
-        } else {
-            exportedJson = loadLatestExportedJson();
-            if (exportedJson.startsWith("Error")) {
-                log("Fehler beim Lesen der Modelldaten: " + exportedJson);
-            } else {
-                log("JSON geladen: " + String.format("%.2f", exportedJson.length() / 1024.0) + " KB");
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(API_BASE + "?pageSize=1000&key=" + apiKey))
+                    .timeout(Duration.ofSeconds(20))
+                    .GET().build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                log("Modellliste nicht abrufbar (HTTP " + resp.statusCode() + ")");
+                return result;
             }
-        }
-
-        String prompt = PromptLoader.buildPrompt(getBaseDirectory(), currentDetailLevel, mode, elementName, elementType, ownerName, exportedJson); // (Niko) mode = Ansicht (Element/Model View) für 4er-Prompt-Auswahl
-        double promptKb = prompt.length() / 1024.0;
-        log("System-Prompt generiert. Payload-Gesamtgröße (inkl. JSON): " + String.format("%.2f", promptKb) + " KB");
-
-        return callGemini(prompt, currentDetailLevel, fileUri);
-    }
-
-    @Override
-    public String fetchFollowUp(String question) {
-        log("Sende Follow-Up Frage\u00A0...");
-        return callGemini(question, currentDetailLevel);
-    }
-
-    private String callGemini(String userMessage, String mode) {
-        return callGemini(userMessage, mode, null);
-    }
-
-    private String callGemini(String userMessage, String mode, String fileUri) {
-        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
-        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
-
-        if (apiKey.isEmpty()) {
-            log("Error: No API key found in settings.");
-            return "⚠️ Error: No API key found. Please enter a valid Gemini API key.";
-        }
-
-        // --- REPARATUR: Dynamische Erkennung des initialen Zustands ---
-        boolean isInitial = conversationHistory.isEmpty();
-
-        String userJson = buildMessageJson("user", userMessage, isInitial ? fileUri : null);
-        conversationHistory.add(userJson);
-
-        // REPARATUR: isInitial-Boolean wird jetzt korrekt an den Body-Builder gereicht
-        String requestBody = buildRequestBody(mode, isInitial);
-
-        String fallbackErrorMessage = "⚠️ All Gemini models are currently overloaded. Please try again in a moment.";
-
-        // (Niko) Bei aktivem Grounding zuerst das grounding-fähige 2.5-Modell, 3.5/3.1 nur als Fallback
-        boolean grounding = prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true);
-        String[] models = resolveModelCascade(grounding);
-
-        for (String model : models) {
-            if (!CIRCUIT.isAvailable(model)) {
-                log("Skipping " + model + " (Circuit is OPEN due to previous failure)");
-                continue;
+            // Grobe Auswertung ohne JSON-Bibliothek: Abschnitte je Modell
+            String json = resp.body();
+            Pattern p = Pattern.compile("\"name\"\\s*:\\s*\"models/([^\"]+)\"");
+            Matcher m = p.matcher(json);
+            List<int[]> spans = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            while (m.find()) {
+                names.add(m.group(1));
+                spans.add(new int[]{m.start(), 0});
             }
-
-            String url = API_BASE + model + ":generateContent?key=" + apiKey;
-
-            // 10 Sekunden pro Modellaufruf ---
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(java.time.Duration.ofSeconds(30)) // (Niko) 3s war zu kurz für Flash + ~12 KB Payload
-                    .build();
-
-            // (Niko) Innere Retry-Schleife: bei HTTP 429 warten + Retry am SELBEN Modell statt rotieren (Free-Limits sind projektweit)
-            boolean moveToNext = false; // (Niko) true = dieses Modell aufgeben, nächstes versuchen
-            int attempt429 = 0;         // (Niko) Zähler für 429-Wiederholungen an diesem Modell
-            while (!moveToNext) {
-
-            log("Sending HTTP POST to " + model + "\u00A0...");
-            long startTime = System.currentTimeMillis();
-
-            try {
-                HttpResponse<String> response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                long duration = System.currentTimeMillis() - startTime;
-
-                if (response.statusCode() == 200) {
-                    CIRCUIT.recordSuccess(model);
-                    log("Circuit CLOSED for " + model + " — recovered.");
-                    log("API response received successfully from " + model + " (HTTP 200 OK | Duration: " + duration + "ms)");
-
-                    String responseText = extractTextFromJson(response.body());
-                    String modelJson = buildMessageJson("model", responseText, null);
-                    conversationHistory.add(modelJson);
-
-                    return responseText;
-                }
-
-                if (response.statusCode() == 400 || response.statusCode() == 403) {
-                    String responseBody = response.body();
-
-                    if (responseBody.contains("API key not valid") ||
-                            responseBody.contains("API_KEY_INVALID") ||
-                            responseBody.contains("not valid")) {
-
-                        prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, "");
-                        log("Info: Invalid API key has been automatically reset.");
-                        conversationHistory.remove(conversationHistory.size() - 1);
-
-                        String cleanError = extractErrorMessageFromJson(responseBody);
-                        return "⚠️ API error (HTTP " + response.statusCode() + "):\n" + cleanError
-                                + "\n\n(The API key was invalid and has been reset. Please reopen the analysis window to enter a valid key.)";
-                    }
-                }
-
-                // (Niko) Typ-spezifische Behandlung der HTTP-Statuscodes
-                int status = response.statusCode(); // (Niko)
-                if (status == 404) { // (Niko) Modell-ID aktuell nicht verfügbar → temporär sperren (Backoff), später erneut probieren
-                    log("Model " + model + " returned HTTP 404 (not found). Temporarily skipping, will retry after backoff."); // (Niko)
-                    CIRCUIT.recordFailure(model); // (Niko) kein Permanent-Lock mehr → Modell rotiert nach Backoff zurück
-                    fallbackErrorMessage = "⚠️ API error (HTTP 404): Modell '" + model + "' aktuell nicht verfügbar."; // (Niko)
-                    moveToNext = true; // (Niko)
-                } else if (status == 429) { // (Niko) Rate-Limit → warten + Retry am SELBEN Modell, nicht rotieren
-                    int waitSec = extractRetryDelaySeconds(response.body()); // (Niko) Googles RetryInfo, falls vorhanden
-                    attempt429++; // (Niko)
-                    if (attempt429 <= MAX_429_RETRIES && waitSec <= MAX_RETRY_WAIT_SEC) { // (Niko) zumutbares Delay → warten und nochmal
-                        log("Model " + model + " rate-limited (HTTP 429). Waiting " + waitSec + "s, retry " + attempt429 + "/" + MAX_429_RETRIES + " on same model."); // (Niko)
-                        try { // (Niko)
-                            Thread.sleep(waitSec * 1000L); // (Niko) blockiert nur den SwingWorker-Hintergrundthread, UI bleibt frei
-                        } catch (InterruptedException ie) { // (Niko)
-                            Thread.currentThread().interrupt(); // (Niko) Interrupt-Flag wiederherstellen
-                            CIRCUIT.recordFailure(model); // (Niko)
-                            fallbackErrorMessage = "⚠️ Abgebrochen während Rate-Limit-Wartezeit."; // (Niko)
-                            moveToNext = true; // (Niko)
-                        }
-                        // (Niko) bei Erfolg kein moveToNext → while wiederholt denselben Request am selben Modell
-                    } else { // (Niko) Delay zu groß (= Tageslimit) oder Versuche erschöpft → Circuit + nächstes Modell
-                        log("Model " + model + " still rate-limited (HTTP 429, suggested wait " + waitSec + "s). Giving up on this model."); // (Niko)
-                        CIRCUIT.recordFailure(model); // (Niko)
-                        fallbackErrorMessage = "⚠️ API error (HTTP 429): Rate-Limit erreicht (Free Tier). Bitte später erneut versuchen."; // (Niko)
-                        moveToNext = true; // (Niko)
-                    }
-                } else { // (Niko) sonstige Fehler (z.B. 5xx) → transient behandeln, nächstes Modell
-                    log("Model " + model + " failed with HTTP " + status + ". Triggering Circuit Breaker."); // (Niko)
-                    CIRCUIT.recordFailure(model);
-                    fallbackErrorMessage = "⚠️ API error (HTTP " + status + "): Modelle temporär überlastet.";
-                    moveToNext = true; // (Niko)
-                }
-            } catch (java.net.http.HttpConnectTimeoutException e) {
-                log("Network connection timeout on " + model + ": " + e.getMessage());
-                CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ Connection Error: Keine Internetverbindung oder der Server ist nicht erreichbar. Bitte prüfe dein Netzwerk.";
-                moveToNext = true; // (Niko)
-
-            } catch (java.net.http.HttpTimeoutException e) {
-                log("API Response Timeout on " + model + ": " + e.getMessage());
-                CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ Timeout Error: Die Anfrage wurde übermittelt, aber die Antwort von " + model + " hat das Zeitlimit überschritten.";
-                moveToNext = true; // (Niko)
-
-            } catch (java.net.UnknownHostException | java.net.ConnectException e) {
-                log("Direct network failure on " + model + ": " + e.getMessage());
-                CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "⚠️ Connection Error: Netzwerk-Infrastruktur offline. Bitte verbinde dich mit dem Internet.";
-                moveToNext = true; // (Niko)
-
-            } catch (Exception e) {
-                log("Unexpected fallback error on " + model + ": " + e.getMessage());
-                CIRCUIT.recordFailure(model);
-                fallbackErrorMessage = "❌ Unexpected Error: " + e.getMessage();
-                moveToNext = true; // (Niko)
-            }
-            } // (Niko) Ende innere Retry-Schleife
-        }
-
-        // Wenn der Code hier ankommt, haben alle Modelle in der Kaskade innerhalb der Fristen versagt
-        conversationHistory.remove(conversationHistory.size() - 1);
-        return fallbackErrorMessage;
-    }
-
-    // (Niko) Bei aktivem Grounding NUR das grounding-fähige 2.5-Modell — kein Fallback auf 3.5/3.1,
-    // (Niko) die im Free Tier kein Grounding können (sonst sinnloses 429-Durchlaufen der Kaskade).
-    private String[] resolveModelCascade(boolean grounding) {
-        if (!grounding) return MODELS;
-        return new String[]{ GROUNDING_MODEL };
-    }
-
-    // ─── Request builders ─────────────────────────────────────────────────────
-
-    private String buildRequestBody(String mode, boolean isInitial) {
-
-        boolean isExpert = "Expert".equalsIgnoreCase(mode);
-        int maxTokens = isExpert ? EXPERT_MAX_TOKENS : BASIC_MAX_TOKENS;
-        double temp = isExpert ? EXPERT_TEMPERATURE : BASIC_TEMPERATURE;
-
-        String historyArray = String.join(",", conversationHistory);
-
-        String systemInstructionPart = "";
-        if (isInitial) {
-            systemInstructionPart = "\"systemInstruction\": {\"parts\": [{\"text\": \"" + escapeJson(SYSTEM_INSTRUCTION) + "\"}]},";
-        }
-
-        // (Niko) Grounding (google_search) nur senden, wenn im Settings-Dialog aktiviert (Default an).
-        // (Niko) Auf Free Tier funktioniert google_search nur mit gemini-2.5 (3.5/3.1 → HTTP 429).
-        boolean grounding = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
-                .getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, true);
-        String toolsPart = grounding ? "\"tools\": [{\"google_search\": {}}]," : "";
-
-        return "{"
-                + systemInstructionPart
-                + toolsPart // (Niko) ersetzt das vormals fest aktivierte google_search
-                + "\"contents\": [" + historyArray + "],"
-                + "\"generationConfig\": {"
-                + "  \"temperature\": " + temp + ","
-                + "  \"maxOutputTokens\": " + maxTokens + ","
-                + "  \"topP\": 0.9"
-                + "}"
-                + "}";
-    }
-
-    private String buildMessageJson(String role, String text, String fileUri) {
-        if (fileUri != null && !fileUri.isEmpty()) {
-            return "{\"role\": \"" + role + "\", \"parts\": ["
-                    + "{\"fileData\": {\"mimeType\": \"application/json\", \"fileUri\": \""
-                    + escapeJson(fileUri) + "\"}},"
-                    + "{\"text\": \"" + escapeJson(text) + "\"}"
-                    + "]}";
-        }
-        return "{\"role\": \"" + role + "\", \"parts\": [{\"text\": \"" + escapeJson(text) + "\"}]}";
-    }
-
-    private String loadLatestExportedJson() {
-        try {
-            File pluginDir = getBaseDirectory();
-            File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
-
-            if (!exportDir.exists() || !exportDir.isDirectory()) {
-                return "Error: Export directory not found at " + exportDir.getAbsolutePath();
-            }
-
-            File[] files = exportDir.listFiles((dir, name) -> name.endsWith(".json"));
-
-            if (files == null || files.length == 0) {
-                return "Error: No model JSON files found.";
-            }
-
-            File newestFile = files[0];
-            for (File f : files) {
-                if (f.lastModified() > newestFile.lastModified()) {
-                    newestFile = f;
+            for (int i = 0; i < names.size(); i++) {
+                int from = spans.get(i)[0];
+                int to = (i + 1 < names.size()) ? spans.get(i + 1)[0] : json.length();
+                String section = json.substring(from, to);
+                if (section.contains("\"generateContent\"") && names.get(i).startsWith("gemini")) {
+                    result.add(names.get(i));
                 }
             }
-
-            return Files.readString(newestFile.toPath());
-
+            Collections.sort(result);
         } catch (Exception e) {
-            return "Error reading exported model data: " + e.getMessage();
+            log("Modellliste nicht abrufbar: " + e.getMessage());
+        }
+        return result;
+    }
+
+    // ─── HTTP-Aufruf eines Modells ────────────────────────────────────────────
+
+    private static class Attempt {
+        Answer answer;   // gesetzt bei Erfolg
+        String error;    // gesetzt bei Fehler
+        boolean fatal;   // Fehler, bei dem ein anderes Modell nicht hilft
+    }
+
+    private Attempt callModel(String model, String body, String apiKey) {
+        Attempt result = new Attempt();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_BASE + "/" + model + ":generateContent?key=" + apiKey))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(REQUEST_TIMEOUT)
+                .build();
+
+        int attempt429 = 0;
+        while (true) {
+            log("Sende Anfrage an " + model + " ...");
+            long t0 = System.currentTimeMillis();
+            try {
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                int status = response.statusCode();
+                String resp = response.body();
+
+                if (status == 200) {
+                    CIRCUIT.recordSuccess(model);
+                    String text = extractAnswerText(resp);
+                    int promptTokens = extractInt(resp, "promptTokenCount");
+                    int answerTokens = extractInt(resp, "candidatesTokenCount");
+                    String finish = extractString(resp, "finishReason");
+                    if (text.isEmpty()) {
+                        String blockReason = extractString(resp, "blockReason");
+                        text = "(No text in response. finishReason=" + finish
+                                + (blockReason.isEmpty() ? "" : ", blockReason=" + blockReason) + ")";
+                    }
+                    if ("MAX_TOKENS".equals(finish)) {
+                        text += "\n\n[Answer cut off: max. output tokens reached. Increase \"Max tokens\".]";
+                    }
+                    log(model + " antwortete in " + (System.currentTimeMillis() - t0) + " ms, Tokens in/out: "
+                            + promptTokens + "/" + answerTokens);
+                    result.answer = new Answer(text, model, true, 0, promptTokens, answerTokens, finish);
+                    return result;
+                }
+
+                String apiMessage = extractString(resp, "message");
+                if ((status == 400 || status == 403)
+                        && (resp.contains("API_KEY_INVALID") || resp.contains("API key not valid"))) {
+                    result.error = "Invalid API key (HTTP " + status + "). Enter a new one via \"API key...\".";
+                    result.fatal = true;
+                    return result;
+                }
+                if (status == 400) {
+                    // z. B. Modell kann kein Grounding, Payload zu groß (Kontextfenster) -> Meldung der API zeigen
+                    result.error = "Request rejected by " + model + " (HTTP 400): " + apiMessage;
+                    result.fatal = true;
+                    return result;
+                }
+                if (status == 429) {
+                    int waitSec = extractRetryDelaySeconds(resp);
+                    attempt429++;
+                    if (attempt429 <= MAX_429_RETRIES && waitSec <= MAX_RETRY_WAIT_SEC) {
+                        log(model + " Rate-Limit (429), warte " + waitSec + " s (Versuch " + attempt429 + ")");
+                        Thread.sleep(waitSec * 1000L);
+                        continue;
+                    }
+                    CIRCUIT.recordFailure(model);
+                    result.error = "Rate limit reached for " + model + " (HTTP 429). "
+                            + "Free-tier limits (requests or tokens per minute/day) exceeded. " + apiMessage;
+                    return result;
+                }
+                CIRCUIT.recordFailure(model);
+                result.error = model + " failed (HTTP " + status + "): " + apiMessage;
+                return result;
+
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                result.error = "Request cancelled.";
+                result.fatal = true;
+                return result;
+            } catch (java.net.http.HttpTimeoutException e) {
+                CIRCUIT.recordFailure(model);
+                result.error = "Timeout: " + model + " did not answer within " + REQUEST_TIMEOUT.getSeconds() + " s.";
+                return result;
+            } catch (java.io.IOException e) {
+                CIRCUIT.recordFailure(model);
+                result.error = "Connection error: " + e.getMessage();
+                return result;
+            }
         }
     }
 
-    @SuppressWarnings("DuplicatedCode")
-    private File getBaseDirectory() {
-        String PLUGIN_ID = "com.schroedingersblock.plugin";
+    // ─── Request ──────────────────────────────────────────────────────────────
+
+    private String buildRequestBody(AskSettings s) {
+        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.detailLevel);
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"systemInstruction\":{\"parts\":[{\"text\":\"").append(escapeJson(systemPrompt)).append("\"}]},");
+        if (s.grounding) {
+            sb.append("\"tools\":[{\"google_search\":{}}],");
+        }
+        sb.append("\"contents\":[").append(String.join(",", conversationHistory)).append("],");
+        sb.append("\"generationConfig\":{")
+                .append("\"temperature\":").append(s.temperature).append(",")
+                .append("\"maxOutputTokens\":").append(s.maxOutputTokens)
+                .append("}}");
+        return sb.toString();
+    }
+
+    private String contentJson(String role, String text) {
+        return "{\"role\":\"" + role + "\",\"parts\":[{\"text\":\"" + escapeJson(text) + "\"}]}";
+    }
+
+    // ─── Response-Auswertung (ohne JSON-Bibliothek) ───────────────────────────
+
+    /** Sammelt alle "text"-Teile der ersten Antwort, ohne interne "thought"-Teile. */
+    static String extractAnswerText(String json) {
+        int end = json.length();
+        for (String stop : new String[]{"\"groundingMetadata\"", "\"usageMetadata\"", "\"citationMetadata\""}) {
+            int i = json.indexOf(stop);
+            if (i != -1 && i < end) end = i;
+        }
+        String scope = json.substring(0, end);
+        StringBuilder out = new StringBuilder();
+        Matcher m = Pattern.compile("\"text\"\\s*:\\s*\"").matcher(scope);
+        int pos = 0;
+        while (m.find(pos)) {
+            int[] endIdx = new int[1];
+            String part = readJsonString(scope, m.end(), endIdx);
+            // Teil-Objekt prüfen: {"text": "...", "thought": true} -> überspringen
+            int objEnd = scope.indexOf('}', endIdx[0]);
+            String tail = objEnd == -1 ? "" : scope.substring(endIdx[0], objEnd);
+            int objStart = scope.lastIndexOf('{', m.start());
+            String head = objStart == -1 ? "" : scope.substring(objStart, m.start());
+            boolean thought = tail.matches("(?s).*\"thought\"\\s*:\\s*true.*") || head.matches("(?s).*\"thought\"\\s*:\\s*true.*");
+            if (!thought) out.append(part);
+            pos = endIdx[0];
+        }
+        return out.toString();
+    }
+
+    /** Liest einen JSON-String ab Position start (direkt hinter dem öffnenden "). */
+    static String readJsonString(String json, int start, int[] endOut) {
+        StringBuilder sb = new StringBuilder();
+        int i = start;
+        while (i < json.length()) {
+            char c = json.charAt(i);
+            if (c == '"') { i++; break; }
+            if (c == '\\' && i + 1 < json.length()) {
+                char n = json.charAt(i + 1);
+                switch (n) {
+                    case 'n': sb.append('\n'); i += 2; continue;
+                    case 't': sb.append('\t'); i += 2; continue;
+                    case 'r': sb.append('\r'); i += 2; continue;
+                    case 'b': sb.append('\b'); i += 2; continue;
+                    case 'f': sb.append('\f'); i += 2; continue;
+                    case 'u':
+                        if (i + 5 < json.length()) {
+                            try {
+                                sb.append((char) Integer.parseInt(json.substring(i + 2, i + 6), 16));
+                                i += 6;
+                                continue;
+                            } catch (NumberFormatException ignored) { }
+                        }
+                        sb.append(n); i += 2; continue;
+                    default: sb.append(n); i += 2; continue; // \" \\ \/
+                }
+            }
+            sb.append(c);
+            i++;
+        }
+        endOut[0] = i;
+        return sb.toString();
+    }
+
+    static String extractString(String json, String key) {
+        Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"").matcher(json);
+        if (!m.find()) return "";
+        return readJsonString(json, m.end(), new int[1]);
+    }
+
+    static int extractInt(String json, String key) {
+        Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(\\d+)").matcher(json);
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
+
+    private int extractRetryDelaySeconds(String json) {
+        Matcher m = Pattern.compile("\"retryDelay\"\\s*:\\s*\"(\\d+)").matcher(json);
+        return m.find() ? Integer.parseInt(m.group(1)) : 10;
+    }
+
+    static String escapeJson(String text) {
+        if (text == null) return "";
+        StringBuilder sb = new StringBuilder(text.length() + 16);
+        for (char c : text.toCharArray()) {
+            switch (c) {
+                case '\\': sb.append("\\\\"); break;
+                case '"': sb.append("\\\""); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    // ─── Hilfsfunktionen ──────────────────────────────────────────────────────
+
+    private String getApiKey() {
+        return Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
+                .get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+    }
+
+    public static File getBaseDirectory() {
+        String pluginId = "com.schroedingersblock.plugin";
         try {
             for (Plugin plugin : PluginUtils.getPlugins()) {
                 PluginDescriptor descriptor = plugin.getDescriptor();
-                if (descriptor != null && PLUGIN_ID.equals(descriptor.getID())) {
+                if (descriptor != null && pluginId.equals(descriptor.getID())) {
                     return descriptor.getPluginDirectory();
                 }
             }
-        } catch (Throwable t) {
-            //Ignored
-        }
-        return new File(System.getProperty("user.dir"), "plugins" + File.separator + PLUGIN_ID);
+        } catch (Throwable ignored) { }
+        return new File(System.getProperty("user.dir"), "plugins" + File.separator + pluginId);
+    }
+
+    /** Ergänzt Standardmodelle und zuletzt verwendete Modelle zu einer Liste ohne Duplikate. */
+    public static List<String> mergeModelLists(List<String> fromApi, String current) {
+        Set<String> set = new LinkedHashSet<>();
+        if (current != null && !current.isBlank()) set.add(current);
+        Collections.addAll(set, DEFAULT_MODELS);
+        if (fromApi != null) set.addAll(fromApi);
+        return new ArrayList<>(set);
     }
 
     private void log(String msg) {
-        String prefixed = "[GeminiExplanationService] " + msg;
+        String prefixed = "[Schrödinger's Block] " + msg;
         try {
             javax.swing.SwingUtilities.invokeLater(() -> {
                 try {
                     Application.getInstance().getGUILog().log(prefixed);
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) { }
             });
         } catch (Throwable t) {
             System.out.println(prefixed);
-        }
-    }
-
-    private String escapeJson(String text) {
-        if (text == null) return "";
-        return text.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
-    }
-
-    private String extractTextFromJson(String json) {
-        try {
-            int metaIndex = json.indexOf("\"groundingMetadata\"");
-            String searchScope = (metaIndex != -1) ? json.substring(0, metaIndex) : json;
-
-            StringBuilder fullText = new StringBuilder();
-            String marker = "\"text\": \"";
-            int currentPos = 0;
-
-            while (true) {
-                int start = searchScope.indexOf(marker, currentPos);
-                if (start == -1) break;
-                start += marker.length();
-
-                int end = searchScope.indexOf("\"", start);
-                while (end != -1 && searchScope.charAt(end - 1) == '\\') {
-                    int backslashCount = 0;
-                    int i = end - 1;
-                    while (i >= start && searchScope.charAt(i) == '\\') {
-                        backslashCount++;
-                        i--;
-                    }
-                    if (backslashCount % 2 == 1) {
-                        end = searchScope.indexOf("\"", end + 1);
-                    } else {
-                        break;
-                    }
-                }
-
-                if (end == -1) break;
-
-                String partText = searchScope.substring(start, end)
-                        .replace("\\n", "\n")
-                        .replace("\\\"", "\"")
-                        .replace("\\\\", "\\")
-                        .replace("\\t", "\t");
-
-                fullText.append(partText);
-                currentPos = end + 1;
-            }
-
-            if (fullText.isEmpty()) return "Could not find text in response.";
-            return fullText.toString();
-        } catch (Exception e) {
-            return "Error extracting text from response.";
-        }
-    }
-
-    private String extractErrorMessageFromJson(String json) {
-        try {
-            String marker = "\"message\": \"";
-            int start = json.indexOf(marker);
-            if (start == -1) return json;
-
-            start += marker.length();
-            int end = json.indexOf("\"", start);
-
-            while (end != -1 && json.charAt(end - 1) == '\\') {
-                end = json.indexOf("\"", end + 1);
-            }
-
-            if (end == -1) return json;
-
-            return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
-        } catch (Exception e) {
-            return json;
-        }
-    }
-
-    // (Niko) Liest das RetryInfo-Feld ("retryDelay": "27s") aus einer 429-Antwort und gibt die Sekunden zurück.
-    // (Niko) Fehlt das Feld oder ist es unparsbar, wird ein konservativer Default (10s) geliefert.
-    private int extractRetryDelaySeconds(String json) {
-        try {
-            String marker = "\"retryDelay\"";
-            int start = json.indexOf(marker);
-            if (start == -1) return 10;
-            int quote = json.indexOf("\"", start + marker.length());
-            if (quote == -1) return 10;
-            int endQuote = json.indexOf("\"", quote + 1);
-            if (endQuote == -1) return 10;
-            String value = json.substring(quote + 1, endQuote).trim(); // z.B. "27s" oder "27.5s"
-            StringBuilder digits = new StringBuilder();
-            for (char c : value.toCharArray()) {
-                if (Character.isDigit(c)) digits.append(c);
-                else break;
-            }
-            if (digits.length() == 0) return 10;
-            return Integer.parseInt(digits.toString());
-        } catch (Exception e) {
-            return 10;
         }
     }
 }

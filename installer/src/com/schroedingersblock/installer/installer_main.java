@@ -308,15 +308,13 @@ public class installer_main extends JFrame {
                 if (!dataExtractionDir.exists()) dataExtractionDir.mkdirs();
 
                 copyRes("sysml_partial_export.vm", new File(dataExtractionDir, "sysml_partial_export.vm"));
+                copyRes("sysml_flat_export.vm", new File(dataExtractionDir, "sysml_flat_export.vm")); // Export des ganzen Modells
 
                 File promptsDir = new File(myPluginDir, "prompts");
                 if (!promptsDir.exists()) promptsDir.mkdirs();
 
-                // (Niko) 4er-Prompt-Struktur (Modus x Ansicht) als .md statt der alten 2 .txt
-                copyRes("Basic_ElementView.md",  new File(promptsDir, "Basic_ElementView.md"));
-                copyRes("Basic_ModelView.md",    new File(promptsDir, "Basic_ModelView.md"));
-                copyRes("Expert_ElementView.md", new File(promptsDir, "Expert_ElementView.md"));
-                copyRes("Expert_ModelView.md",   new File(promptsDir, "Expert_ModelView.md"));
+                // Ein editierbarer System-Prompt statt der 4 festen Prompt-Dateien (Frage wird frei eingegeben)
+                copyRes("System_Prompt.md", new File(promptsDir, "System_Prompt.md"));
 
                 log(lang.equals("EN") ? "--- Installation successful! ---" : "--- Installation erfolgreich! ---");
 
