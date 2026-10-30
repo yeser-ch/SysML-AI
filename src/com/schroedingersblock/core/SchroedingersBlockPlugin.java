@@ -13,6 +13,7 @@ import java.io.File;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.actions.ActionsConfiguratorsManager;
 import com.schroedingersblock.ui.OpenSettingsAction;
+import com.schroedingersblock.ui.ShowExplanationAction;
 
 import javax.swing.JOptionPane;
 import java.util.prefs.Preferences;
@@ -24,14 +25,24 @@ public class SchroedingersBlockPlugin extends Plugin {
     // (Niko) Schalter für Google-Search-Grounding (Default an beim ersten Start; auf Free Tier nur mit gemini-2.5 nutzbar)
     public static final String GROUNDING_PREF = "schroedingersblock_grounding_enabled";
 
+    // Einstellungen des neuen "Ask the model"-Fensters (alle auf einer Oberfläche, werden hier persistiert)
+    public static final String MODEL_PREF = "schroedingersblock_model";
+    public static final String TEMPERATURE_PREF = "schroedingersblock_temperature";
+    public static final String MAX_TOKENS_PREF = "schroedingersblock_max_tokens";
+    public static final String SCOPE_PREF = "schroedingersblock_context_scope";
+    public static final String FRESH_CHAT_PREF = "schroedingersblock_fresh_chat";
+    public static final String FALLBACK_PREF = "schroedingersblock_model_fallback";
+
     @Override
     public void init() {
         Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class); //zum speichern des Datenschutz
 
         // Beim allerersten Start noch kein gespeicherter Wert vorhanden -> Default an setzen.
         // Danach bleibt der zuletzt vom Nutzer gewählte Wert über Neustarts hinweg erhalten.
+        // Grounding ist ab jetzt standardmäßig AUS: Google-Suchergebnisse würden die Evaluation
+        // (Versteht die KI das Modell?) verfälschen. Kann im "Ask the model"-Fenster eingeschaltet werden.
         if (prefs.get(GROUNDING_PREF, null) == null) {
-            prefs.putBoolean(GROUNDING_PREF, true);
+            prefs.putBoolean(GROUNDING_PREF, false);
         }
 
         // Beim ersten Start nach Datenschutz fragen
@@ -75,7 +86,9 @@ public class SchroedingersBlockPlugin extends Plugin {
                 // Suche nach dem Tools-Menü
                 ActionsCategory toolsMenu = (ActionsCategory) manager.getActionFor("TOOLS");
                 if (toolsMenu != null) {
-                    // Füge die Einstellungs-Action hinzu
+                    // "Ask the model" auch ohne Rechtsklick erreichbar (fragt zum ganzen Modell)
+                    toolsMenu.addAction(new ShowExplanationAction(null));
+                    // Einstellungs-Action (API-Key)
                     toolsMenu.addAction(new OpenSettingsAction());
                 }
             }

@@ -6,53 +6,69 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
- * Loads prompt templates from the plugin's prompts directory on the filesystem
- * and fills in the placeholders for each request.
+ * Baut die Nachrichten an das LLM.
+ *
+ * Neu: Es gibt keine festen Fragen mehr. Der Nutzer tippt seine Frage frei ein.
+ * - System-Prompt: prompts/System_Prompt.md (editierbar, ohne neu zu kompilieren).
+ *   Platzhalter {answerStyle} wird je nach Basic/Expert ersetzt.
+ * - Erste Nachricht eines Chats: Modelldaten (JSON) + optionaler Fokus + Frage.
+ * - Folgefragen im selben Chat: nur die Frage (Modell ist schon im Verlauf).
+ *
+ * Wichtig für die Evaluation: Der System-Prompt ist eine Versuchsvariable.
+ * Änderungen an System_Prompt.md bitte versionieren/dokumentieren.
  */
 public class PromptLoader {
 
     private static final String PROMPT_DIR = "prompts";
-    // (Niko) 4er-Prompt-Struktur: Modus (Basic/Expert) x Ansicht (Element/Model View), als LLM-optimierte .md
+    private static final String SYSTEM_PROMPT_FILE = "System_Prompt.md";
 
-    /**
-     * Loads the correct prompt template based on mode,
-     * then fills in elementName, elementType, ownerName, and exportedXML.
-     *
-     * @param baseDir     Plugin installation directory (contains the prompts/ subfolder)
-     * @param detailLevel "EXPERT" or "BASIC" (case-insensitive)
-     * @param view        "Model View" or "Element View" (anything != "Model View" = Element View)
-     * @param elementName Human-readable name of the Cameo element
-     * @param elementType Human-readable type of the Cameo element
-     * @param ownerName   Name of the owning element, or "root"
-     * @param exportedXml JSON export string from Cameo
-     * @return            Fully resolved prompt string ready to send to the LLM
-     */
-    public static String buildPrompt(File baseDir,
-                                     String detailLevel,
-                                     String view,
-                                     String elementName,
-                                     String elementType,
-                                     String ownerName,
-                                     String exportedXml) {
+    static final String STYLE_BASIC =
+            "Answer briefly and in plain language (at most three short paragraphs).";
+    static final String STYLE_EXPERT =
+            "Answer in technical detail for an experienced systems engineer. "
+                    + "Name the concrete model elements (with their names) that support each statement.";
 
-        // (Niko) Datei je Modus x Ansicht: z.B. Expert_ElementView.md
-        boolean expert    = "EXPERT".equalsIgnoreCase(detailLevel);
-        boolean modelView = "Model View".equalsIgnoreCase(view); // alles andere = Element View (konsistent mit ExplanationDialog)
-        String fileName = (expert ? "Expert" : "Basic") + "_" + (modelView ? "ModelView" : "ElementView") + ".md";
-        String template = loadTemplate(baseDir, fileName);
-        return template
-                .replace("{elementName}", elementName)
-                .replace("{elementType}", elementType)
-                .replace("{ownerName}",   ownerName)
-                .replace("{exportedJson}", exportedXml != null ? exportedXml : "No model data available."); // (Niko) JSON, nicht XML
+    /** Fallback, falls die Datei fehlt – inhaltlich identisch zu installer/ressources/System_Prompt.md. */
+    private static final String DEFAULT_SYSTEM_PROMPT =
+            "You are an assistant for SysML v1 models created in CATIA Magic.\n"
+                    + "With the first user message you receive the model as a JSON export: a flat list of elements, "
+                    + "each with id, name, type, stereotypes, owner_id, documentation, values and relations "
+                    + "(outgoing_relations, routing_details, association_ends, connector_details). "
+                    + "Relations reference other elements by id.\n"
+                    + "Answer the user's questions about this model. Base your answers on the model data.\n"
+                    + "Answer in the language of the question.\n"
+                    + "{answerStyle}";
+
+    public static String buildSystemPrompt(File baseDir, String detailLevel) {
+        String template = DEFAULT_SYSTEM_PROMPT;
+        File promptFile = new File(baseDir, PROMPT_DIR + File.separator + SYSTEM_PROMPT_FILE);
+        if (promptFile.exists()) {
+            try {
+                template = Files.readString(promptFile.toPath(), StandardCharsets.UTF_8);
+            } catch (IOException ignored) {
+                // Fallback auf DEFAULT_SYSTEM_PROMPT
+            }
+        }
+        String style = "Expert".equalsIgnoreCase(detailLevel) ? STYLE_EXPERT : STYLE_BASIC;
+        return template.replace("{answerStyle}", style);
     }
 
-    private static String loadTemplate(File baseDir, String fileName) {
-        File promptFile = new File(baseDir, PROMPT_DIR + File.separator + fileName);
-        try {
-            return Files.readString(promptFile.toPath(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to load prompt file: " + promptFile.getAbsolutePath(), e);
+    /**
+     * Erste Nachricht eines Chats: Modell + (optional) Fokus-Element + Frage.
+     *
+     * @param modelJson  JSON-Export des Modells
+     * @param focusInfo  z. B. "Battery [Block], owner: Power Subsystem" oder null
+     * @param question   Frage des Nutzers
+     */
+    public static String buildFirstMessage(String modelJson, String focusInfo, String question) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Model data (JSON export)\n")
+                .append(modelJson != null ? modelJson : "No model data available.")
+                .append("\n\n");
+        if (focusInfo != null && !focusInfo.isBlank()) {
+            sb.append("# Currently selected element\n").append(focusInfo).append("\n\n");
         }
+        sb.append("# Question\n").append(question);
+        return sb.toString();
     }
 }
