@@ -45,7 +45,7 @@ public final class Evaluation {
         }
 
         EvaluationLog.archive(r.systemPromptSha, systemPrompt, export);
-        EvaluationLog.append(r, runFile);
+        r.logWarning = EvaluationLog.append(r, runFile);
         return r;
     }
 }

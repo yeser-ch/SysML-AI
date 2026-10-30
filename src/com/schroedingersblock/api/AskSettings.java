@@ -5,7 +5,7 @@ package com.schroedingersblock.api;
  * Werden pro Antwort ins Evaluations-Log geschrieben, damit Versuche reproduzierbar sind.
  */
 public class AskSettings {
-    public String model = "gemini-3.5-flash";
+    public String model = "gemini-3.8-flash";
     public double temperature = 0.0;
     public int maxOutputTokens = 8192;
     public String detailLevel = "Basic";     // "Basic" oder "Expert"
@@ -14,6 +14,9 @@ public class AskSettings {
     public boolean allowFallback = false;    // bei Überlastung automatisch anderes Modell nutzen
     public boolean requireIds = false;       // KI soll Element-IDs als [id:...] angeben (Halluzinations-Check)
     public int repetitions = 1;              // wie oft jede Frage gestellt wird (Konsistenz)
+    public boolean cacheModel = true;        // Modell einmal hochladen (Gemini-Cache) statt bei jeder Frage mitschicken
+    public int max429WaitSec = 30;           // bei Rate-Limit (pro Minute) höchstens so lange auf Google warten
+    public int max429Retries = 2;            // so oft nach einem Rate-Limit erneut versuchen
     public String scope = "FULL_MODEL";      // nur fürs Log
 
     public AskSettings copy() {
@@ -27,6 +30,9 @@ public class AskSettings {
         c.allowFallback = allowFallback;
         c.requireIds = requireIds;
         c.repetitions = repetitions;
+        c.cacheModel = cacheModel;
+        c.max429WaitSec = max429WaitSec;
+        c.max429Retries = max429Retries;
         c.scope = scope;
         return c;
     }

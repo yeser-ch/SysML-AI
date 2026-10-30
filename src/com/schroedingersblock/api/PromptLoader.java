@@ -71,18 +71,20 @@ public class PromptLoader {
     }
 
     /**
-     * Erste Nachricht eines Chats: Modell + (optional) Fokus-Element + Frage.
-     *
-     * @param modelJson  JSON-Export des Modells
-     * @param focusInfo  z. B. "Battery [Block], owner: Power Subsystem" oder null
-     * @param question   Frage des Nutzers
+     * Nachricht mit den Modelldaten. Steht immer als ERSTE Nachricht im Chat –
+     * entweder direkt in der Anfrage (inline) oder im Gemini-Cache (einmal hochgeladen).
+     * Beide Wege erzeugen damit denselben Gesprächsaufbau.
      */
-    public static String buildFirstMessage(String modelJson, String focusInfo, String question) {
+    public static String buildModelMessage(String modelJson) {
+        return "# Model data (JSON export)\n" + (modelJson != null ? modelJson : "No model data available.");
+    }
+
+    /**
+     * Nachricht mit der Frage. Das ausgewählte Element wird nur bei der ersten Frage eines Chats genannt.
+     */
+    public static String buildQuestionMessage(String focusInfo, String question, boolean firstInChat) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# Model data (JSON export)\n")
-                .append(modelJson != null ? modelJson : "No model data available.")
-                .append("\n\n");
-        if (focusInfo != null && !focusInfo.isBlank()) {
+        if (firstInChat && focusInfo != null && !focusInfo.isBlank()) {
             sb.append("# Currently selected element\n").append(focusInfo).append("\n\n");
         }
         sb.append("# Question\n").append(question);

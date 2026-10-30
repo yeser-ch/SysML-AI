@@ -21,16 +21,18 @@ import java.util.List;
  *
  * CSV: Trennzeichen ";", UTF-8 mit BOM -> öffnet direkt in Excel.
  * Die Spalten "rating" und "rating_notes" sind leer und für eure manuelle Bewertung gedacht.
+ * Das Plugin hängt nur Zeilen an und liest die Dateien nie zurück – Zeilen/Dateien dürfen gelöscht werden.
  */
 public final class EvaluationLog {
 
     static final String[] COLUMNS = {
             "run_id", "test_id", "category", "repetition", "timestamp",
             "question", "expected_answer", "answer", "rating", "rating_notes",
-            "model_requested", "model_used", "success", "finish_reason",
+            "model_requested", "model_used", "model_version", "success", "finish_reason",
             "detail_level", "temperature", "max_tokens", "grounding", "fresh_chat", "require_ids", "scope",
             "focus_element", "system_prompt_sha", "export_file", "export_sha", "export_kb",
-            "export_elements", "export_relations", "prompt_tokens", "answer_tokens", "duration_s",
+            "export_elements", "export_relations", "model_transfer", "prompt_tokens", "cached_tokens",
+            "answer_tokens", "duration_s", "rate_limit_wait_s",
             "ids_cited", "ids_found", "ids_unknown", "unknown_ids", "answer_sha", "plugin_version"
     };
     static final String HEADER = String.join(";", COLUMNS);
@@ -53,10 +55,24 @@ public final class EvaluationLog {
         return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
     }
 
-    /** Schreibt einen Datensatz ins Gesamt-Log und – falls angegeben – in die Datei des Testlaufs. */
-    public static synchronized void append(EvaluationRecord r, File runFile) {
-        writeLine(getLogFile(), r);
-        if (runFile != null) writeLine(runFile, r);
+    /**
+     * Schreibt einen Datensatz ins Gesamt-Log und – falls angegeben – in die Datei des Testlaufs.
+     * Ist eine Datei gesperrt (z. B. in Excel geöffnet), wird in eine Ersatzdatei "..._while-open.csv" geschrieben.
+     *
+     * @return Warnung für die Anzeige oder null, wenn alles normal gespeichert wurde
+     */
+    public static synchronized String append(EvaluationRecord r, File runFile) {
+        StringBuilder warn = new StringBuilder();
+        for (File f : runFile == null ? new File[]{getLogFile()} : new File[]{getLogFile(), runFile}) {
+            if (writeLine(f, r)) continue;
+            File alt = new File(f.getParentFile(), f.getName().replace(".csv", "_while-open.csv"));
+            if (writeLine(alt, r)) {
+                warn.append(f.getName()).append(" is open in another program – saved to ").append(alt.getName()).append(". ");
+            } else {
+                warn.append("Could not save to ").append(f.getName()).append(" (close it in Excel). ");
+            }
+        }
+        return warn.length() == 0 ? null : warn.toString().trim();
     }
 
     /** Legt System-Prompt und Modell-Export einmalig im Archiv ab (Dateiname = Prüfsumme). */
@@ -79,7 +95,7 @@ public final class EvaluationLog {
         }
     }
 
-    private static void writeLine(File f, EvaluationRecord r) {
+    private static boolean writeLine(File f, EvaluationRecord r) {
         try {
             File dir = f.getParentFile();
             if (dir != null && !dir.exists()) dir.mkdirs();
@@ -95,8 +111,10 @@ public final class EvaluationLog {
             line.append("\r\n");
             Files.write(f.toPath(), line.toString().getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            return true;
         } catch (IOException e) {
             System.err.println("[Schrödinger's Block] Log konnte nicht geschrieben werden: " + e.getMessage());
+            return false;
         }
     }
 
