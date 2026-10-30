@@ -38,3 +38,6 @@ target/
 *.jar
 *.class
 .classpath
+
+### Build-Skript ###
+build/
