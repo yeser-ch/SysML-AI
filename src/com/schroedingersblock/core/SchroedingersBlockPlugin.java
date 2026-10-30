@@ -36,6 +36,7 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static final String REPETITIONS_PREF = "schroedingersblock_repetitions";
     public static final String PAUSE_PREF = "schroedingersblock_batch_pause_s";
     public static final String CACHE_MODEL_PREF = "schroedingersblock_cache_model";
+    public static final String SETTINGS_VERSION_PREF = "schroedingersblock_settings_version";
 
     @Override
     public void init() {
@@ -43,10 +44,12 @@ public class SchroedingersBlockPlugin extends Plugin {
 
         // Beim allerersten Start noch kein gespeicherter Wert vorhanden -> Default an setzen.
         // Danach bleibt der zuletzt vom Nutzer gewählte Wert über Neustarts hinweg erhalten.
-        // Grounding ist ab jetzt standardmäßig AUS: Google-Suchergebnisse würden die Evaluation
-        // (Versteht die KI das Modell?) verfälschen. Kann im "Ask the model"-Fenster eingeschaltet werden.
-        if (prefs.get(GROUNDING_PREF, null) == null) {
+        // Einmalige Umstellung beim Update von der Vorgängerversion:
+        // Grounding ist ab jetzt standardmäßig AUS (Google-Suchergebnisse würden die Evaluation verfälschen,
+        // und neue Modelle unterstützen es im Free Tier nicht). Die alte Version hatte "an" gespeichert.
+        if (prefs.getInt(SETTINGS_VERSION_PREF, 1) < 2) {
             prefs.putBoolean(GROUNDING_PREF, false);
+            prefs.putInt(SETTINGS_VERSION_PREF, 2);
         }
 
         // Beim ersten Start nach Datenschutz fragen

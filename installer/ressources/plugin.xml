@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin id="com.schroedingersblock.plugin"
-        name="SchrÃ¶dingers Block Plugin"
-        version="0.7"
+        name="Schrödingers Block Plugin"
+        version="2.2"
         provider-name="SE Projekt Team"
         class="com.schroedingersblock.core.SchroedingersBlockPlugin">
     <runtime>

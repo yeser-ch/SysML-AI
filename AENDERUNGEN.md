@@ -37,13 +37,21 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 ## Evaluation
 Siehe [`evaluation/README.md`](evaluation/README.md).
 
-## Zum Bauen/Testen (in CATIA nötig)
-1. Plugin-JAR neu bauen und nach `installer/ressources/schroedingers-block.jar` kopieren (die mitgelieferte JAR ist noch die alte!).
-2. Installer neu bauen und ausführen – oder `sysml_flat_export.vm` nach `<plugin>/data_extraction/` und `System_Prompt.md` nach `<plugin>/prompts/` kopieren.
-3. Test: Rechtsklick auf ein Element → „Ask the model…“ → Statuszeile zeigt Elementanzahl und geschätzte Tokens.
+## Bauen und in CATIA installieren
+Einmalig: Java JDK 17 oder neuer installieren (z. B. Eclipse Temurin 21 von https://adoptium.net, bei der Installation „Set JAVA_HOME“ anhaken).
+
+1. Diesen Branch holen (`git checkout feature/free-prompt-full-model` + `git pull`, oder als ZIP herunterladen).
+2. CATIA schließen.
+3. **`build.bat` doppelklicken.** Das Skript findet CATIA, das JDK und den Plugin-Ordner, kompiliert, baut `schroedingers-block.jar` und kopiert alles in den Plugin-Ordner (alte JAR → `.bak`).
+4. CATIA starten → Rechtsklick auf ein Element → „Schrödinger's Block“ → „Ask the model…“.
+
+Nach jeder Code-Änderung: CATIA schließen, `build.bat` erneut ausführen.
+Falls die automatische Suche nicht klappt: `build.bat -CatiaDir "<CATIA-Ordner>" -PluginDir "<Plugin-Ordner>"`. Nur bauen: `build.bat -NoInstall`.
+Hinweis: Die JAR im Installer (`installer/ressources/`) ist noch die alte Version.
 
 ## Offene Punkte / Risiken
-- **Nur gegen Platzhalter-Klassen kompiliert**, nicht in CATIA getestet.
+- **Nur gegen Platzhalter-Klassen kompiliert**, nicht in CATIA getestet. Das Build-Skript wurde mit PowerShell 7 gegen eine nachgebaute CATIA-Ordnerstruktur getestet, nicht auf Windows.
+- Beim ersten Start nach dem Update wird Grounding einmalig ausgeschaltet (die alte Version hatte „an“ gespeichert).
 - **Größe**: Das ganze Modell kann > 100 000 Tokens haben. Free-Tier-Limits (Tokens pro Minute) können zu HTTP 429 führen.
 - **Cache**: Ob gecachte Tokens im Free Tier auf das Limit „Tokens pro Minute“ angerechnet werden, ist in Googles Doku nicht eindeutig – im Log (`cached_tokens`, `rate_limit_wait_s`) prüfen. Laut Preisliste ist Caching im Free Tier nicht für alle Modelle verfügbar (Flash-Lite nicht); dann wird automatisch inline gesendet.
 - **System-Prompt ist eine Versuchsvariable** – Änderungen an `System_Prompt.md` dokumentieren.
