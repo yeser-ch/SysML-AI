@@ -32,6 +32,9 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static final String SCOPE_PREF = "schroedingersblock_context_scope";
     public static final String FRESH_CHAT_PREF = "schroedingersblock_fresh_chat";
     public static final String FALLBACK_PREF = "schroedingersblock_model_fallback";
+    public static final String REQUIRE_IDS_PREF = "schroedingersblock_require_ids";
+    public static final String REPETITIONS_PREF = "schroedingersblock_repetitions";
+    public static final String PAUSE_PREF = "schroedingersblock_batch_pause_sec";
 
     @Override
     public void init() {

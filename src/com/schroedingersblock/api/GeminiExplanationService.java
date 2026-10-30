@@ -271,7 +271,7 @@ public class GeminiExplanationService implements ExplanationService {
     // ─── Request ──────────────────────────────────────────────────────────────
 
     private String buildRequestBody(AskSettings s) {
-        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.detailLevel);
+        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.detailLevel, s.requireIds);
         StringBuilder sb = new StringBuilder("{");
         sb.append("\"systemInstruction\":{\"parts\":[{\"text\":\"").append(escapeJson(systemPrompt)).append("\"}]},");
         if (s.grounding) {

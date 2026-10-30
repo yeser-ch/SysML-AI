@@ -3,3 +3,4 @@ With the first user message you receive the model as a JSON export: a flat list 
 Answer the user's questions about this model. Base your answers on the model data.
 Answer in the language of the question.
 {answerStyle}
+{idInstruction}

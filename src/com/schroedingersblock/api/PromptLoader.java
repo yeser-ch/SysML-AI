@@ -37,9 +37,19 @@ public class PromptLoader {
                     + "Relations reference other elements by id.\n"
                     + "Answer the user's questions about this model. Base your answers on the model data.\n"
                     + "Answer in the language of the question.\n"
-                    + "{answerStyle}";
+                    + "{answerStyle}\n"
+                    + "{idInstruction}";
+
+    /** Wird angehängt (oder ersetzt {idInstruction}), wenn "Cite IDs" aktiv ist. */
+    static final String ID_INSTRUCTION =
+            "Whenever you mention a model element, add its id from the JSON directly after the name "
+                    + "in the form [id:<id>], for example: Battery [id:_19_0_abc_123].";
 
     public static String buildSystemPrompt(File baseDir, String detailLevel) {
+        return buildSystemPrompt(baseDir, detailLevel, false);
+    }
+
+    public static String buildSystemPrompt(File baseDir, String detailLevel, boolean requireIds) {
         String template = DEFAULT_SYSTEM_PROMPT;
         File promptFile = new File(baseDir, PROMPT_DIR + File.separator + SYSTEM_PROMPT_FILE);
         if (promptFile.exists()) {
@@ -50,7 +60,14 @@ public class PromptLoader {
             }
         }
         String style = "Expert".equalsIgnoreCase(detailLevel) ? STYLE_EXPERT : STYLE_BASIC;
-        return template.replace("{answerStyle}", style);
+        String result = template.replace("{answerStyle}", style);
+        String ids = requireIds ? ID_INSTRUCTION : "";
+        if (result.contains("{idInstruction}")) {
+            result = result.replace("{idInstruction}", ids);
+        } else if (requireIds) {
+            result = result.stripTrailing() + "\n" + ids;
+        }
+        return result;
     }
 
     /**
