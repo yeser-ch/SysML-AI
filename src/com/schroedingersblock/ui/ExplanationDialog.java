@@ -4,6 +4,8 @@
  * Ablauf:
  * 1. Beim Öffnen wird das Modell exportiert (Standard: ganzes Modell).
  * 2. Der Nutzer tippt eine Frage oder wählt eine Schnellfrage und drückt "Send".
+ *    Standard: Das Modell wird mit der ersten Frage EINMAL hochgeladen (Gemini-Cache); danach geht nur die Frage raus.
+ *    "Resend model" exportiert neu aus CATIA und lädt bei der nächsten Frage neu hoch.
  *    Optional wird jede Frage mehrfach gestellt (Repetitions) und auf erfundene Element-IDs geprüft.
  * 3. "Run test suite…" arbeitet eine CSV mit Testfällen automatisch ab (auch für mehrere Modelle).
  * 4. Jede Antwort wird mit dem kompletten Versuchsaufbau protokolliert (siehe EvaluationLog).
@@ -73,6 +75,7 @@ public class ExplanationDialog extends JFrame {
     private JCheckBox freshChatBox;
     private JCheckBox fallbackBox;
     private JCheckBox requireIdsBox;
+    private JCheckBox cacheModelBox;
     private JLabel exportStatusLabel;
     private JButton suiteBtn;
 
@@ -107,6 +110,7 @@ public class ExplanationDialog extends JFrame {
     @Override
     public void dispose() {
         cancelRequested = true; // laufenden Testlauf beim Schließen beenden
+        apiService.discardUploadedModel(); // Upload bei Google löschen (läuft sonst nach 60 min ab)
         super.dispose();
     }
 
@@ -197,8 +201,15 @@ public class ExplanationDialog extends JFrame {
         freshChatBox.setToolTipText("On: every question is answered independently (recommended for tests). Off: follow-up questions keep the conversation.");
         fallbackBox = new JCheckBox("Fallback model");
         fallbackBox.setToolTipText("If the chosen model is overloaded, automatically try other models. Off for evaluation, so results are not mixed.");
-        for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox}) cb.addActionListener(e -> saveSettings());
+        cacheModelBox = new JCheckBox("Upload model once");
+        cacheModelBox.setToolTipText("<html>On: the model is uploaded to Google once (cache, valid 60 min) with the first question.<br>"
+                + "After that only your question is sent. Click 'Resend model' after changing the model in CATIA.<br>"
+                + "Changing AI model, answer style, ID check or grounding uploads once more automatically.<br>"
+                + "Not available for every model on the free tier – then the model is sent with each question.</html>");
+        for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox, cacheModelBox}) cb.addActionListener(e -> saveSettings());
         JPanel checks = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        checks.add(cacheModelBox);
+        checks.add(Box.createHorizontalStrut(8));
         checks.add(groundingBox);
         checks.add(Box.createHorizontalStrut(8));
         checks.add(freshChatBox);
@@ -237,8 +248,8 @@ public class ExplanationDialog extends JFrame {
         // Zeile 4: Status + Buttons
         exportStatusLabel = new JLabel("Exporting model …");
         exportStatusLabel.setForeground(Color.DARK_GRAY);
-        JButton reexportBtn = new JButton("Re-export model");
-        reexportBtn.setToolTipText("Export again after you changed the model in CATIA.");
+        JButton reexportBtn = new JButton("Resend model");
+        reexportBtn.setToolTipText("Exports the model again from CATIA (use after changes) and uploads it with the next question.");
         reexportBtn.addActionListener(e -> {
             if (!busy) runExport();
         });
@@ -351,13 +362,14 @@ public class ExplanationDialog extends JFrame {
         freshChatBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.FRESH_CHAT_PREF, true));
         fallbackBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.FALLBACK_PREF, false));
         requireIdsBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.REQUIRE_IDS_PREF, false));
+        cacheModelBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.CACHE_MODEL_PREF, true));
         loading = false;
     }
 
     private void saveSettings() {
         if (loading || modelBox == null || styleBox == null || scopeBox == null || temperatureSpinner == null
                 || maxTokensSpinner == null || repetitionsSpinner == null || groundingBox == null
-                || freshChatBox == null || fallbackBox == null || requireIdsBox == null) {
+                || freshChatBox == null || fallbackBox == null || requireIdsBox == null || cacheModelBox == null) {
             return;
         }
         prefs.put(SchroedingersBlockPlugin.MODEL_PREF, currentModel());
@@ -370,6 +382,7 @@ public class ExplanationDialog extends JFrame {
         prefs.putBoolean(SchroedingersBlockPlugin.FRESH_CHAT_PREF, freshChatBox.isSelected());
         prefs.putBoolean(SchroedingersBlockPlugin.FALLBACK_PREF, fallbackBox.isSelected());
         prefs.putBoolean(SchroedingersBlockPlugin.REQUIRE_IDS_PREF, requireIdsBox.isSelected());
+        prefs.putBoolean(SchroedingersBlockPlugin.CACHE_MODEL_PREF, cacheModelBox.isSelected());
     }
 
     private String currentModel() {
@@ -394,6 +407,7 @@ public class ExplanationDialog extends JFrame {
         s.allowFallback = fallbackBox.isSelected();
         s.requireIds = requireIdsBox.isSelected();
         s.repetitions = ((Number) repetitionsSpinner.getValue()).intValue();
+        s.cacheModel = cacheModelBox.isSelected();
         s.scope = isFullScope() ? "FULL_MODEL" : "FOCUS_NEIGHBOURHOOD";
         return s;
     }
@@ -463,11 +477,16 @@ public class ExplanationDialog extends JFrame {
                         addMessage("System", "Error: model export failed (see CATIA log window).");
                     } else {
                         export = ex;
-                        apiService.resetConversation(); // neue Modelldaten -> neuer Chat
+                        apiService.resetConversation();     // neue Modelldaten -> neuer Chat
+                        apiService.discardUploadedModel();  // alter Upload ungültig -> nächste Frage lädt neu hoch
                         String info = String.format("Model ready: %d elements · %d relations · %.0f KB · ~%,d tokens · export %s",
                                 ex.elementCount, ex.relationCount, ex.sizeKb(), ex.approxTokens(), ex.sha);
                         exportStatusLabel.setText(info);
-                        addMessage("System", escapeHtml(info) + "<br>Type a question below or pick a quick question.");
+                        addMessage("System", escapeHtml(info) + "<br>"
+                                + (cacheModelBox.isSelected()
+                                ? "The model will be uploaded once with your first question; after that only questions are sent."
+                                : "The model is sent with each question.")
+                                + "<br>Type a question below or pick a quick question.");
                     }
                 } catch (Exception e) {
                     exportStatusLabel.setText("Export failed.");
@@ -572,8 +591,9 @@ public class ExplanationDialog extends JFrame {
         AskSettings base = currentSettings();
         JTextField modelsField = new JTextField(base.model, 30);
         modelsField.setToolTipText("Several models separated by commas, e.g. gemini-3.5-flash, gemini-3.1-flash-lite");
-        JSpinner pauseSpinner = new JSpinner(new SpinnerNumberModel(prefs.getInt(SchroedingersBlockPlugin.PAUSE_PREF, 10), 0, 600, 5));
-        pauseSpinner.setToolTipText("Wait time between requests. Free tier: with the whole model (~100k+ tokens) per request, use 30–60 s.");
+        JSpinner pauseSpinner = new JSpinner(new SpinnerNumberModel(prefs.getInt(SchroedingersBlockPlugin.PAUSE_PREF, 0), 0, 600, 5));
+        pauseSpinner.setToolTipText("<html>0 = no fixed pause (recommended). If Google's per-minute limit is hit,<br>"
+                + "the plugin waits exactly as long as Google says (up to 2 min) and retries automatically.</html>");
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(3, 3, 3, 3);
@@ -587,13 +607,16 @@ public class ExplanationDialog extends JFrame {
         c.gridx = 1;
         form.add(modelsField, c);
         c.gridx = 0; c.gridy = 2;
-        form.add(new JLabel("Pause between requests (s):"), c);
+        form.add(new JLabel("Extra pause between requests (s):"), c);
         c.gridx = 1;
         form.add(pauseSpinner, c);
         c.gridx = 0; c.gridy = 3; c.gridwidth = 2;
         form.add(new JLabel("<html>Uses the current settings (style, temperature, max tokens, grounding, ID check).<br>"
                 + "Repetitions per question: <b>" + base.repetitions + "</b> · every question in a new chat.<br>"
-                + "Each request sends the model data: ~" + String.format("%,d", export.approxTokens()) + " tokens.</html>"), c);
+                + (base.cacheModel
+                ? "Model is uploaded once per AI model (~" + String.format("%,d", export.approxTokens()) + " tokens), then only questions are sent."
+                : "Each request sends the model data: ~" + String.format("%,d", export.approxTokens()) + " tokens.")
+                + "<br>Rate limits: the plugin waits automatically when Google asks for it.</html>"), c);
 
         int ok = JOptionPane.showConfirmDialog(this, form, "Run test suite", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (ok != JOptionPane.OK_OPTION) return;
@@ -610,11 +633,11 @@ public class ExplanationDialog extends JFrame {
         prefs.putInt(SchroedingersBlockPlugin.PAUSE_PREF, pauseSec);
 
         int total = suite.cases.size() * models.size() * base.repetitions;
-        long tokens = total * export.approxTokens();
         if (total > 1) {
-            int go = JOptionPane.showConfirmDialog(this,
-                    String.format("This will send %d requests (≈ %,d input tokens in total).%nStart now?", total, tokens),
-                    "Run test suite", JOptionPane.YES_NO_OPTION);
+            String effort = base.cacheModel
+                    ? String.format("This will send %d questions to %d AI model(s); the model data is uploaded once per AI model.", total, models.size())
+                    : String.format("This will send %d requests (≈ %,d input tokens in total).", total, total * export.approxTokens());
+            int go = JOptionPane.showConfirmDialog(this, effort + "\nStart now?", "Run test suite", JOptionPane.YES_NO_OPTION);
             if (go != JOptionPane.YES_OPTION) return;
         }
         runTestSuite(suite, models, base, pauseSec, total);
@@ -641,8 +664,11 @@ public class ExplanationDialog extends JFrame {
                 for (String model : models) {
                     AskSettings s = base.copy();
                     s.model = model;
-                    s.freshChat = true;   // Testfälle immer unabhängig
+                    s.freshChat = true;      // Testfälle immer unabhängig
                     s.allowFallback = false; // keine vermischten Modelle im Testlauf
+                    s.max429WaitSec = 120;   // im Testlauf geduldiger auf Rate-Limits warten
+                    s.max429Retries = 5;
+                    modelLoop:
                     for (TestSuite.TestCase tc : suite.cases) {
                         for (int rep = 1; rep <= s.repetitions; rep++) {
                             if (cancelRequested) break outer;
@@ -655,6 +681,11 @@ public class ExplanationDialog extends JFrame {
                             if (r.answer.success) ok++;
                             if (r.idCheck != null && !r.idCheck.unknown.isEmpty()) unknownIdAnswers++;
                             publish(progressLine(done, total, model, tc, rep, s.repetitions, r));
+                            if (r.answer.dailyLimit) {
+                                publish("<span style='color:#B00020'><b>Daily limit reached for " + escapeHtml(model)
+                                        + "</b> – skipping the remaining questions for this model.</span>");
+                                break modelLoop;
+                            }
                         }
                     }
                 }
@@ -691,10 +722,12 @@ public class ExplanationDialog extends JFrame {
         sb.append(done).append("/").append(total).append(" · ").append(escapeHtml(tc.id));
         if (!tc.category.isBlank()) sb.append(" [").append(escapeHtml(tc.category)).append("]");
         if (reps > 1) sb.append(" · rep ").append(rep).append("/").append(reps);
-        sb.append(" · ").append(escapeHtml(model)).append(" · ");
+        sb.append(" · ").append(modelLabel(model, r.answer)).append(" · ");
         if (r.answer.success) {
             sb.append("<span style='color:#1E7B34'>ok</span>")
                     .append(String.format(" %.1f s", r.answer.durationMs / 1000.0));
+            if ("cache_new".equals(r.answer.transfer)) sb.append(" · model uploaded");
+            if (r.answer.rateLimitWaitSec > 0) sb.append(" · waited ").append(r.answer.rateLimitWaitSec).append(" s (rate limit)");
             sb.append(idCheckHtml(r));
             String preview = r.answer.text.replaceAll("\\s+", " ").trim();
             if (preview.length() > 140) preview = preview.substring(0, 140) + " …";
@@ -702,7 +735,18 @@ public class ExplanationDialog extends JFrame {
         } else {
             sb.append("<span style='color:#B00020'>failed</span>: ").append(escapeHtml(r.answer.text));
         }
+        if (!r.answer.note.isEmpty() && !"cache_new".equals(r.answer.transfer) && r.repetition == 1) {
+            sb.append("<br><span style='color:#9A6700'>").append(escapeHtml(r.answer.note)).append("</span>");
+        }
+        if (r.logWarning != null) sb.append("<br><span style='color:#B00020'>⚠ ").append(escapeHtml(r.logWarning)).append("</span>");
         return sb.toString();
+    }
+
+    /** "gemini-3.5-flash" bzw. "gemini-3.5-flash → gemini-3.6-flash", wenn Google auf ein anderes Modell umleitet. */
+    private static String modelLabel(String requested, ExplanationService.Answer a) {
+        String v = a.modelVersion == null ? "" : a.modelVersion;
+        if (v.isEmpty() || v.equals(requested) || v.startsWith(requested + "-")) return escapeHtml(requested);
+        return escapeHtml(requested) + " → <b>" + escapeHtml(v) + "</b>";
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -711,14 +755,24 @@ public class ExplanationDialog extends JFrame {
 
     private void showRecord(EvaluationRecord r, int reps) {
         ExplanationService.Answer a = r.answer;
+        if (!a.note.isEmpty() && !"cache_new".equals(a.transfer)) addMessage("System", "ℹ " + escapeHtml(a.note));
+        if (r.logWarning != null) addMessage("System", "⚠ " + escapeHtml(r.logWarning));
         if (!a.success) {
             addMessage("System", "⚠ " + escapeHtml(a.text));
             return;
         }
+        if ("cache_new".equals(a.transfer)) {
+            addMessage("System", "Model uploaded to Google for " + escapeHtml(a.modelUsed)
+                    + " (valid 60 min). Next questions send only the question – until you click <b>Resend model</b>.");
+            exportStatusLabel.setText(exportStatusLabel.getText().replaceAll(" · uploaded.*$", "")
+                    + " · uploaded for " + a.modelUsed);
+        }
         StringBuilder meta = new StringBuilder();
         if (reps > 1) meta.append("rep ").append(r.repetition).append("/").append(reps).append(" · ");
-        meta.append(escapeHtml(a.modelUsed)).append(String.format(" · %.1f s", a.durationMs / 1000.0));
+        meta.append(modelLabel(a.modelUsed, a)).append(String.format(" · %.1f s", a.durationMs / 1000.0));
         if (a.promptTokens >= 0) meta.append(String.format(" · %,d → %,d tokens", a.promptTokens, a.answerTokens));
+        if (a.cachedTokens > 0) meta.append(String.format(" (%,d from cache)", a.cachedTokens));
+        if (a.rateLimitWaitSec > 0) meta.append(" · waited ").append(a.rateLimitWaitSec).append(" s");
         if (!a.modelUsed.equals(r.settings.model)) meta.append(" · <b>fallback model!</b>");
 
         String body = convertMarkdownToHtml(a.text);

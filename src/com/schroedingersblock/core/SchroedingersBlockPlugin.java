@@ -34,7 +34,8 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static final String FALLBACK_PREF = "schroedingersblock_model_fallback";
     public static final String REQUIRE_IDS_PREF = "schroedingersblock_require_ids";
     public static final String REPETITIONS_PREF = "schroedingersblock_repetitions";
-    public static final String PAUSE_PREF = "schroedingersblock_batch_pause_sec";
+    public static final String PAUSE_PREF = "schroedingersblock_batch_pause_s";
+    public static final String CACHE_MODEL_PREF = "schroedingersblock_cache_model";
 
     @Override
     public void init() {
