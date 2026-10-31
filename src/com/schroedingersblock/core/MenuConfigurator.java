@@ -42,6 +42,8 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
         // Bestimmung auf was der Nutzer im Diagramm geklickt hat (Block oder Hintergrund)
         if (requestor != null) {
             targetElement = requestor.getElement();
+        } else if (selected != null && selected.length > 0 && selected[0] != null && selected[0].getElement() != null) {
+            targetElement = selected[0].getElement(); // z. B. markierte Zeile in einer Tabelle
         } else if (diagram != null) {
             targetElement = diagram.getElement(); //Element des gesamten Diagramms
         }
@@ -68,10 +70,12 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
 
         category.setDescription("Ask an AI questions about this SysML model");
 
-        // Ein einziger Einstieg: Fenster öffnen, Frage frei eingeben.
-        // Das angeklickte Element wird als "Fokus" mitgegeben (z. B. für Schnellfragen),
-        // standardmäßig wird aber das GANZE Modell an die KI geschickt.
+        // 1) Fragen zum GANZEN Modell (angeklicktes Element dient als Fokus, z. B. für Schnellfragen)
         category.addAction(new ShowExplanationAction(targetElement));
+        // 2) Fragen zu genau diesem Element (nur Element + Umgebung wird exportiert -> kleiner, schneller)
+        if (targetElement != null) {
+            category.addAction(new ShowExplanationAction(targetElement, true, false));
+        }
 
         mngr.addCategory(category);
     }

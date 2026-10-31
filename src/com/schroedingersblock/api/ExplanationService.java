@@ -38,6 +38,10 @@ public interface ExplanationService {
         public String transfer = "";
         /** Tokens, die aus einem Cache kamen (explizit oder automatisch), -1 wenn unbekannt. */
         public int cachedTokens = -1;
+        /** Tokens, die das Modell intern zum "Nachdenken" verbraucht hat (-1 = unbekannt). Treiben die Antwortzeit. */
+        public int thoughtsTokens = -1;
+        /** Tatsächlich verwendete Denktiefe ("default", wenn das Modell die Einstellung abgelehnt hat). */
+        public String thinkingUsed = "default";
         /** Sekunden, die wegen Rate-Limits gewartet wurde. */
         public int rateLimitWaitSec = 0;
         /** Tageslimit erreicht – weitere Anfragen heute sinnlos. */

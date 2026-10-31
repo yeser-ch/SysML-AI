@@ -29,10 +29,10 @@ public final class EvaluationLog {
             "run_id", "test_id", "category", "repetition", "timestamp",
             "question", "expected_answer", "answer", "rating", "rating_notes",
             "model_requested", "model_used", "model_version", "success", "finish_reason",
-            "detail_level", "temperature", "max_tokens", "grounding", "fresh_chat", "require_ids", "scope",
+            "detail_level", "temperature", "max_tokens", "thinking_level", "thinking_used", "grounding", "fresh_chat", "require_ids", "scope",
             "focus_element", "system_prompt_sha", "export_file", "export_sha", "export_kb",
             "export_elements", "export_relations", "model_transfer", "prompt_tokens", "cached_tokens",
-            "answer_tokens", "duration_s", "rate_limit_wait_s",
+            "answer_tokens", "thoughts_tokens", "duration_s", "rate_limit_wait_s",
             "ids_cited", "ids_found", "ids_unknown", "unknown_ids", "answer_sha", "plugin_version"
     };
     static final String HEADER = String.join(";", COLUMNS);

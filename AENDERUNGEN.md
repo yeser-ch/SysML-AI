@@ -12,7 +12,9 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 | Einstellungen verteilt (Tools → Settings), Modell/Temperatur fest im Code | **Alles in einem Fenster**: Modell, Antwortstil, Kontext, Temperatur, Max Tokens, Grounding, neuer Chat pro Frage, Fallback |
 | Grounding standardmäßig an, erzwingt `gemini-2.5-flash-lite` | Grounding standardmäßig **aus**, erzwingt kein Modell |
 | Stiller Wechsel auf andere Modelle bei Überlastung | Nur wenn „Fallback model“ angehakt; antwortendes Modell wird immer angezeigt |
-| – | **Schnellfragen** nach Kategorien A–D (Retrieval, Struktur, Semantik, Unsicherheit) |
+| – | **Schnellfragen aus eurem Modell**: Kategorien A–D (Retrieval, Struktur, Semantik, Unsicherheit), automatisch mit echten Elementen, Anforderungen und Beziehungen aus dem Export befüllt; „Other elements“ würfelt neue aus |
+| – | **„Ask AI about this element…“**: Fragen zu einem Element, nur Element + Umgebung wird exportiert (kleiner, schneller); auch im Tools-Menü („…selected element…“, nimmt die aktuelle Auswahl) |
+| – | **Thinking**: Denktiefe des Modells einstellbar (Model default / Minimal / Low / Medium / High) – weniger = schneller; wird geloggt |
 | – | **Evaluations-Log** mit vollständigem Versuchsaufbau (Prüfsummen von Prompt, Export, Antwort; Archiv) in `Dokumente/SysML-AI-QA/` |
 | – | **Testläufe aus CSV** („Run test suite…“), auch für mehrere Modelle nacheinander, mit Pause gegen Rate-Limits |
 | – | **Wiederholungen** pro Frage (Konsistenz-Messung) |
