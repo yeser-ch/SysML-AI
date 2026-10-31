@@ -1,4 +1,34 @@
-# SchroedingersBlock
+# SysML AI Q&A
+
+**Fragen an eine KI zum eigenen SysML-Modell – direkt in CATIA Magic, mit vollständiger Protokollierung für die Auswertung.**
+
+Weiterentwicklung des Plugins *Schrödinger's Block* (SoSe 2026) im Projekt **„How well does AI understand the SysML model?“** – Systems Engineering Project, Hochschule München, WS 2026/27.
+
+| | |
+| --- | --- |
+| **Plattform** | CATIA Magic / Magic Systems of Systems Architect 2026x, SysML v1 |
+| **KI** | Google Gemini API (eigener, kostenloser API-Key) |
+| **Aktueller Stand** | Branch `feature/free-prompt-full-model` |
+
+### Loslegen
+
+- **Installieren:** [`INSTALL.md`](INSTALL.md) – fertiges Paket aus den *Releases* herunterladen, entpacken, `install.bat` doppelklicken. Kein Java nötig.
+- **Was ist neu gegenüber Schrödinger's Block:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
+- **Testläufe und Auswertung:** [`evaluation/README.md`](evaluation/README.md)
+
+### Was das Plugin kann
+
+- Freie Fragen zum ganzen Modell oder zu einem ausgewählten Element stellen, mit Folgefragen im Chat
+- Schnellfragen als Vorlagen nach den vier Kategorien A Retrieval, B Structure, C Semantics, D Uncertainty
+- Alle Versuchsparameter in einem Fenster: KI-Modell, Temperatur, Thinking, Kontext, Grounding, Fallback, Wiederholungen
+- Testsuite aus einer CSV-Datei automatisch abarbeiten, jede Antwort mit Versuchsaufbau protokollieren (CSV für Excel)
+- Zitierte Element-IDs gegen das Modell prüfen
+
+---
+
+> **Hinweis:** Alles ab hier ist der Entwickler-Guide der Vorgängergruppe *Schrödinger's Block* (SoSe 2026). Er beschreibt deren Workflow und Stand und ist teilweise veraltet. So gibt es den `DummyExplanationService` nicht mehr, und `build.ps1` ist inzwischen fertig (siehe [`INSTALL.md`](INSTALL.md), Weg B).
+
+## SchroedingersBlock (Vorgängergruppe)
 📘 AI4MBSE - Entwickler Guide & Workflow
 
 
