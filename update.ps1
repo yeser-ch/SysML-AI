@@ -4,7 +4,7 @@
   Optionen werden an build.ps1 weitergegeben, z. B.: update.bat -CatiaDir "C:\Program Files\..."
 #>
 $ErrorActionPreference = 'Stop'
-$Repo   = 'yeser-ch/SchroedingersBlock'
+$Repo   = 'yeser-ch/SysML-AI'
 $Branch = 'feature/free-prompt-full-model'
 
 Write-Host ''
