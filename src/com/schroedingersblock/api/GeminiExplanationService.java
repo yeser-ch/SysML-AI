@@ -384,9 +384,23 @@ public class GeminiExplanationService implements ExplanationService {
     private Sent sendWithRateLimit(HttpRequest request, String model, AskSettings s, RetryStats stats) {
         Sent out = new Sent();
         int attempt = 0;
+        int overloadAttempt = 0;
         while (true) {
             try {
                 HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 503 || resp.statusCode() == 500) {
+                    // Google überlastet ("high demand") – meist nach Sekunden vorbei: kurz warten und erneut versuchen
+                    overloadAttempt++;
+                    if (overloadAttempt <= 3) {
+                        int wait = 5 * overloadAttempt; // 5 s, 10 s, 15 s
+                        log(model + ": überlastet (HTTP " + resp.statusCode() + "), neuer Versuch in " + wait + " s (" + overloadAttempt + "/3)");
+                        Thread.sleep(wait * 1000L);
+                        stats.waitedSec += wait;
+                        continue;
+                    }
+                    out.response = resp;
+                    return out;
+                }
                 if (resp.statusCode() != 429) {
                     out.response = resp;
                     return out;
@@ -491,7 +505,8 @@ public class GeminiExplanationService implements ExplanationService {
             return result;
         }
         CIRCUIT.recordFailure(model);
-        result.error = model + " failed (HTTP " + status + "): " + apiMessage;
+        result.error = model + " failed (HTTP " + status + "): " + apiMessage
+                + (status == 503 ? " Tried 4 times. Try again in a minute or choose another AI model (e.g. gemini-3.6-flash)." : "");
         return result;
     }
 
