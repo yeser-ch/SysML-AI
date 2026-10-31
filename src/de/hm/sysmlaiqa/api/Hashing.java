@@ -1,4 +1,4 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

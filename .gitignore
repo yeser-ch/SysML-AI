@@ -7,7 +7,7 @@ out/
 .idea/
 gen/
 .txt
-src/com/schroedingersblock/api/ApiKeyManager.java
+src/de/hm/sysmlaiqa/api/ApiKeyManager.java
 expert_prompt_ChangeImpact
 ### Eclipse ###
 .apt_generated

@@ -4,7 +4,7 @@
  * mit den verfügbaren Modi bereit.
  */
 
-package com.schroedingersblock.core;
+package de.hm.sysmlaiqa.core;
 
 import com.nomagic.actions.ActionsCategory;
 import com.nomagic.actions.ActionsManager;
@@ -13,7 +13,7 @@ import com.nomagic.magicdraw.actions.DiagramContextAMConfigurator;
 import com.nomagic.magicdraw.ui.browser.Tree;
 import com.nomagic.magicdraw.uml.symbols.DiagramPresentationElement;
 import com.nomagic.magicdraw.uml.symbols.PresentationElement;
-import com.schroedingersblock.ui.ShowExplanationAction;
+import de.hm.sysmlaiqa.ui.ShowExplanationAction;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 
 public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramContextAMConfigurator {
@@ -66,7 +66,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
     }
 
     private static void log(String text) {
-        String msg = SchroedingersBlockPlugin.LOG_PREFIX + text;
+        String msg = SysmlAiQaPlugin.LOG_PREFIX + text;
         System.out.println(msg);
         try {
             com.nomagic.magicdraw.core.Application.getInstance().getGUILog().log(msg);
@@ -92,7 +92,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
 
     // Untermenü "Ask AI" mit "Ask AI about the model..." und "Ask AI about this element..."
     private void addMenu(ActionsManager mngr, Element targetElement) {
-        if (mngr.getActionFor("SCHROEDINGER_ROOT") != null) {
+        if (mngr.getActionFor("SYSMLAIQA_ROOT") != null) {
             return;
         }
 
@@ -105,7 +105,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
         }
 
         // Untermenü "Ask AI" (wie in der Vorgängerversion verschachtelt – nur so erscheint es auch in Requirement-Tabellen)
-        ActionsCategory category = new ActionsCategory("SCHROEDINGER_ROOT", "Ask AI (" + SchroedingersBlockPlugin.DISPLAY_NAME + ")");
+        ActionsCategory category = new ActionsCategory("SYSMLAIQA_ROOT", "Ask AI (" + SysmlAiQaPlugin.DISPLAY_NAME + ")");
         category.setNested(true);
 
         category.setDescription("Ask an AI questions about this SysML model");

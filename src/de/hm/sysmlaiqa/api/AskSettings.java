@@ -1,4 +1,4 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 /**
  * Alle Einstellungen einer Anfrage – kommen direkt aus dem "Ask AI about the model"-Fenster.

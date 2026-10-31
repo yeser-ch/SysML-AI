@@ -1,4 +1,4 @@
-package com.schroedingersblock.data_extraction;
+package de.hm.sysmlaiqa.data_extraction;
 
 import com.nomagic.magicdraw.core.Application;
 import com.nomagic.magicdraw.core.Project;
@@ -18,14 +18,14 @@ import java.time.format.DateTimeFormatter;
 
 public class DataExtractionService {
 
-    private static final String PLUGIN_ID = "com.schroedingersblock.plugin";
+    private static final String PLUGIN_ID = "de.hm.sysmlaiqa.plugin";
     private static final String DATA_EXTRACTION_DIR = "data_extraction";
     private static final String TEMPLATE_NAME_PARTIAL = "sysml_partial_export.vm";
     private static final String TARGET_SUBDIR = "exports";
 
     /** Ordner für temporäre Modell-Exporte (beschreibbar ohne Administratorrechte). Beim Schließen von CATIA geleert. */
     public static File getExportDirectory() {
-        return new File(com.schroedingersblock.api.EvaluationLog.getBaseDir(), TARGET_SUBDIR);
+        return new File(de.hm.sysmlaiqa.api.EvaluationLog.getBaseDir(), TARGET_SUBDIR);
     }
 
     private static final String TEMPLATE_NAME_FULL = "sysml_flat_export.vm";

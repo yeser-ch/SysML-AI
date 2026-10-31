@@ -11,24 +11,24 @@
  * 4. Jede Antwort wird mit dem kompletten Versuchsaufbau protokolliert (siehe EvaluationLog).
  */
 
-package com.schroedingersblock.ui;
+package de.hm.sysmlaiqa.ui;
 
 import com.nomagic.magicdraw.core.Application;
 import com.nomagic.magicdraw.core.Project;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.NamedElement;
-import com.schroedingersblock.api.AskSettings;
-import com.schroedingersblock.api.Evaluation;
-import com.schroedingersblock.api.EvaluationLog;
-import com.schroedingersblock.api.EvaluationRecord;
-import com.schroedingersblock.api.ExplanationService;
-import com.schroedingersblock.api.GeminiExplanationService;
-import com.schroedingersblock.api.ModelExport;
-import com.schroedingersblock.api.ModelIndex;
-import com.schroedingersblock.api.QuickQuestions;
-import com.schroedingersblock.api.TestSuite;
-import com.schroedingersblock.core.SchroedingersBlockPlugin;
-import com.schroedingersblock.data_extraction.DataExtractionService;
+import de.hm.sysmlaiqa.api.AskSettings;
+import de.hm.sysmlaiqa.api.Evaluation;
+import de.hm.sysmlaiqa.api.EvaluationLog;
+import de.hm.sysmlaiqa.api.EvaluationRecord;
+import de.hm.sysmlaiqa.api.ExplanationService;
+import de.hm.sysmlaiqa.api.GeminiExplanationService;
+import de.hm.sysmlaiqa.api.ModelExport;
+import de.hm.sysmlaiqa.api.ModelIndex;
+import de.hm.sysmlaiqa.api.QuickQuestions;
+import de.hm.sysmlaiqa.api.TestSuite;
+import de.hm.sysmlaiqa.core.SysmlAiQaPlugin;
+import de.hm.sysmlaiqa.data_extraction.DataExtractionService;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -55,7 +55,7 @@ public class ExplanationDialog extends JFrame {
     private volatile ModelIndex modelIndex;
     private JComboBox<String> thinkingBox;
     private final GeminiExplanationService apiService = new GeminiExplanationService();
-    private final Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
+    private final Preferences prefs = Preferences.userNodeForPackage(SysmlAiQaPlugin.class);
 
     // Einstellungen
     private JComboBox<String> modelBox;
@@ -97,7 +97,7 @@ public class ExplanationDialog extends JFrame {
         this.focusElement = focusElement;
         this.elementMode = elementMode && focusElement != null;
 
-        setTitle(SchroedingersBlockPlugin.DISPLAY_NAME + " – " + (this.elementMode
+        setTitle(SysmlAiQaPlugin.DISPLAY_NAME + " – " + (this.elementMode
                 ? "Ask AI about " + getFocusName() : "Ask AI about the model"));
         setSize(800, 900);
         setLocationRelativeTo(null);
@@ -395,20 +395,20 @@ public class ExplanationDialog extends JFrame {
 
     private void loadSettings() {
         loading = true;
-        String model = prefs.get(SchroedingersBlockPlugin.MODEL_PREF, GeminiExplanationService.DEFAULT_MODELS[0]);
+        String model = prefs.get(SysmlAiQaPlugin.MODEL_PREF, GeminiExplanationService.DEFAULT_MODELS[0]);
         for (String m : GeminiExplanationService.mergeModelLists(null, model)) modelBox.addItem(m);
         modelBox.setSelectedItem(model);
-        styleBox.setSelectedItem(prefs.get(SchroedingersBlockPlugin.DEFAULT_MODE_PREF, "Basic"));
+        styleBox.setSelectedItem(prefs.get(SysmlAiQaPlugin.DEFAULT_MODE_PREF, "Basic"));
         scopeBox.setSelectedItem(elementMode ? SCOPE_FOCUS : SCOPE_FULL);
-        thinkingBox.setSelectedItem(prefs.get(SchroedingersBlockPlugin.THINKING_PREF, "Model default"));
-        temperatureSpinner.setValue(prefs.getDouble(SchroedingersBlockPlugin.TEMPERATURE_PREF, 0.0));
-        maxTokensSpinner.setValue(prefs.getInt(SchroedingersBlockPlugin.MAX_TOKENS_PREF, 8192));
-        repetitionsSpinner.setValue(Math.max(1, Math.min(20, prefs.getInt(SchroedingersBlockPlugin.REPETITIONS_PREF, 1))));
-        groundingBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, false));
-        freshChatBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.FRESH_CHAT_PREF, true));
-        fallbackBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.FALLBACK_PREF, false));
-        requireIdsBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.REQUIRE_IDS_PREF, false));
-        cacheModelBox.setSelected(prefs.getBoolean(SchroedingersBlockPlugin.CACHE_MODEL_PREF, true));
+        thinkingBox.setSelectedItem(prefs.get(SysmlAiQaPlugin.THINKING_PREF, "Model default"));
+        temperatureSpinner.setValue(prefs.getDouble(SysmlAiQaPlugin.TEMPERATURE_PREF, 0.0));
+        maxTokensSpinner.setValue(prefs.getInt(SysmlAiQaPlugin.MAX_TOKENS_PREF, 8192));
+        repetitionsSpinner.setValue(Math.max(1, Math.min(20, prefs.getInt(SysmlAiQaPlugin.REPETITIONS_PREF, 1))));
+        groundingBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.GROUNDING_PREF, false));
+        freshChatBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.FRESH_CHAT_PREF, true));
+        fallbackBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.FALLBACK_PREF, false));
+        requireIdsBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.REQUIRE_IDS_PREF, false));
+        cacheModelBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.CACHE_MODEL_PREF, true));
         loading = false;
     }
 
@@ -419,17 +419,17 @@ public class ExplanationDialog extends JFrame {
                 || thinkingBox == null) {
             return;
         }
-        prefs.put(SchroedingersBlockPlugin.MODEL_PREF, currentModel());
-        prefs.put(SchroedingersBlockPlugin.DEFAULT_MODE_PREF, (String) styleBox.getSelectedItem());
-        prefs.put(SchroedingersBlockPlugin.THINKING_PREF, (String) thinkingBox.getSelectedItem());
-        prefs.putDouble(SchroedingersBlockPlugin.TEMPERATURE_PREF, ((Number) temperatureSpinner.getValue()).doubleValue());
-        prefs.putInt(SchroedingersBlockPlugin.MAX_TOKENS_PREF, ((Number) maxTokensSpinner.getValue()).intValue());
-        prefs.putInt(SchroedingersBlockPlugin.REPETITIONS_PREF, ((Number) repetitionsSpinner.getValue()).intValue());
-        prefs.putBoolean(SchroedingersBlockPlugin.GROUNDING_PREF, groundingBox.isSelected());
-        prefs.putBoolean(SchroedingersBlockPlugin.FRESH_CHAT_PREF, freshChatBox.isSelected());
-        prefs.putBoolean(SchroedingersBlockPlugin.FALLBACK_PREF, fallbackBox.isSelected());
-        prefs.putBoolean(SchroedingersBlockPlugin.REQUIRE_IDS_PREF, requireIdsBox.isSelected());
-        prefs.putBoolean(SchroedingersBlockPlugin.CACHE_MODEL_PREF, cacheModelBox.isSelected());
+        prefs.put(SysmlAiQaPlugin.MODEL_PREF, currentModel());
+        prefs.put(SysmlAiQaPlugin.DEFAULT_MODE_PREF, (String) styleBox.getSelectedItem());
+        prefs.put(SysmlAiQaPlugin.THINKING_PREF, (String) thinkingBox.getSelectedItem());
+        prefs.putDouble(SysmlAiQaPlugin.TEMPERATURE_PREF, ((Number) temperatureSpinner.getValue()).doubleValue());
+        prefs.putInt(SysmlAiQaPlugin.MAX_TOKENS_PREF, ((Number) maxTokensSpinner.getValue()).intValue());
+        prefs.putInt(SysmlAiQaPlugin.REPETITIONS_PREF, ((Number) repetitionsSpinner.getValue()).intValue());
+        prefs.putBoolean(SysmlAiQaPlugin.GROUNDING_PREF, groundingBox.isSelected());
+        prefs.putBoolean(SysmlAiQaPlugin.FRESH_CHAT_PREF, freshChatBox.isSelected());
+        prefs.putBoolean(SysmlAiQaPlugin.FALLBACK_PREF, fallbackBox.isSelected());
+        prefs.putBoolean(SysmlAiQaPlugin.REQUIRE_IDS_PREF, requireIdsBox.isSelected());
+        prefs.putBoolean(SysmlAiQaPlugin.CACHE_MODEL_PREF, cacheModelBox.isSelected());
     }
 
     private String currentModel() {
@@ -622,12 +622,12 @@ public class ExplanationDialog extends JFrame {
             addMessage("System", "Wait until the model export is finished.");
             return;
         }
-        JFileChooser chooser = new JFileChooser(prefs.get("schroedingersblock_last_suite_dir", System.getProperty("user.home")));
+        JFileChooser chooser = new JFileChooser(prefs.get("sysmlaiqa_last_suite_dir", System.getProperty("user.home")));
         chooser.setDialogTitle("Choose test cases (CSV)");
         chooser.setFileFilter(new FileNameExtensionFilter("CSV test cases", "csv", "txt"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         File file = chooser.getSelectedFile();
-        if (file.getParentFile() != null) prefs.put("schroedingersblock_last_suite_dir", file.getParentFile().getAbsolutePath());
+        if (file.getParentFile() != null) prefs.put("sysmlaiqa_last_suite_dir", file.getParentFile().getAbsolutePath());
 
         TestSuite suite;
         try {
@@ -642,7 +642,7 @@ public class ExplanationDialog extends JFrame {
         AskSettings base = currentSettings();
         JTextField modelsField = new JTextField(base.model, 30);
         modelsField.setToolTipText("Several models separated by commas, e.g. gemini-3.5-flash, gemini-3.1-flash-lite");
-        JSpinner pauseSpinner = new JSpinner(new SpinnerNumberModel(prefs.getInt(SchroedingersBlockPlugin.PAUSE_PREF, 0), 0, 600, 5));
+        JSpinner pauseSpinner = new JSpinner(new SpinnerNumberModel(prefs.getInt(SysmlAiQaPlugin.PAUSE_PREF, 0), 0, 600, 5));
         pauseSpinner.setToolTipText("<html>0 = no fixed pause (recommended). If Google's per-minute limit is hit,<br>"
                 + "the plugin waits exactly as long as Google says (up to 2 min) and retries automatically.</html>");
         JPanel form = new JPanel(new GridBagLayout());
@@ -681,7 +681,7 @@ public class ExplanationDialog extends JFrame {
         }
         if (models.isEmpty()) models.add(base.model);
         int pauseSec = ((Number) pauseSpinner.getValue()).intValue();
-        prefs.putInt(SchroedingersBlockPlugin.PAUSE_PREF, pauseSec);
+        prefs.putInt(SysmlAiQaPlugin.PAUSE_PREF, pauseSec);
 
         int total = suite.cases.size() * models.size() * base.repetitions;
         if (total > 1) {
@@ -897,7 +897,7 @@ public class ExplanationDialog extends JFrame {
 
     private static void logInfo(String msg) {
         try {
-            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + msg);
+            Application.getInstance().getGUILog().log(SysmlAiQaPlugin.LOG_PREFIX + msg);
         } catch (Throwable ignored) { }
     }
 
