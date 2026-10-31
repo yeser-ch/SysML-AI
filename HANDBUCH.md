@@ -31,7 +31,9 @@ Dieses Handbuch erklärt das Plugin-Fenster nach der Installation: wo jede Einst
 
 In einer **Requirement-Tabelle** erscheint beim Rechtsklick kein Eintrag. Dann die Zeile markieren und den Weg über die Menüleiste nehmen.
 
-Beim Öffnen exportiert das Plugin das Modell aus CATIA. Das dauert je nach Modellgröße einige Sekunden. Danach steht unten im Einstellungsbereich **Model ready: …**.
+Beim Öffnen exportiert das Plugin das Modell aus CATIA. Das dauert je nach Modellgröße einige Sekunden. Danach steht unten im Einstellungsbereich **Model ready: …** mit der Anzahl der Elemente und Beziehungen.
+
+![Das Plugin-Fenster in CATIA nach dem Export](docs/images/start-05-plugin-window.png)
 
 ---
 

@@ -117,7 +117,11 @@ Wer hier *No* oder *Abbrechen* klickt, wird beim ersten Öffnen des Plugins noch
 
 ### Schritt 8 – Prüfen, ob das Plugin geladen ist
 
-In CATIA **Window → Notification Window** öffnen. Dort muss eine Zeile stehen wie:
+In CATIA oben im Menü **Window → Notification Window** öffnen (oder **Strg+M**).
+
+![Menü Window → Notification Window](docs/images/start-02a-window-menu.png)
+
+Im Notification Window muss eine Zeile stehen wie:
 
 ```
 [SysML AI Q&A] Plugin loaded (version 3.1-ws2627, 17/17 diagram/table types)
@@ -137,11 +141,15 @@ Ein Projekt öffnen. Dann gibt es zwei Wege:
 
 ![Rechtsklick-Menü im Containment Tree](docs/images/start-03-context-menu.png)
 
-**Menüleiste → Ask AI** → *Ask AI about the model…*, *Ask AI about the selected element…* oder *SysML AI Q&A – API key…*. Das funktioniert auch, wenn ein Element in einer Tabelle markiert ist.
+**Menüleiste:** ganz rechts **Ask AI** → *Ask AI about the model…*, *Ask AI about the selected element…* oder *SysML AI Q&A – API key…*. Das funktioniert auch, wenn ein Element in einer Tabelle markiert ist.
 
-![Menüleiste „Ask AI“](docs/images/start-04-menu-bar.png)
+![Menüleiste mit „Ask AI“](docs/images/start-04-menu-bar.png)
 
-Es öffnet sich das Fenster **SysML AI Q&A**. Wie es funktioniert und was jede Einstellung bedeutet, steht im **[Benutzerhandbuch](HANDBUCH.md)**.
+Es öffnet sich das Fenster **SysML AI Q&A**. Das Plugin exportiert zuerst das Modell. Sobald im Einstellungsbereich **Model ready: …** steht, kann man Fragen stellen.
+
+![Das Plugin-Fenster in CATIA nach dem Export](docs/images/start-05-plugin-window.png)
+
+Wie es weitergeht und was jede Einstellung bedeutet, steht im **[Benutzerhandbuch](HANDBUCH.md)**.
 
 ---
 
