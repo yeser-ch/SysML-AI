@@ -317,7 +317,12 @@ public class ExplanationDialog extends JFrame {
         } else {
             JPanel grid = new JPanel(new GridLayout(0, 2, 4, 4));
             String focusId = focusElement == null ? null : focusElement.getID();
-            for (QuickQuestions.Question q : QuickQuestions.generate(idx, focusId, quickSeed)) {
+            // Element-Fragen, wenn nur die Umgebung eines Elements exportiert ist; sonst Fragen zum ganzen Modell
+            boolean elementQuestions = focusElement != null && !isFullScope();
+            ((javax.swing.border.TitledBorder) quickPanel.getBorder()).setTitle(elementQuestions
+                    ? "Quick questions about " + getFocusName() + " (click to insert, then edit and send)"
+                    : "Quick questions about the whole model (click to insert, then edit and send)");
+            for (QuickQuestions.Question q : QuickQuestions.generate(idx, focusId, quickSeed, elementQuestions)) {
                 String label = q.category + ": " + q.label;
                 if (label.length() > 70) label = label.substring(0, 69) + "…";
                 JButton b = new JButton(label);
@@ -328,9 +333,7 @@ public class ExplanationDialog extends JFrame {
                 grid.add(b);
             }
             JButton shuffle = new JButton("Other elements");
-            shuffle.setToolTipText(focusElement == null
-                    ? "Generate the questions again with other elements and relationships from your model."
-                    : "Generate the questions again with other related elements from your model.");
+            shuffle.setToolTipText("Generate the questions again with other elements and relationships from your model.");
             shuffle.addActionListener(e -> {
                 quickSeed = System.nanoTime();
                 refreshQuickQuestions();
