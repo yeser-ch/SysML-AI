@@ -35,8 +35,27 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
         addMenu(mngr, targetElement);
     }
 
+    // Diagnose: jeden Diagramm-/Tabellentyp einmal ins Meldungsfenster schreiben, wenn CATIA unser Menü dafür anfragt
+    private static final java.util.Set<String> LOGGED_TYPES = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    private static void logMenuRequest(DiagramPresentationElement diagram, PresentationElement[] selected, PresentationElement requestor) {
+        try {
+            String type = "?";
+            if (diagram != null) {
+                // per Reflection, damit es mit jeder CATIA-Version kompiliert
+                Object dt = diagram.getClass().getMethod("getDiagramType").invoke(diagram);
+                type = String.valueOf(dt.getClass().getMethod("getType").invoke(dt));
+            }
+            if (!LOGGED_TYPES.add(type)) return;
+            String msg = SchroedingersBlockPlugin.LOG_PREFIX + "Context menu requested in '" + type + "' (selected: "
+                    + (selected == null ? 0 : selected.length) + ", requestor: " + (requestor != null) + ")";
+            com.nomagic.magicdraw.core.Application.getInstance().getGUILog().log(msg);
+        } catch (Throwable ignored) { }
+    }
+
     @Override
     public void configure(ActionsManager mngr, DiagramPresentationElement diagram, PresentationElement[] selected, PresentationElement requestor) {
+        logMenuRequest(diagram, selected, requestor);
         Element targetElement = null;
 
         // Bestimmung auf was der Nutzer im Diagramm geklickt hat (Block oder Hintergrund)
