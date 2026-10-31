@@ -64,7 +64,7 @@ Im entpackten Ordner **`install.bat` doppelklicken**.
 
 ![Windows-Warnung beim ersten Start](docs/images/install-04-windows-warning.png)
 
-**4b – Administratorrechte.** Die Frage *„Möchten Sie zulassen, dass durch diese App Änderungen an Ihrem Gerät vorgenommen werden?“* mit **Ja** beantworten. Ohne Adminrechte kann das Plugin nicht in den CATIA-Ordner kopiert werden.
+**4b – Administratorrechte.** Die Frage *„Möchten Sie zulassen, dass durch diese App Änderungen an Ihrem Gerät vorgenommen werden?“* (App: *Windows-Befehlsprozessor*) mit **Ja** beantworten. Achtung: Vorausgewählt ist *Nein*, also nicht einfach Enter drücken. Ohne Adminrechte kann das Plugin nicht in den CATIA-Ordner kopiert werden.
 
 ![Abfrage der Administratorrechte](docs/images/install-05-uac.png)
 
