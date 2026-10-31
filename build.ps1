@@ -253,8 +253,14 @@ try {
     }
     Copy-Item (Join-Path $Repo 'resources/System_Prompt.md') (Join-Path $plug 'prompts/System_Prompt.md') -Force
     [System.IO.File]::WriteAllText((Join-Path $plug 'VERSION.txt'), $version)
-    foreach ($f in @('install.bat', 'install.ps1', 'INSTALL.md')) {
+    foreach ($f in @('install.bat', 'install.ps1', 'INSTALL.md', 'HANDBUCH.md')) {
         Copy-Item (Join-Path $Repo $f) (Join-Path $pkgDir $f) -Force
+    }
+    # Bilder der Anleitung (INSTALL.md / HANDBUCH.md verweisen auf docs/images)
+    $img = Join-Path $Repo 'docs/images'
+    if (Test-Path $img) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $pkgDir 'docs') | Out-Null
+        Copy-Item $img (Join-Path $pkgDir 'docs/images') -Recurse -Force
     }
 } catch {
     Fail "Installationspaket konnte nicht zusammengestellt werden: $($_.Exception.Message)"
