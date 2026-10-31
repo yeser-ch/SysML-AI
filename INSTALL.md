@@ -187,11 +187,19 @@ Dieselben Optionen funktionieren auch mit `update.bat`. Mit `install.bat` gehen 
 ## Neue Version an andere verteilen (Team)
 
 1. Falls sich etwas Wesentliches geändert hat: die Versionsnummer `PLUGIN_VERSION` in `src/de/hm/sysmlaiqa/api/EvaluationRecord.java` erhöhen. Sie steht in jeder Log-Zeile und im Dateinamen des Pakets.
-2. `update.bat` (oder `build.bat`) ausführen. Danach liegt das Paket unter `dist\SysML-AI-QA_v<Version>.zip`.
+2. `update.bat` (oder `build.bat`) ausführen. Danach liegt das Paket im Ordner der `update.bat` unter `dist\SysML-AI-QA_v<Version>.zip`. Den genauen Pfad zeigt die letzte grüne Zeile im schwarzen Fenster (*Installationspaket für neue Nutzer: …*).
+
+   ![Die fertige ZIP im Ordner dist](docs/images/team-01-dist-folder.png)
+
 3. Kurz in CATIA testen.
-4. Auf GitHub: **Releases → Draft a new release**.
-   - **Tag** `v<Version>` anlegen, **Target** = `feature/free-prompt-full-model`.
-   - Die ZIP per Drag & Drop anhängen, kurz notieren, was neu ist → **Publish release**.
+4. Auf GitHub: **Releases → Draft a new release** (bei einem vorhandenen Release: Release öffnen → **Stift-Symbol** rechts oben).
+   - **Tag** `v<Version>` anlegen, **Target** = `main`.
+   - Die ZIP unten in das Feld *Attach binaries by dropping them here* ziehen und warten, bis sie in der Liste erscheint.
+   - Kurz notieren, was neu ist → **Publish release** bzw. **Update release**.
+
+   ![ZIP an das Release anhängen](docs/images/team-02-release-attach.png)
+
+   Danach stehen unter *Assets* drei Dateien: die ZIP und die zwei *Source code*-Dateien, die GitHub automatisch anhängt.
 
 Die ZIP gehört **nicht** in den Code (sie steht in `.gitignore`). Sie wird nur als Release-Datei hochgeladen.
 
