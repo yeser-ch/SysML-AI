@@ -71,7 +71,8 @@ function Test-CatiaDir($d) {
     if (-not $d -or -not (Test-Path $d)) { return $false }
     if ((Test-Path (Join-Path $d 'lib/md.jar')) -or (Test-Path (Join-Path $d 'lib/md_api.jar'))) { return $true }
     $lib = Join-Path $d 'lib'
-    if (-not (Test-Path (Join-Path $d 'bin')) -or -not (Test-Path $lib)) { return $false }
+    # 'plugins' unterscheidet CATIA von anderen Java-Programmen (z. B. einem JDK, das auch bin + lib hat)
+    if (-not (Test-Path (Join-Path $d 'bin')) -or -not (Test-Path $lib) -or -not (Test-Path (Join-Path $d 'plugins'))) { return $false }
     return [bool](Get-ChildItem -LiteralPath $lib -Recurse -Filter '*.jar' -File -ErrorAction SilentlyContinue | Select-Object -First 1)
 }
 
@@ -268,6 +269,16 @@ if (-not $PluginDir) {
 New-Item -ItemType Directory -Force -Path $PluginDir | Out-Null
 Ok "Plugin-Ordner: $PluginDir"
 
+# Schreibrechte prüfen (C:\Program Files braucht Administratorrechte)
+try {
+    $probe = Join-Path $PluginDir '.write-test'
+    [System.IO.File]::WriteAllText($probe, 'x')
+    Remove-Item $probe -Force
+} catch {
+    Fail ("Keine Schreibrechte im Plugin-Ordner '$PluginDir'.`n" +
+          "   Bitte build.bat mit Rechtsklick -> 'Als Administrator ausführen' starten.")
+}
+
 # Läuft CATIA noch? (Die JAR ist dann gesperrt)
 function Get-CatiaProcess {
     Get-Process -ErrorAction SilentlyContinue | Where-Object {
@@ -306,7 +317,11 @@ try {
         Copy-Item $newPrompt $installedPrompt -Force
     }
 } catch {
-    Fail "Kopieren fehlgeschlagen: $($_.Exception.Message)`n   Ist CATIA wirklich geschlossen?"
+    $msg = $_.Exception.Message
+    if ($msg -match 'verweigert|denied|UnauthorizedAccess') {
+        Fail "Kopieren fehlgeschlagen: $msg`n   Bitte build.bat mit Rechtsklick -> 'Als Administrator ausführen' starten (und CATIA geschlossen lassen)."
+    }
+    Fail "Kopieren fehlgeschlagen: $msg`n   Ist CATIA wirklich geschlossen?"
 }
 
 Write-Host ''
