@@ -91,7 +91,7 @@ public final class EvaluationLog {
                 }
             }
         } catch (IOException ex) {
-            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Archivierung fehlgeschlagen: " + ex.getMessage());
+            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Archiving failed: " + ex.getMessage());
         }
     }
 
@@ -113,7 +113,7 @@ public final class EvaluationLog {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return true;
         } catch (IOException e) {
-            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Log konnte nicht geschrieben werden: " + e.getMessage());
+            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Could not write log: " + e.getMessage());
             return false;
         }
     }

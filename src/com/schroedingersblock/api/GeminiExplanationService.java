@@ -163,7 +163,7 @@ public class GeminiExplanationService implements ExplanationService {
         boolean daily = false;
         for (String model : models) {
             if (s.allowFallback && !CIRCUIT.isAvailable(model)) {
-                log("Überspringe " + model + " (kurzzeitig gesperrt nach Fehler)");
+                log("Skipping " + model + " (temporarily blocked after an error)");
                 continue;
             }
 
@@ -244,7 +244,7 @@ public class GeminiExplanationService implements ExplanationService {
                     .GET().build();
             HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) {
-                log("Modellliste nicht abrufbar (HTTP " + resp.statusCode() + ")");
+                log("Could not load model list (HTTP " + resp.statusCode() + ")");
                 return result;
             }
             String json = resp.body();
@@ -264,7 +264,7 @@ public class GeminiExplanationService implements ExplanationService {
             }
             Collections.sort(result);
         } catch (Exception e) {
-            log("Modellliste nicht abrufbar: " + e.getMessage());
+            log("Could not load model list: " + e.getMessage());
         }
         return result;
     }
@@ -329,7 +329,7 @@ public class GeminiExplanationService implements ExplanationService {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .timeout(REQUEST_TIMEOUT)
                 .build();
-        log("Lade Modell für " + model + " hoch (Cache, gültig " + (CACHE_TTL_SEC / 60) + " min) …");
+        log("Uploading model for " + model + " (cache, valid " + (CACHE_TTL_SEC / 60) + " min) ...");
         Sent sent = sendWithRateLimit(req, model, s, stats);
         if (sent.response == null) {
             r.message = "Model upload failed (" + sent.error + ") – model is sent with each question instead.";
@@ -351,7 +351,7 @@ public class GeminiExplanationService implements ExplanationService {
             }
             r.name = nm.group(1);
             r.created = true;
-            log("Modell hochgeladen: " + r.name + " (" + extractInt(resp, "totalTokenCount") + " Tokens)");
+            log("Model uploaded: " + r.name + " (" + extractInt(resp, "totalTokenCount") + " tokens)");
             return r;
         }
         // Caching nicht möglich (z. B. Free Tier für dieses Modell, Modell zu klein) -> inline bis "Resend model"
@@ -405,7 +405,7 @@ public class GeminiExplanationService implements ExplanationService {
                     overloadAttempt++;
                     if (overloadAttempt <= 3) {
                         int wait = 5 * overloadAttempt; // 5 s, 10 s, 15 s
-                        log(model + ": überlastet (HTTP " + resp.statusCode() + "), neuer Versuch in " + wait + " s (" + overloadAttempt + "/3)");
+                        log(model + ": overloaded (HTTP " + resp.statusCode() + "), retrying in " + wait + " s (" + overloadAttempt + "/3)");
                         Thread.sleep(wait * 1000L);
                         stats.waitedSec += wait;
                         continue;
@@ -431,7 +431,7 @@ public class GeminiExplanationService implements ExplanationService {
                     out.error = "Rate limit for " + model + " (HTTP 429, Google suggests waiting " + wait + " s). " + apiMsg;
                     return out;
                 }
-                log(model + ": Rate-Limit pro Minute, warte " + wait + " s (Versuch " + attempt + "/" + s.max429Retries + ")");
+                log(model + ": per-minute rate limit, waiting " + wait + " s (attempt " + attempt + "/" + s.max429Retries + ")");
                 Thread.sleep((wait + 1) * 1000L);
                 stats.waitedSec += wait + 1;
             } catch (InterruptedException ie) {
@@ -464,7 +464,7 @@ public class GeminiExplanationService implements ExplanationService {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .timeout(REQUEST_TIMEOUT)
                 .build();
-        log("Sende Frage an " + model + " (" + String.format("%.1f", body.length() / 1024.0) + " KB) …");
+        log("Sending question to " + model + " (" + String.format("%.1f", body.length() / 1024.0) + " KB) ...");
         long t0 = System.currentTimeMillis();
         Sent sent = sendWithRateLimit(request, model, s, stats);
         if (sent.response == null) {
@@ -494,8 +494,8 @@ public class GeminiExplanationService implements ExplanationService {
             a.modelVersion = extractString(resp, "modelVersion");
             a.cachedTokens = extractInt(resp, "cachedContentTokenCount");
             a.thoughtsTokens = extractInt(resp, "thoughtsTokenCount");
-            log(model + " (" + a.modelVersion + ") antwortete in " + (System.currentTimeMillis() - t0) + " ms, Tokens in/out: "
-                    + a.promptTokens + "/" + a.answerTokens + (a.cachedTokens > 0 ? ", davon aus Cache: " + a.cachedTokens : ""));
+            log(model + " (" + a.modelVersion + ") answered in " + (System.currentTimeMillis() - t0) + " ms, Tokens in/out: "
+                    + a.promptTokens + "/" + a.answerTokens + (a.cachedTokens > 0 ? ", from cache: " + a.cachedTokens : ""));
             result.answer = a;
             return result;
         }
