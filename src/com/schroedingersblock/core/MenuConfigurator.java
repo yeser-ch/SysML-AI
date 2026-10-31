@@ -22,6 +22,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
 //im Strukturbaum (Containment Tree)
     @Override
     public void configure(ActionsManager mngr, Tree tree) {
+        if (LOGGED_TYPES.add("Containment tree")) log("Context menu requested in 'Containment tree'");
         Element targetElement = null;
 
         // BEstimmung auf was der Nutzer im Strukturbaum geklickt hat
@@ -39,16 +40,35 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
     private static final java.util.Set<String> LOGGED_TYPES = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     private static void logMenuRequest(DiagramPresentationElement diagram, PresentationElement[] selected, PresentationElement requestor) {
-        try {
-            String type = "?";
-            if (diagram != null) {
-                // per Reflection, damit es mit jeder CATIA-Version kompiliert
+        String type = "unknown";
+        if (diagram != null) {
+            // Typname per Reflection (damit es mit jeder CATIA-Version kompiliert); Fallbacks, falls das scheitert
+            try {
                 Object dt = diagram.getClass().getMethod("getDiagramType").invoke(diagram);
                 type = String.valueOf(dt.getClass().getMethod("getType").invoke(dt));
+            } catch (Throwable t1) {
+                try {
+                    type = String.valueOf(diagram.getClass().getMethod("getHumanType").invoke(diagram));
+                } catch (Throwable t2) {
+                    type = diagram.getClass().getSimpleName();
+                }
             }
-            if (!LOGGED_TYPES.add(type)) return;
-            String msg = SchroedingersBlockPlugin.LOG_PREFIX + "Context menu requested in '" + type + "' (selected: "
-                    + (selected == null ? 0 : selected.length) + ", requestor: " + (requestor != null) + ")";
+        }
+        if (!LOGGED_TYPES.add(type)) return;
+        String target = "-";
+        try {
+            if (requestor != null && requestor.getElement() != null) target = requestor.getElement().getHumanName();
+            else if (selected != null && selected.length > 0 && selected[0] != null && selected[0].getElement() != null)
+                target = selected[0].getElement().getHumanName();
+        } catch (Throwable ignored) { }
+        log("Context menu requested in '" + type + "' (selected: " + (selected == null ? 0 : selected.length)
+                + ", clicked: " + target + ")");
+    }
+
+    private static void log(String text) {
+        String msg = SchroedingersBlockPlugin.LOG_PREFIX + text;
+        System.out.println(msg);
+        try {
             com.nomagic.magicdraw.core.Application.getInstance().getGUILog().log(msg);
         } catch (Throwable ignored) { }
     }
