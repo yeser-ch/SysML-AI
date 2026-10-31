@@ -185,24 +185,37 @@ public class ShowExplanationAction extends MDAction {
         diag.append(" | table=").append(table.getClass().getName()).append(" model=")
                 .append(table.getModel().getClass().getName()).append(" row=").append(row);
         if (row < 0) return null;
-        // a) Methoden des Tabellenmodells, die eine Zeile in ein Objekt übersetzen
+        // a) Was in der markierten Zeile ANGEZEIGT wird (zuverlässig, gleiche Zeilenzählung wie auf dem Bildschirm).
+        //    Zuerst die Spalte "Name", dann die übrigen Spalten.
+        int nameCol = -1;
+        for (int col = 0; col < table.getColumnCount(); col++) {
+            try {
+                if ("Name".equalsIgnoreCase(String.valueOf(table.getColumnName(col)).trim())) { nameCol = col; break; }
+            } catch (Throwable ignored) { }
+        }
+        java.util.List<Integer> cols = new java.util.ArrayList<>();
+        if (nameCol >= 0) cols.add(nameCol);
+        for (int col = 0; col < table.getColumnCount(); col++) if (col != nameCol) cols.add(col);
+        for (int col : cols) {
+            Object v = null;
+            try { v = table.getValueAt(row, col); } catch (Throwable ignored) { }
+            if (diag.length() < 600) diag.append(" col").append(col).append("=").append(v == null ? "null" : v.getClass().getName());
+            Element el = asElement(v, 0);
+            if (el != null) return el;
+        }
+        // b) Fallback: Methoden des Tabellenmodells (Zeilenzählung kann hier abweichen)
         int modelRow = row;
         try { modelRow = table.convertRowIndexToModel(row); } catch (Throwable ignored) { }
         Object model = table.getModel();
-        for (String m : new String[]{"getRowElement", "getElementAt", "getRowObject", "getObjectAt", "getRow", "getRowValue", "getNodeForRow", "getValueAt"}) {
+        for (String m : new String[]{"getRowElement", "getElementAt", "getRowObject", "getObjectAt", "getRowValue", "getNodeForRow"}) {
             try {
                 java.lang.reflect.Method meth = model.getClass().getMethod(m, int.class);
                 Element el = asElement(meth.invoke(model, modelRow), 0);
-                if (el != null) return el;
+                if (el != null) {
+                    diag.append(" via model.").append(m);
+                    return el;
+                }
             } catch (Throwable ignored) { }
-        }
-        // b) Zellwerte der Zeile
-        for (int col = 0; col < table.getColumnCount(); col++) {
-            Object v = null;
-            try { v = table.getValueAt(row, col); } catch (Throwable ignored) { }
-            if (col < 4) diag.append(" col").append(col).append("=").append(v == null ? "null" : v.getClass().getName());
-            Element el = asElement(v, 0);
-            if (el != null) return el;
         }
         return null;
     }
