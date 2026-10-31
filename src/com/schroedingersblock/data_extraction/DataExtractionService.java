@@ -50,11 +50,11 @@ public class DataExtractionService {
         GUILog log = Application.getInstance().getGUILog();
 
         if (currentProject == null) {
-            log.log("[DataExtractionService] Fehler: Kein aktives Projekt übergeben.");
+            log.log("[DataExtractionService] Error: no active project.");
             return null;
         }
         if (scope == Scope.FOCUS_NEIGHBOURHOOD && focusElement == null) {
-            log.log("[DataExtractionService] Kein Element ausgewählt – exportiere stattdessen das ganze Modell.");
+            log.log("[DataExtractionService] No element selected - exporting the whole model instead.");
             scope = Scope.FULL_MODEL;
         }
 
@@ -62,11 +62,11 @@ public class DataExtractionService {
             File baseDir = getBaseDirectory(currentProject);
             boolean full = scope == Scope.FULL_MODEL;
             String selectedTemplate = full ? TEMPLATE_NAME_FULL : TEMPLATE_NAME_PARTIAL;
-            log.log("[DataExtractionService] Starte JSON-Export (" + scope + ", Template " + selectedTemplate + ")");
+            log.log("[DataExtractionService] Starting JSON export (" + scope + ", Template " + selectedTemplate + ")");
 
             File templateFile = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + selectedTemplate);
             if (!templateFile.exists()) {
-                log.log("[DataExtractionService] Fehler: Template nicht gefunden unter: " + templateFile.getAbsolutePath());
+                log.log("[DataExtractionService] Error: template not found: " + templateFile.getAbsolutePath());
                 return null;
             }
 
@@ -74,7 +74,7 @@ public class DataExtractionService {
             // Der Plugin-Ordner liegt oft unter C:\Program Files und ist ohne Administratorrechte schreibgeschützt.
             File targetDir = getExportDirectory();
             if (!targetDir.exists() && !targetDir.mkdirs()) {
-                log.log("[DataExtractionService] Fehler: Zielordner konnte nicht erstellt werden: " + targetDir.getAbsolutePath());
+                log.log("[DataExtractionService] Error: could not create folder: " + targetDir.getAbsolutePath());
                 return null;
             }
 
@@ -89,13 +89,13 @@ public class DataExtractionService {
 
                 if (full) {
                     // Kein "element" im Kontext -> das Flat-Template läuft über das gesamte Primärmodell.
-                    log.log("[DataExtractionService] Scope: gesamtes Modell");
+                    log.log("[DataExtractionService] Scope: whole model");
                 } else {
                     engine.addContext("centerElement", focusElement);
                     engine.addContext("maxDependencyDepth", 5);
                     engine.addContext("maxSiblingDepth", 3);
                     engine.addContext("maxSiblingOwnedDepth", 0);
-                    log.log("[DataExtractionService] Scope: Umgebung von " + focusElement.getHumanName());
+                    log.log("[DataExtractionService] Scope: surroundings of " + focusElement.getHumanName());
                 }
 
                 Template template = engine.createTemplate(templateFile, outputFile);
@@ -103,7 +103,7 @@ public class DataExtractionService {
                 engine.setProperty("output.encoding", "UTF-8");
                 engine.evaluate(template);
 
-                log.log("[DataExtractionService] Erfolgreich: " + outputFile.getAbsolutePath()
+                log.log("[DataExtractionService] Done: " + outputFile.getAbsolutePath()
                         + " (" + String.format("%.2f", outputFile.length() / 1024.0) + " KB)");
             } finally {
                 engine.destroy();
@@ -111,7 +111,7 @@ public class DataExtractionService {
             return outputFile;
 
         } catch (Exception e) {
-            log.log("[DataExtractionService] Fehler beim Export: " + e.getMessage());
+            log.log("[DataExtractionService] Export error: " + e.getMessage());
             e.printStackTrace();
             return null;
         }

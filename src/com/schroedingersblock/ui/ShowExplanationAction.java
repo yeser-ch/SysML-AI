@@ -102,7 +102,7 @@ public class ShowExplanationAction extends MDAction {
         if (!apiKey.isEmpty()) {
             new ExplanationDialog(focus, elementMode).setVisible(true);
         } else {
-            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + "Info: Abgebrochen, da kein API-Key hinterlegt wurde.");
+            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + "Cancelled: no API key configured.");
         }
     }
 

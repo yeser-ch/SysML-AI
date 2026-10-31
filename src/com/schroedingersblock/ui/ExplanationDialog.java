@@ -339,16 +339,10 @@ public class ExplanationDialog extends JFrame {
                 b.addActionListener(e -> insertQuickQuestion(q.text));
                 grid.add(b);
             }
-            JButton shuffle = new JButton("Other elements");
-            shuffle.setToolTipText("Generate the questions again with other elements and relationships from your model.");
-            shuffle.addActionListener(e -> {
-                quickSeed = System.nanoTime();
-                refreshQuickQuestions();
-            });
-            JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-            south.add(shuffle);
             quickPanel.add(grid, BorderLayout.CENTER);
-            quickPanel.add(south, BorderLayout.SOUTH);
+            JLabel hint = new JLabel("Fill in the parts in <angle brackets> (the first one is selected when you click), then send.");
+            hint.setForeground(Color.GRAY);
+            quickPanel.add(hint, BorderLayout.SOUTH);
         }
         quickPanel.revalidate();
         quickPanel.repaint();

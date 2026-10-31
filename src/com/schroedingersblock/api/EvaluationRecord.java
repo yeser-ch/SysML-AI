@@ -8,7 +8,7 @@ import java.util.List;
 /** Ein Datensatz = eine Antwort mit vollständigem Versuchsaufbau (eine Zeile im Log). */
 public class EvaluationRecord {
 
-    public static final String PLUGIN_VERSION = "2.6-ws2627";
+    public static final String PLUGIN_VERSION = "2.7-ws2627";
 
     public String runId = "chat";
     public String testId = "";
