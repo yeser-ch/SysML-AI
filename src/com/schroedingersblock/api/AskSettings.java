@@ -14,6 +14,8 @@ public class AskSettings {
     public boolean allowFallback = false;    // bei Überlastung automatisch anderes Modell nutzen
     public boolean requireIds = false;       // KI soll Element-IDs als [id:...] angeben (Halluzinations-Check)
     public int repetitions = 1;              // wie oft jede Frage gestellt wird (Konsistenz)
+    /** Denktiefe des Modells: "default", "minimal", "low", "medium", "high". Weniger = schneller, evtl. schlechter. */
+    public String thinkingLevel = "default";
     public boolean cacheModel = true;        // Modell einmal hochladen (Gemini-Cache) statt bei jeder Frage mitschicken
     public int max429WaitSec = 30;           // bei Rate-Limit (pro Minute) höchstens so lange auf Google warten
     public int max429Retries = 2;            // so oft nach einem Rate-Limit erneut versuchen
@@ -31,6 +33,7 @@ public class AskSettings {
         c.requireIds = requireIds;
         c.repetitions = repetitions;
         c.cacheModel = cacheModel;
+        c.thinkingLevel = thinkingLevel;
         c.max429WaitSec = max429WaitSec;
         c.max429Retries = max429Retries;
         c.scope = scope;

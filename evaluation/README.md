@@ -32,7 +32,7 @@ Ordner `Dokumente/SysML-AI-QA/` (Button „Open results“):
 | `archive/prompts/<sha>.md` | System-Prompt im Wortlaut, Dateiname = `system_prompt_sha` |
 | `archive/exports/<sha>.json` | Modell-Export, Dateiname = `export_sha` |
 
-Wichtige Spalten: `model_used`, `model_version` (**tatsächlich antwortendes Modell** – Google leitet Aliase um, z. B. `gemini-3.5-flash` → `gemini-3.6-flash`; für den Modellvergleich diese Spalte nehmen), `model_transfer` (`inline` / `cache` / `cache_new`), `cached_tokens`, `temperature`, `system_prompt_sha`, `export_sha`, `export_elements`, `export_relations`, `prompt_tokens`, `answer_tokens`, `finish_reason` (`MAX_TOKENS` = abgeschnitten), `duration_s`.
+Wichtige Spalten: `model_used`, `model_version` (**tatsächlich antwortendes Modell** – Google leitet Aliase um, z. B. `gemini-3.5-flash` → `gemini-3.6-flash`; für den Modellvergleich diese Spalte nehmen), `model_transfer` (`inline` / `cache` / `cache_new`), `cached_tokens`, `temperature`, `system_prompt_sha`, `export_sha`, `export_elements`, `export_relations`, `prompt_tokens`, `answer_tokens`, `finish_reason` (`MAX_TOKENS` = abgeschnitten), `duration_s`, `thinking_level` / `thinking_used` / `thoughts_tokens` (Denktiefe: eingestellt / tatsächlich / verbrauchte Denk-Tokens).
 
 **Bewertung:** Die Spalten `rating` und `rating_notes` sind leer – dort tragt ihr eure Bewertung ein. Das Schema legt ihr selbst fest (z. B. `correct / partial / wrong / hallucinated / correctly_refused`). Es sollte vor dem ersten Lauf feststehen und von zwei Personen unabhängig angewendet werden.
 
@@ -56,4 +56,4 @@ Grenzen:
 - Der Schalter **verändert den Prompt** (andere `system_prompt_sha`). Innerhalb eines Experiments konstant lassen. Ob die ID-Pflicht die Antwortqualität verändert, wäre eine eigene Versuchsfrage.
 
 ## 5. Reproduzierbarkeit
-Zwei Antworten sind nur dann direkt vergleichbar, wenn `system_prompt_sha`, `export_sha`, `model_version`, `temperature`, `max_tokens`, `grounding` und `require_ids` gleich sind. `model_transfer` (Cache oder inline) ändert den Gesprächsaufbau nicht – sollte sich trotzdem ein Unterschied zeigen, ist das eine Beobachtung wert. Variiert pro Experiment genau **eine** Größe, z. B. nur `model_used` oder nur das Testmodell.
+Zwei Antworten sind nur dann direkt vergleichbar, wenn `system_prompt_sha`, `export_sha`, `model_version`, `thinking_used`, `temperature`, `max_tokens`, `grounding` und `require_ids` gleich sind. `model_transfer` (Cache oder inline) ändert den Gesprächsaufbau nicht – sollte sich trotzdem ein Unterschied zeigen, ist das eine Beobachtung wert. Variiert pro Experiment genau **eine** Größe, z. B. nur `model_used` oder nur das Testmodell.

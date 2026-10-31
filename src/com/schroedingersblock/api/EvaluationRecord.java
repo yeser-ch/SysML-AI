@@ -8,7 +8,7 @@ import java.util.List;
 /** Ein Datensatz = eine Antwort mit vollständigem Versuchsaufbau (eine Zeile im Log). */
 public class EvaluationRecord {
 
-    public static final String PLUGIN_VERSION = "2.2-ws2627";
+    public static final String PLUGIN_VERSION = "2.3-ws2627";
 
     public String runId = "chat";
     public String testId = "";
@@ -40,6 +40,7 @@ public class EvaluationRecord {
                 a == null ? "false" : String.valueOf(a.success),
                 a == null || a.finishReason == null ? "" : a.finishReason,
                 s.detailLevel, String.valueOf(s.temperature), String.valueOf(s.maxOutputTokens),
+                s.thinkingLevel, a == null ? "" : a.thinkingUsed,
                 String.valueOf(s.grounding), String.valueOf(s.freshChat), String.valueOf(s.requireIds), s.scope,
                 focusElement == null ? "" : focusElement, systemPromptSha,
                 export == null ? "" : export.file.getName(), export == null ? "" : export.sha,
@@ -49,6 +50,7 @@ public class EvaluationRecord {
                 a == null ? "" : a.transfer,
                 a == null ? "" : String.valueOf(a.promptTokens), a == null ? "" : String.valueOf(a.cachedTokens),
                 a == null ? "" : String.valueOf(a.answerTokens),
+                a == null ? "" : String.valueOf(a.thoughtsTokens),
                 a == null ? "" : String.format("%.2f", a.durationMs / 1000.0),
                 a == null ? "" : String.valueOf(a.rateLimitWaitSec),
                 idCheck == null ? "" : String.valueOf(idCheck.cited.size()),

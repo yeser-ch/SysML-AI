@@ -44,6 +44,7 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static final String REPETITIONS_PREF = "schroedingersblock_repetitions";
     public static final String PAUSE_PREF = "schroedingersblock_batch_pause_s";
     public static final String CACHE_MODEL_PREF = "schroedingersblock_cache_model";
+    public static final String THINKING_PREF = "schroedingersblock_thinking";
     public static final String SETTINGS_VERSION_PREF = "schroedingersblock_settings_version";
 
     @Override
@@ -91,7 +92,20 @@ public class SchroedingersBlockPlugin extends Plugin {
                 "SysML Use Case Diagram",
                 "SysML Requirement Diagram",
                 "SysML Activity Diagram",
-                "SysML Parametric Diagram"
+                "SysML Parametric Diagram",
+                // Tabellen und Matrizen (Typnamen je nach Version unterschiedlich – unbekannte Namen schaden nicht)
+                "Requirement Table",
+                "Generic Table",
+                "Instance Table",
+                "Glossary Table",
+                "Metric Table",
+                "Dependency Matrix",
+                "Requirement Matrix",
+                "Satisfy Requirement Matrix",
+                "Verify Requirement Matrix",
+                "Refine Requirement Matrix",
+                "Derive Requirement Matrix",
+                "Allocation Matrix"
         };
 
         // Zusätzlich für ALLE Diagrammtypen anmelden (deckt z. B. Requirement-Diagramme ab, deren Typname je nach
@@ -108,8 +122,9 @@ public class SchroedingersBlockPlugin extends Plugin {
                 // Suche nach dem Tools-Menü
                 ActionsCategory toolsMenu = (ActionsCategory) manager.getActionFor("TOOLS");
                 if (toolsMenu != null) {
-                    // "Ask AI about the model" auch ohne Rechtsklick erreichbar (fragt zum ganzen Modell)
-                    toolsMenu.addAction(new ShowExplanationAction(null));
+                    // Auch ohne Rechtsklick erreichbar (z. B. aus Tabellen): Auswahl wird beim Klick ermittelt
+                    toolsMenu.addAction(new ShowExplanationAction(null, false, true));
+                    toolsMenu.addAction(new ShowExplanationAction(null, true, true));
                     // Einstellungs-Action (API-Key)
                     toolsMenu.addAction(new OpenSettingsAction());
                 }

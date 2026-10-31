@@ -70,6 +70,8 @@ public class GeminiExplanationService implements ExplanationService {
     private final Map<String, CacheEntry> caches = new HashMap<>();
     // KI-Modelle, bei denen Caching abgelehnt wurde (z. B. Free Tier) -> bis "Resend model" inline
     private final Map<String, String> cacheUnsupported = new HashMap<>();
+    // KI-Modelle, die eine bestimmte Denktiefe ablehnen (Schlüssel: Modell|Stufe)
+    private final Set<String> thinkingUnsupported = new HashSet<>();
 
     private static class CacheEntry {
         final String name;        // cachedContents/...
@@ -184,8 +186,16 @@ public class GeminiExplanationService implements ExplanationService {
                 }
             }
 
-            // 2. Frage senden
-            Attempt a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName), apiKey, s, stats);
+            // 2. Frage senden (Denktiefe wie eingestellt; lehnt das Modell sie ab, einmal ohne)
+            String thinking = effectiveThinking(model, s.thinkingLevel);
+            Attempt a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats);
+            if (a.answer == null && !"default".equals(thinking) && a.error != null && a.error.toLowerCase().contains("think")) {
+                synchronized (thinkingUnsupported) { thinkingUnsupported.add(model + "|" + thinking); }
+                note = (note.isEmpty() ? "" : note + " ") + model + " does not support thinking level \"" + thinking
+                        + "\" – used the model's default instead.";
+                thinking = "default";
+                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats);
+            }
             if (a.cacheMissing && cacheName != null) {
                 // Cache bei Google abgelaufen/gelöscht -> einmal neu hochladen
                 forgetCache(cacheKey(model, exportSha, promptSha, s.grounding));
@@ -193,7 +203,7 @@ public class GeminiExplanationService implements ExplanationService {
                 cacheName = cr.name;
                 transfer = cacheName != null ? "cache_new" : "inline";
                 if (cacheName == null) note = cr.message;
-                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName), apiKey, s, stats);
+                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats);
             }
 
             if (a.answer != null) {
@@ -204,6 +214,8 @@ public class GeminiExplanationService implements ExplanationService {
                         a.answer.promptTokens, a.answer.answerTokens, a.answer.finishReason);
                 res.modelVersion = a.answer.modelVersion;
                 res.cachedTokens = a.answer.cachedTokens;
+                res.thoughtsTokens = a.answer.thoughtsTokens;
+                res.thinkingUsed = thinking;
                 res.transfer = transfer;
                 res.rateLimitWaitSec = stats.waitedSec;
                 res.note = note;
@@ -481,6 +493,7 @@ public class GeminiExplanationService implements ExplanationService {
                     extractInt(resp, "promptTokenCount"), extractInt(resp, "candidatesTokenCount"), finish);
             a.modelVersion = extractString(resp, "modelVersion");
             a.cachedTokens = extractInt(resp, "cachedContentTokenCount");
+            a.thoughtsTokens = extractInt(resp, "thoughtsTokenCount");
             log(model + " (" + a.modelVersion + ") antwortete in " + (System.currentTimeMillis() - t0) + " ms, Tokens in/out: "
                     + a.promptTokens + "/" + a.answerTokens + (a.cachedTokens > 0 ? ", davon aus Cache: " + a.cachedTokens : ""));
             result.answer = a;
@@ -514,7 +527,15 @@ public class GeminiExplanationService implements ExplanationService {
      * Mit Cache: nur Verlauf + Frage (System-Prompt, Modell und Tools liegen im Cache – die API erlaubt sie
      * dann nicht zusätzlich in der Anfrage). Ohne Cache: System-Prompt + Modell + Verlauf + Frage.
      */
-    private String buildRequestBody(AskSettings s, String systemPrompt, String modelTurn, String questionTurn, String cacheName) {
+    private String effectiveThinking(String model, String requested) {
+        String t = requested == null ? "default" : requested.toLowerCase();
+        synchronized (thinkingUnsupported) {
+            return thinkingUnsupported.contains(model + "|" + t) ? "default" : t;
+        }
+    }
+
+    private String buildRequestBody(AskSettings s, String systemPrompt, String modelTurn, String questionTurn, String cacheName,
+                                    String thinking) {
         List<String> contents = new ArrayList<>();
         if (cacheName == null) contents.add(modelTurn);
         contents.addAll(conversationHistory);
@@ -530,8 +551,11 @@ public class GeminiExplanationService implements ExplanationService {
         sb.append("\"contents\":[").append(String.join(",", contents)).append("],");
         sb.append("\"generationConfig\":{")
                 .append("\"temperature\":").append(s.temperature).append(",")
-                .append("\"maxOutputTokens\":").append(s.maxOutputTokens)
-                .append("}}");
+                .append("\"maxOutputTokens\":").append(s.maxOutputTokens);
+        if (thinking != null && !"default".equals(thinking)) {
+            sb.append(",\"thinkingConfig\":{\"thinkingLevel\":\"").append(escapeJson(thinking)).append("\"}");
+        }
+        sb.append("}}");
         return sb.toString();
     }
 

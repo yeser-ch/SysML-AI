@@ -24,6 +24,8 @@ import com.schroedingersblock.api.EvaluationRecord;
 import com.schroedingersblock.api.ExplanationService;
 import com.schroedingersblock.api.GeminiExplanationService;
 import com.schroedingersblock.api.ModelExport;
+import com.schroedingersblock.api.ModelIndex;
+import com.schroedingersblock.api.QuickQuestions;
 import com.schroedingersblock.api.TestSuite;
 import com.schroedingersblock.core.SchroedingersBlockPlugin;
 import com.schroedingersblock.data_extraction.DataExtractionService;
@@ -46,21 +48,12 @@ public class ExplanationDialog extends JFrame {
     private static final String SCOPE_FULL = "Whole model";
     private static final String SCOPE_FOCUS = "Selected element + surroundings";
 
-    /** Schnellfragen: {Kategorie, Button-Text, Frage-Vorlage}. Platzhalter <...> werden markiert. */
-    private static final String[][] QUICK_QUESTIONS = {
-            {"General", "Model overview", "Give an overview of the model: its main system, subsystems, requirements and how they are connected."},
-            {"General", "Explain selection", "Explain <element> and all its relationships in the model."},
-            {"A · Retrieval", "Who satisfies…?", "Which component satisfies the requirement <requirement>?"},
-            {"A · Retrieval", "Requirement list", "List all requirements and the model elements that satisfy them."},
-            {"B · Structure", "Indirect links", "Which components are directly or indirectly connected to <element>? Show the path for each."},
-            {"B · Structure", "Change impact", "If <element> changes, which other elements are affected and why?"},
-            {"C · Semantics", "Does satisfy prove it?", "Does the satisfy relationship of <requirement> prove that the requirement is actually fulfilled? Explain."},
-            {"C · Semantics", "Meaning of relation", "What does the relationship between <element A> and <element B> mean technically?"},
-            {"D · Uncertainty", "Is it verifiable?", "Can it be verified from the model whether <requirement> is met? Which information is missing?"},
-            {"D · Uncertainty", "Missing data", "Is there enough information in the model to answer the following? If not, say what is missing: <question>"},
-    };
-
     private final Element focusElement;
+    private final boolean elementMode;   // true = "Ask AI about this element" (nur Umgebung des Elements)
+    private JPanel quickPanel;
+    private long quickSeed = System.nanoTime();
+    private volatile ModelIndex modelIndex;
+    private JComboBox<String> thinkingBox;
     private final GeminiExplanationService apiService = new GeminiExplanationService();
     private final Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
 
@@ -93,9 +86,19 @@ public class ExplanationDialog extends JFrame {
     private boolean loading = false;
 
     public ExplanationDialog(Element focusElement) {
-        this.focusElement = focusElement;
+        this(focusElement, false);
+    }
 
-        setTitle(SchroedingersBlockPlugin.DISPLAY_NAME + " – Ask AI about the model");
+    /**
+     * @param elementMode true: Fragen zu einem Element – es wird nur das Element mit seiner Umgebung exportiert
+     *                    (kleiner, schneller). false: ganzes Modell.
+     */
+    public ExplanationDialog(Element focusElement, boolean elementMode) {
+        this.focusElement = focusElement;
+        this.elementMode = elementMode && focusElement != null;
+
+        setTitle(SchroedingersBlockPlugin.DISPLAY_NAME + " – " + (this.elementMode
+                ? "Ask AI about " + getFocusName() : "Ask AI about the model"));
         setSize(800, 900);
         setLocationRelativeTo(null);
         setAlwaysOnTop(true);
@@ -144,7 +147,7 @@ public class ExplanationDialog extends JFrame {
 
     private JComponent createHeader() {
         JPanel header = new JPanel(new BorderLayout());
-        JLabel title = new JLabel("Ask the AI about your SysML model");
+        JLabel title = new JLabel(elementMode ? "Ask the AI about this element" : "Ask the AI about your SysML model");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
         header.add(title, BorderLayout.NORTH);
 
@@ -187,11 +190,17 @@ public class ExplanationDialog extends JFrame {
 
         // Zeile 1: Kontext + Temperatur
         scopeBox = new JComboBox<>(focusElement == null ? new String[]{SCOPE_FULL} : new String[]{SCOPE_FULL, SCOPE_FOCUS});
-        scopeBox.setToolTipText("Which part of the model is sent to the AI. 'Whole model' sends everything except SysML/UML libraries.");
+        scopeBox.setToolTipText("<html>Which part of the model is sent to the AI.<br>'Whole model': everything except SysML/UML libraries.<br>"
+                + "'Selected element + surroundings': only the element, its owners, neighbours and relations (smaller, faster).</html>");
         temperatureSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0.0, 2.0, 0.1));
         temperatureSpinner.setToolTipText("0 = most deterministic (recommended for evaluation). Higher = more varied answers.");
         temperatureSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 1, "Context:", scopeBox, "Temperature:", temperatureSpinner);
+        thinkingBox = new JComboBox<>(new String[]{"Model default", "Minimal", "Low", "Medium", "High"});
+        thinkingBox.setToolTipText("<html>How much the AI \"thinks\" before answering. Less thinking = faster answers,<br>"
+                + "but possibly worse reasoning about indirect links. Keep it constant within an experiment<br>"
+                + "(it is logged). Not every model supports every level – then the model default is used.</html>");
+        thinkingBox.addActionListener(e -> saveSettings());
+        addRow(p, c, 1, "Context:", scopeBox, "Thinking:", thinkingBox);
 
         // Zeile 2: Optionen + Max Tokens
         groundingBox = new JCheckBox("Grounding");
@@ -218,7 +227,7 @@ public class ExplanationDialog extends JFrame {
         maxTokensSpinner = new JSpinner(new SpinnerNumberModel(8192, 256, 65536, 256));
         maxTokensSpinner.setToolTipText("Maximum length of the answer (incl. internal reasoning of thinking models).");
         maxTokensSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 2, "Options:", checks, "Max tokens:", maxTokensSpinner);
+        addRow(p, c, 2, "Options:", checks, "Temperature:", temperatureSpinner);
 
         // Zeile 3: Evaluation – ID-Check, Testlauf, Wiederholungen
         requireIdsBox = new JCheckBox("Cite element IDs (hallucination check)");
@@ -243,7 +252,7 @@ public class ExplanationDialog extends JFrame {
         repetitionsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 20, 1));
         repetitionsSpinner.setToolTipText("How often each question is asked (each time in a new chat). >1 shows how consistent the answers are.");
         repetitionsSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 3, "Evaluation:", evalRow, "Repetitions:", repetitionsSpinner);
+        addRow(p, c, 3, "Evaluation:", evalRow, "Max tokens:", maxTokensSpinner);
 
         // Zeile 4: Status + Buttons
         exportStatusLabel = new JLabel("Exporting model …");
@@ -266,7 +275,10 @@ public class ExplanationDialog extends JFrame {
 
         c.gridy = 4; c.gridx = 0; c.gridwidth = 2; c.weightx = 1;
         p.add(exportStatusLabel, c);
-        c.gridx = 2; c.gridwidth = 2; c.weightx = 0;
+        c.gridwidth = 1;
+        c.gridx = 2; c.weightx = 0; p.add(new JLabel("Repetitions:"), c);
+        c.gridx = 3; c.weightx = 0.3; p.add(repetitionsSpinner, c);
+        c.gridy = 5; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
         p.add(buttons, c);
         c.gridwidth = 1;
 
@@ -287,19 +299,49 @@ public class ExplanationDialog extends JFrame {
     }
 
     private JComponent createQuickQuestionPanel() {
-        JPanel p = new JPanel(new GridLayout(0, 2, 4, 4));
-        p.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(),
-                "Quick questions (click to insert, then edit and send)", TitledBorder.LEFT, TitledBorder.TOP));
-        p.setAlignmentX(Component.LEFT_ALIGNMENT);
-        for (String[] q : QUICK_QUESTIONS) {
-            JButton b = new JButton(q[0] + ": " + q[1]);
-            b.setHorizontalAlignment(SwingConstants.LEFT);
-            b.setMargin(new Insets(2, 6, 2, 6));
-            b.setToolTipText(q[2]);
-            b.addActionListener(e -> insertQuickQuestion(q[2]));
-            p.add(b);
+        quickPanel = new JPanel(new BorderLayout(4, 4));
+        quickPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(),
+                "Quick questions about your model (click to insert, then edit and send)", TitledBorder.LEFT, TitledBorder.TOP));
+        quickPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        quickPanel.add(new JLabel("Questions are generated from your model after the export …"), BorderLayout.CENTER);
+        return quickPanel;
+    }
+
+    /** Baut die Schnellfragen aus echten Elementen und Beziehungen des exportierten Modells. */
+    private void refreshQuickQuestions() {
+        if (quickPanel == null) return;
+        quickPanel.removeAll();
+        ModelIndex idx = modelIndex;
+        if (idx == null || idx.elements.isEmpty()) {
+            quickPanel.add(new JLabel("No model data yet."), BorderLayout.CENTER);
+        } else {
+            JPanel grid = new JPanel(new GridLayout(0, 2, 4, 4));
+            String focusId = focusElement == null ? null : focusElement.getID();
+            for (QuickQuestions.Question q : QuickQuestions.generate(idx, focusId, quickSeed)) {
+                String label = q.category + ": " + q.label;
+                if (label.length() > 70) label = label.substring(0, 69) + "…";
+                JButton b = new JButton(label);
+                b.setHorizontalAlignment(SwingConstants.LEFT);
+                b.setMargin(new Insets(2, 6, 2, 6));
+                b.setToolTipText("<html><div style='width:420px'>" + escapeHtml(q.text) + "</div></html>");
+                b.addActionListener(e -> insertQuickQuestion(q.text));
+                grid.add(b);
+            }
+            JButton shuffle = new JButton("Other elements");
+            shuffle.setToolTipText(focusElement == null
+                    ? "Generate the questions again with other elements and relationships from your model."
+                    : "Generate the questions again with other related elements from your model.");
+            shuffle.addActionListener(e -> {
+                quickSeed = System.nanoTime();
+                refreshQuickQuestions();
+            });
+            JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+            south.add(shuffle);
+            quickPanel.add(grid, BorderLayout.CENTER);
+            quickPanel.add(south, BorderLayout.SOUTH);
         }
-        return p;
+        quickPanel.revalidate();
+        quickPanel.repaint();
     }
 
     private JComponent createInputPanel() {
@@ -353,8 +395,8 @@ public class ExplanationDialog extends JFrame {
         for (String m : GeminiExplanationService.mergeModelLists(null, model)) modelBox.addItem(m);
         modelBox.setSelectedItem(model);
         styleBox.setSelectedItem(prefs.get(SchroedingersBlockPlugin.DEFAULT_MODE_PREF, "Basic"));
-        String scope = prefs.get(SchroedingersBlockPlugin.SCOPE_PREF, SCOPE_FULL);
-        scopeBox.setSelectedItem(focusElement == null ? SCOPE_FULL : scope);
+        scopeBox.setSelectedItem(elementMode ? SCOPE_FOCUS : SCOPE_FULL);
+        thinkingBox.setSelectedItem(prefs.get(SchroedingersBlockPlugin.THINKING_PREF, "Model default"));
         temperatureSpinner.setValue(prefs.getDouble(SchroedingersBlockPlugin.TEMPERATURE_PREF, 0.0));
         maxTokensSpinner.setValue(prefs.getInt(SchroedingersBlockPlugin.MAX_TOKENS_PREF, 8192));
         repetitionsSpinner.setValue(Math.max(1, Math.min(20, prefs.getInt(SchroedingersBlockPlugin.REPETITIONS_PREF, 1))));
@@ -369,12 +411,13 @@ public class ExplanationDialog extends JFrame {
     private void saveSettings() {
         if (loading || modelBox == null || styleBox == null || scopeBox == null || temperatureSpinner == null
                 || maxTokensSpinner == null || repetitionsSpinner == null || groundingBox == null
-                || freshChatBox == null || fallbackBox == null || requireIdsBox == null || cacheModelBox == null) {
+                || freshChatBox == null || fallbackBox == null || requireIdsBox == null || cacheModelBox == null
+                || thinkingBox == null) {
             return;
         }
         prefs.put(SchroedingersBlockPlugin.MODEL_PREF, currentModel());
         prefs.put(SchroedingersBlockPlugin.DEFAULT_MODE_PREF, (String) styleBox.getSelectedItem());
-        if (focusElement != null) prefs.put(SchroedingersBlockPlugin.SCOPE_PREF, (String) scopeBox.getSelectedItem());
+        prefs.put(SchroedingersBlockPlugin.THINKING_PREF, (String) thinkingBox.getSelectedItem());
         prefs.putDouble(SchroedingersBlockPlugin.TEMPERATURE_PREF, ((Number) temperatureSpinner.getValue()).doubleValue());
         prefs.putInt(SchroedingersBlockPlugin.MAX_TOKENS_PREF, ((Number) maxTokensSpinner.getValue()).intValue());
         prefs.putInt(SchroedingersBlockPlugin.REPETITIONS_PREF, ((Number) repetitionsSpinner.getValue()).intValue());
@@ -408,6 +451,8 @@ public class ExplanationDialog extends JFrame {
         s.requireIds = requireIdsBox.isSelected();
         s.repetitions = ((Number) repetitionsSpinner.getValue()).intValue();
         s.cacheModel = cacheModelBox.isSelected();
+        String th = (String) thinkingBox.getSelectedItem();
+        s.thinkingLevel = th == null || th.startsWith("Model") ? "default" : th.toLowerCase();
         s.scope = isFullScope() ? "FULL_MODEL" : "FOCUS_NEIGHBOURHOOD";
         return s;
     }
@@ -477,6 +522,8 @@ public class ExplanationDialog extends JFrame {
                         addMessage("System", "Error: model export failed (see CATIA log window).");
                     } else {
                         export = ex;
+                        modelIndex = ModelIndex.parse(ex.json);
+                        refreshQuickQuestions();
                         apiService.resetConversation();     // neue Modelldaten -> neuer Chat
                         apiService.discardUploadedModel();  // alter Upload ungültig -> nächste Frage lädt neu hoch
                         String info = String.format("Model ready: %d elements · %d relations · %.0f KB · ~%,d tokens · export %s",
@@ -772,6 +819,7 @@ public class ExplanationDialog extends JFrame {
         meta.append(modelLabel(a.modelUsed, a)).append(String.format(" · %.1f s", a.durationMs / 1000.0));
         if (a.promptTokens >= 0) meta.append(String.format(" · %,d → %,d tokens", a.promptTokens, a.answerTokens));
         if (a.cachedTokens > 0) meta.append(String.format(" (%,d from cache)", a.cachedTokens));
+        if (a.thoughtsTokens > 0) meta.append(String.format(" · %,d thinking tokens", a.thoughtsTokens));
         if (a.rateLimitWaitSec > 0) meta.append(" · waited ").append(a.rateLimitWaitSec).append(" s");
         if (!a.modelUsed.equals(r.settings.model)) meta.append(" · <b>fallback model!</b>");
 
