@@ -62,8 +62,34 @@ public class ShowExplanationAction extends MDAction {
             return;
         }
 
-        Element focus = focusElement;
-        if (resolveSelectionOnClick) focus = currentSelection();
+        if (resolveSelectionOnClick) {
+            // Liegt der Fokus in einer Tabelle, CATIAs eigenes "Select in Containment Tree" (Alt+B) auslösen
+            // und danach die Auswahl im Modellbaum lesen – zuverlässiger als die Tabelle selbst auszulesen.
+            java.awt.Component focusOwner = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+            if (isInTable(focusOwner)) {
+                clearTreeSelection(); // damit eindeutig ist, ob Alt+B etwas ausgewählt hat
+                pressAltB(focusOwner);
+                // zweimal invokeLater: CATIA wählt im Baum ggf. selbst erst per invokeLater aus
+                javax.swing.SwingUtilities.invokeLater(() -> javax.swing.SwingUtilities.invokeLater(() -> {
+                    Object after = treeSelectionObject();
+                    Element el = after instanceof Element ? (Element) after : null;
+                    if (el != null) {
+                        logInfo("Selected table row via 'Select in Containment Tree': " + el.getHumanName());
+                        proceed(el);
+                    } else {
+                        logInfo("'Select in Containment Tree' did not change the tree selection - reading the table instead.");
+                        proceed(currentSelection());
+                    }
+                }));
+                return;
+            }
+            proceed(currentSelection());
+        } else {
+            proceed(focusElement);
+        }
+    }
+
+    private void proceed(Element focus) {
         if (elementMode && focus == null) {
             try {
                 Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX
@@ -108,6 +134,58 @@ public class ShowExplanationAction extends MDAction {
         } else {
             Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + "Cancelled: no API key configured.");
         }
+    }
+
+    private static boolean isInTable(java.awt.Component c) {
+        for (; c != null; c = c.getParent()) {
+            if (c instanceof javax.swing.JTree) return false; // Modellbaum: Auswahl direkt lesbar
+            if (c instanceof javax.swing.JTable) return true;
+            String n = c.getClass().getName().toLowerCase();
+            if (n.contains("table") || n.contains("grid")) return true;
+        }
+        return false;
+    }
+
+    /** Simuliert Alt+B ("Select in Containment Tree") auf der fokussierten Komponente. */
+    private static void pressAltB(java.awt.Component target) {
+        try {
+            long now = System.currentTimeMillis();
+            int alt = java.awt.event.InputEvent.ALT_DOWN_MASK;
+            target.dispatchEvent(new java.awt.event.KeyEvent(target, java.awt.event.KeyEvent.KEY_PRESSED, now, alt,
+                    java.awt.event.KeyEvent.VK_B, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+            target.dispatchEvent(new java.awt.event.KeyEvent(target, java.awt.event.KeyEvent.KEY_RELEASED, now + 1, alt,
+                    java.awt.event.KeyEvent.VK_B, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+        } catch (Throwable t) {
+            logInfo("Could not trigger 'Select in Containment Tree': " + t);
+        }
+    }
+
+    private static void clearTreeSelection() {
+        try {
+            Object project = Application.getInstance().getProject();
+            Object tree = call(call(project, "getBrowser"), "getContainmentTree");
+            Object jtree = call(tree, "getTree");
+            if (jtree instanceof javax.swing.JTree) ((javax.swing.JTree) jtree).clearSelection();
+        } catch (Throwable ignored) { }
+    }
+
+    /** Aktuell im Containment Tree ausgewähltes Objekt (oder null). */
+    private static Object treeSelectionObject() {
+        try {
+            Object project = Application.getInstance().getProject();
+            Object browser = call(project, "getBrowser");
+            Object tree = call(browser, "getContainmentTree");
+            Object node = call(tree, "getSelectedNode");
+            return call(node, "getUserObject");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static void logInfo(String msg) {
+        try {
+            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + msg);
+        } catch (Throwable ignored) { }
     }
 
     /**
