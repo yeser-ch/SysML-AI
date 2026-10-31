@@ -23,11 +23,15 @@ Dauer: etwa 5 Minuten.
 
 ### Schritt 1 – Paket herunterladen
 
-Im GitHub-Repository rechts auf **Releases** klicken. Bei der neuesten Version unter *Assets* die Datei **`SysML-AI-QA_v….zip`** anklicken. Sie landet im Ordner *Downloads*.
+Im GitHub-Repository rechts unter **Releases** auf die neueste Version klicken (mit dem grünen Schild *Latest*).
 
-![GitHub Releases mit der ZIP-Datei](docs/images/install-01-github-release.png)
+![Releases rechts auf der Startseite des Repositorys](docs/images/install-01-github-release.png)
 
-> Nicht die Dateien *Source code (zip)* nehmen. Darin ist nur der Quellcode, keine fertige JAR.
+Auf der Release-Seite unten bei **Assets** die Datei **`SysML-AI-QA_v….zip`** anklicken. Sie landet im Ordner *Downloads*.
+
+![Assets mit der ZIP-Datei](docs/images/install-01b-assets.png)
+
+> **Nicht** *Source code (zip)* oder *Source code (tar.gz)* nehmen. Diese beiden Dateien hängt GitHub automatisch an. Darin ist nur der Quellcode ohne fertiges Plugin, und `install.bat` meldet dann *„fehlen Dateien“*.
 
 ### Schritt 2 – ZIP entpacken
 
@@ -35,7 +39,7 @@ Im Explorer **Rechtsklick auf die ZIP-Datei → Alle extrahieren… → Extrahie
 
 ![Rechtsklick auf die ZIP und „Alle extrahieren“](docs/images/install-02-extract.png)
 
-Es öffnet sich ein Ordner `SysML-AI-QA_v…` mit diesem Inhalt:
+Es öffnet sich ein Ordner `SysML-AI-QA_v…`. Darin liegen unter anderem `install` (*Windows-Batchdatei*) und `install` (*Windows PowerShell-Skript*). Windows blendet die Endungen `.bat` und `.ps1` oft aus. Gestartet wird die **Windows-Batchdatei**.
 
 ![Entpackter Ordner mit install.bat](docs/images/install-03-folder.png)
 
@@ -56,7 +60,7 @@ CATIA komplett beenden, auch weitere geöffnete CATIA-Fenster. Solange CATIA lä
 
 Im entpackten Ordner **`install.bat` doppelklicken**.
 
-**4a – Windows-Warnung (nur manchmal).** Weil die Datei aus dem Internet kommt, kann Windows warnen. Dann **Weitere Informationen** → **Trotzdem ausführen** klicken (bzw. **Ausführen**).
+**4a – Windows-Warnung.** Weil die Datei aus dem Internet kommt, warnt Windows meist: *„Der Herausgeber konnte nicht verifiziert werden. Möchten Sie diese Software ausführen?“* → **Ausführen** klicken. (Bei der Variante *„Der Computer wurde durch Windows geschützt“*: **Weitere Informationen** → **Trotzdem ausführen**.)
 
 ![Windows-Warnung beim ersten Start](docs/images/install-04-windows-warning.png)
 
