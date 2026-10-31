@@ -41,3 +41,6 @@ target/
 
 ### Build-Skript ###
 build/
+
+### Installationspaket ###
+dist/

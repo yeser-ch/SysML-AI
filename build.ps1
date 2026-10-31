@@ -5,14 +5,16 @@
     1. findet die CATIA-Installation (für die Bibliotheken),
     2. findet ein Java JDK (javac),
     3. kompiliert den Code in src\ zu build\schroedingers-block.jar,
-    4. kopiert JAR, plugin.xml, Export-Templates und System-Prompt in den Plugin-Ordner von CATIA
-       (die alte JAR wird als .bak gesichert).
+    4. legt ein Installationspaket an: dist\SysML-AI-QA_v<Version>.zip
+       (für neue Nutzer: entpacken, install.bat doppelklicken – ohne Java, ohne Git),
+    5. installiert das Paket mit install.ps1 in CATIA
+       (die alte JAR wird als .bak gesichert, ein geänderter System-Prompt bleibt erhalten).
 
   Optionen (nur falls die automatische Suche nicht klappt):
     build.bat -CatiaDir "C:\Program Files\...\CATIA Magic ... 2026x"
-    build.bat -PluginDir "C:\Users\<du>\AppData\Local\.magic.systems.of.systems.architect\2026x\plugins\com.schroedingersblock.plugin"
+    build.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\com.schroedingersblock.plugin"
     build.bat -JdkDir "C:\Program Files\Eclipse Adoptium\jdk-21..."
-    build.bat -NoInstall      (nur bauen, nichts kopieren)
+    build.bat -NoInstall      (nur bauen und Paket erstellen, nichts installieren)
 #>
 param(
     [string]$CatiaDir = "",
@@ -64,7 +66,7 @@ if (-not (Test-Path (Join-Path $Repo 'src'))) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Step '1/5  CATIA-Installation suchen'
+Step '1/6  CATIA-Installation suchen'
 # ─────────────────────────────────────────────────────────────────────────────
 # CATIA Magic / Magic Systems of Systems Architect / Cameo: Hauptordner enthält 'bin' und 'lib' (mit .jar-Dateien)
 function Test-CatiaDir($d) {
@@ -117,7 +119,7 @@ if (-not $CatiaDir) {
 Ok "CATIA: $CatiaDir"
 
 # ─────────────────────────────────────────────────────────────────────────────
-Step '2/5  Java JDK suchen (javac, mindestens Version 17)'
+Step '2/6  Java JDK suchen (javac, mindestens Version 17)'
 # ─────────────────────────────────────────────────────────────────────────────
 function Get-JdkMajor($jdk) {
     $javac = Join-Path $jdk ("bin/javac" + $ExeSuffix)
@@ -161,7 +163,7 @@ $JarTool = Join-Path $Jdk ("bin/jar" + $ExeSuffix)
 Ok "JDK: $Jdk (Java $JdkMajor)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-Step '3/5  Code kompilieren'
+Step '3/6  Code kompilieren'
 # ─────────────────────────────────────────────────────────────────────────────
 Push-Location $Repo
 $previousCwd = [System.IO.Directory]::GetCurrentDirectory()
@@ -218,7 +220,7 @@ try {
     Ok 'Kompiliert.'
 
     # ─────────────────────────────────────────────────────────────────────────
-    Step '4/5  JAR erstellen'
+    Step '4/6  JAR erstellen'
     # ─────────────────────────────────────────────────────────────────────────
     $jarPath = Join-Path $buildDir $JarName
     if (Test-Path $jarPath) { Remove-Item $jarPath -Force }
@@ -230,102 +232,60 @@ try {
     Pop-Location
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+Step '5/6  Installationspaket erstellen'
+# ─────────────────────────────────────────────────────────────────────────────
+$version = 'dev'
+$verSrc = Join-Path $Repo 'src/com/schroedingersblock/api/EvaluationRecord.java'
+if ((Test-Path $verSrc) -and ((Get-Content $verSrc -Raw) -match 'PLUGIN_VERSION\s*=\s*"([^"]+)"')) { $version = $Matches[1] }
+$pkgName = "SysML-AI-QA_v$version"
+$pkgRoot = Join-Path $Repo 'build/package'
+$pkgDir = Join-Path $pkgRoot $pkgName
+$plug = Join-Path $pkgDir 'plugin'
+try {
+    if (Test-Path $pkgRoot) { Remove-Item $pkgRoot -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path (Join-Path $plug 'data_extraction') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $plug 'prompts') | Out-Null
+    Copy-Item (Join-Path $Repo "build/$JarName") (Join-Path $plug $JarName) -Force
+    Copy-Item (Join-Path $Repo 'plugin.xml') (Join-Path $plug 'plugin.xml') -Force
+    foreach ($vm in @('sysml_flat_export.vm', 'sysml_partial_export.vm')) {
+        Copy-Item (Join-Path $Repo "src/com/schroedingersblock/data_extraction/$vm") (Join-Path $plug "data_extraction/$vm") -Force
+    }
+    Copy-Item (Join-Path $Repo 'installer/ressources/System_Prompt.md') (Join-Path $plug 'prompts/System_Prompt.md') -Force
+    [System.IO.File]::WriteAllText((Join-Path $plug 'VERSION.txt'), $version)
+    foreach ($f in @('install.bat', 'install.ps1', 'INSTALL.md')) {
+        Copy-Item (Join-Path $Repo $f) (Join-Path $pkgDir $f) -Force
+    }
+} catch {
+    Fail "Installationspaket konnte nicht zusammengestellt werden: $($_.Exception.Message)"
+}
+
+# ZIP für die Weitergabe (ein Fehler hier verhindert die Installation nicht)
+try {
+    $distDir = Join-Path $Repo 'dist'
+    New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+    $zipPath = Join-Path $distDir "$pkgName.zip"
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($pkgDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+    Ok ("Paket: $zipPath  ({0:N0} KB)" -f ((Get-Item $zipPath).Length / 1KB))
+    Info 'Diese ZIP an neue Nutzer weitergeben (z. B. GitHub -> Releases). Sie brauchen kein Java und kein Git.'
+} catch {
+    Warn "ZIP konnte nicht erstellt werden: $($_.Exception.Message)"
+}
+
 if ($NoInstall) {
     Write-Host ''
-    Ok 'Fertig (nur gebaut, nichts installiert).'
+    Ok 'Fertig (gebaut und Paket erstellt, nichts installiert).'
     exit 0
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Step '5/5  In CATIA installieren'
+Step '6/6  In CATIA installieren (install.ps1)'
 # ─────────────────────────────────────────────────────────────────────────────
-if (-not $PluginDir) {
-    $pluginCandidates = New-Object System.Collections.Generic.List[string]
-    $pluginCandidates.Add((Join-Path $CatiaDir "plugins/$PluginId"))
-    foreach ($base in @($env:LOCALAPPDATA, $env:APPDATA, $HOME) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique) {
-        foreach ($magic in Get-ChildItem -LiteralPath $base -Directory -Force -Filter '.magic*' -ErrorAction SilentlyContinue) {
-            foreach ($ver in Get-ChildItem -LiteralPath $magic.FullName -Directory -Force -ErrorAction SilentlyContinue) {
-                $pluginCandidates.Add((Join-Path $ver.FullName "plugins/$PluginId"))
-            }
-        }
-    }
-    $existing = @($pluginCandidates | Select-Object -Unique | Where-Object { Test-Path (Join-Path $_ $JarName) })
-    if ($existing.Count -gt 0) {
-        # Der Ordner mit der zuletzt geänderten JAR ist der, den du benutzt
-        $PluginDir = $existing | Sort-Object { (Get-Item (Join-Path $_ $JarName)).LastWriteTime } -Descending | Select-Object -First 1
-        if ($existing.Count -gt 1) {
-            Info 'Mehrere Plugin-Ordner gefunden (genommen wird der mit der neuesten JAR):'
-            $existing | ForEach-Object { Info "  - $_" }
-        }
-    }
-}
-if (-not $PluginDir) {
-    Warn 'Das installierte Plugin wurde nicht gefunden.'
-    Info "Suche im Explorer nach dem Ordner '$PluginId' (z. B. unter %LOCALAPPDATA%\.magic.systems.of.systems.architect\2026x\plugins)."
-    $PluginDir = Ask "Pfad zum Ordner '$PluginId' einfügen (oder leer lassen zum Abbrechen)"
-    if (-not $PluginDir) { Fail "Kein Plugin-Ordner. Die JAR liegt unter build\$JarName." }
-    if ((Split-Path $PluginDir -Leaf) -ne $PluginId) { $PluginDir = Join-Path $PluginDir $PluginId }
-}
-New-Item -ItemType Directory -Force -Path $PluginDir | Out-Null
-Ok "Plugin-Ordner: $PluginDir"
-
-# Schreibrechte prüfen (C:\Program Files braucht Administratorrechte)
-try {
-    $probe = Join-Path $PluginDir '.write-test'
-    [System.IO.File]::WriteAllText($probe, 'x')
-    Remove-Item $probe -Force
-} catch {
-    Fail ("Keine Schreibrechte im Plugin-Ordner '$PluginDir'.`n" +
-          "   Bitte build.bat mit Rechtsklick -> 'Als Administrator ausführen' starten.")
-}
-
-# Läuft CATIA noch? (Die JAR ist dann gesperrt)
-function Get-CatiaProcess {
-    Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        try { $_.Path -and (Fwd $_.Path).StartsWith((Fwd $CatiaDir), [System.StringComparison]::OrdinalIgnoreCase) } catch { $false }
-    }
-}
-while (Get-CatiaProcess) {
-    Warn 'CATIA läuft noch. Bitte CATIA komplett schließen.'
-    if ($NonInteractive) { Fail 'CATIA läuft noch.' }
-    [void](Ask 'Danach Enter drücken')
-}
-
-$targetJar = Join-Path $PluginDir $JarName
-try {
-    if (Test-Path $targetJar) {
-        Copy-Item $targetJar "$targetJar.bak" -Force
-        Info "Alte JAR gesichert: $JarName.bak"
-    }
-    Copy-Item (Join-Path $Repo "build/$JarName") $targetJar -Force
-    Copy-Item (Join-Path $Repo 'plugin.xml') (Join-Path $PluginDir 'plugin.xml') -Force
-
-    $dx = Join-Path $PluginDir 'data_extraction'
-    New-Item -ItemType Directory -Force -Path $dx | Out-Null
-    foreach ($vm in @('sysml_flat_export.vm', 'sysml_partial_export.vm')) {
-        Copy-Item (Join-Path $Repo "src/com/schroedingersblock/data_extraction/$vm") (Join-Path $dx $vm) -Force
-    }
-
-    $promptsDir = Join-Path $PluginDir 'prompts'
-    New-Item -ItemType Directory -Force -Path $promptsDir | Out-Null
-    $newPrompt = Join-Path $Repo 'installer/ressources/System_Prompt.md'
-    $installedPrompt = Join-Path $promptsDir 'System_Prompt.md'
-    if ((Test-Path $installedPrompt) -and ((Get-FileHash $installedPrompt).Hash -ne (Get-FileHash $newPrompt).Hash)) {
-        Copy-Item $newPrompt "$installedPrompt.new" -Force
-        Warn 'System_Prompt.md wurde von euch geändert und bleibt erhalten. Neue Version liegt daneben als System_Prompt.md.new.'
-    } else {
-        Copy-Item $newPrompt $installedPrompt -Force
-    }
-} catch {
-    $msg = $_.Exception.Message
-    if ($msg -match 'verweigert|denied|UnauthorizedAccess') {
-        Fail "Kopieren fehlgeschlagen: $msg`n   Bitte build.bat mit Rechtsklick -> 'Als Administrator ausführen' starten (und CATIA geschlossen lassen)."
-    }
-    Fail "Kopieren fehlgeschlagen: $msg`n   Ist CATIA wirklich geschlossen?"
-}
-
-Write-Host ''
-Ok 'Fertig! Das neue Plugin ist installiert.'
-Info 'Jetzt CATIA starten -> Rechtsklick auf ein Element -> "Ask AI about the model..."'
-Info "Zurück zur alten Version: $JarName.bak im Plugin-Ordner wieder in $JarName umbenennen."
-exit 0
+$installArgs = @{ CatiaDir = $CatiaDir; SourceDir = $plug }
+if ($PluginDir) { $installArgs.PluginDir = $PluginDir }
+if ($NonInteractive) { $installArgs.NonInteractive = $true }
+& (Join-Path $Repo 'install.ps1') @installArgs
+exit $LASTEXITCODE

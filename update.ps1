@@ -35,8 +35,19 @@ Write-Host ("   Geladen: {0:dd.MM.yyyy HH:mm}" -f (Get-Date)) -ForegroundColor G
 & (Join-Path $src.FullName 'build.ps1') @args
 $code = $LASTEXITCODE
 
-# Neueste Version von update.bat/update.ps1 neben die eigene Datei legen (falls sie sich geändert hat)
-foreach ($f in @('update.bat', 'update.ps1', 'build.bat', 'build.ps1')) {
+# Installationspaket (ZIP für neue Nutzer) aus dem temporären Ordner in den eigenen Ordner dist\ übernehmen
+$zips = @(Get-ChildItem -LiteralPath (Join-Path $src.FullName 'dist') -Filter '*.zip' -File -ErrorAction SilentlyContinue)
+if ($zips.Count -gt 0) {
+    $dist = Join-Path $PSScriptRoot 'dist'
+    try {
+        New-Item -ItemType Directory -Force -Path $dist | Out-Null
+        foreach ($z in $zips) { Copy-Item $z.FullName (Join-Path $dist $z.Name) -Force }
+        Write-Host "   Installationspaket für neue Nutzer: $(Join-Path $dist $zips[0].Name)" -ForegroundColor Green
+    } catch { }
+}
+
+# Neueste Version der Skripte neben die eigene Datei legen (falls sie sich geändert hat)
+foreach ($f in @('update.bat', 'update.ps1', 'build.bat', 'build.ps1', 'install.bat', 'install.ps1', 'INSTALL.md')) {
     try { Copy-Item (Join-Path $src.FullName $f) (Join-Path $PSScriptRoot $f) -Force -ErrorAction Stop } catch { }
 }
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
