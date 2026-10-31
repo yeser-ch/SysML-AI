@@ -1,4 +1,4 @@
-# Änderungen WS 2026/27 – „Ask the model“
+# Änderungen WS 2026/27 – „SysML AI Q&A“ (Weiterentwicklung von Schrödinger's Block)
 
 Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Commit 2606f7d)
 
@@ -6,14 +6,14 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 
 | Vorher | Jetzt |
 |---|---|
-| Rechtsklick → „Element View“ / „Model View“, danach RUN mit festem Prompt | Rechtsklick → **„Ask the model…“** (auch unter *Tools*), Frage frei eintippen |
+| Rechtsklick → „Schrödinger's Block“ → „Element View“ / „Model View“, danach RUN mit festem Prompt | Rechtsklick → **„Ask AI about the model…“** (direkt im Menü, auch unter *Tools*), Frage frei eintippen. Sichtbarer Name des Werkzeugs: **SysML AI Q&A** (interne Namen bleiben `schroedingersblock`, damit Updates und gespeicherte Einstellungen funktionieren) |
 | 4 feste Prompt-Dateien (Basic/Expert × Element/Model View) | 1 editierbarer System-Prompt `prompts/System_Prompt.md` + eigene Frage |
 | Auch „Model View“ exportierte nur einen Ausschnitt (Tiefe 5) | Standard: **ganzes Modell** (`sysml_flat_export.vm`); Ausschnitt optional wählbar |
 | Einstellungen verteilt (Tools → Settings), Modell/Temperatur fest im Code | **Alles in einem Fenster**: Modell, Antwortstil, Kontext, Temperatur, Max Tokens, Grounding, neuer Chat pro Frage, Fallback |
 | Grounding standardmäßig an, erzwingt `gemini-2.5-flash-lite` | Grounding standardmäßig **aus**, erzwingt kein Modell |
 | Stiller Wechsel auf andere Modelle bei Überlastung | Nur wenn „Fallback model“ angehakt; antwortendes Modell wird immer angezeigt |
 | – | **Schnellfragen** nach Kategorien A–D (Retrieval, Struktur, Semantik, Unsicherheit) |
-| – | **Evaluations-Log** mit vollständigem Versuchsaufbau (Prüfsummen von Prompt, Export, Antwort; Archiv) in `Dokumente/SchroedingersBlock/` |
+| – | **Evaluations-Log** mit vollständigem Versuchsaufbau (Prüfsummen von Prompt, Export, Antwort; Archiv) in `Dokumente/SysML-AI-QA/` |
 | – | **Testläufe aus CSV** („Run test suite…“), auch für mehrere Modelle nacheinander, mit Pause gegen Rate-Limits |
 | – | **Wiederholungen** pro Frage (Konsistenz-Messung) |
 | – | **ID-Check**: KI nennt Element-IDs, Plugin erkennt erfundene IDs |
@@ -43,7 +43,7 @@ Einmalig: Java JDK 17 oder neuer installieren (z. B. Eclipse Temurin 21 von http
 1. Diesen Branch holen (`git checkout feature/free-prompt-full-model` + `git pull`, oder als ZIP herunterladen).
 2. CATIA schließen.
 3. **`build.bat` doppelklicken.** Das Skript findet CATIA, das JDK und den Plugin-Ordner, kompiliert, baut `schroedingers-block.jar` und kopiert alles in den Plugin-Ordner (alte JAR → `.bak`).
-4. CATIA starten → Rechtsklick auf ein Element → „Schrödinger's Block“ → „Ask the model…“.
+4. CATIA starten → Rechtsklick auf ein Element → **„Ask AI about the model…“**.
 
 Nach jeder Code-Änderung: CATIA schließen, `build.bat` erneut ausführen.
 Falls die automatische Suche nicht klappt: `build.bat -CatiaDir "<CATIA-Ordner>" -PluginDir "<Plugin-Ordner>"`. Nur bauen: `build.bat -NoInstall`.

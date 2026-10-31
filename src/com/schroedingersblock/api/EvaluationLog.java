@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Protokolliert jede Frage/Antwort mit dem kompletten Versuchsaufbau.
  *
- * Ordner: Dokumente/SchroedingersBlock/
+ * Ordner: Dokumente/SysML-AI-QA/
  *   answers_log.csv          – alle Antworten (Chat und Testläufe)
  *   runs/run_<id>.csv        – eine Datei pro Testlauf (gleiche Spalten, zum Bewerten)
  *   archive/prompts/<sha>.md – jeder verwendete System-Prompt im Wortlaut
@@ -40,7 +40,7 @@ public final class EvaluationLog {
     private EvaluationLog() { }
 
     public static File getBaseDir() {
-        return new File(System.getProperty("user.home"), "Documents" + File.separator + "SchroedingersBlock");
+        return new File(System.getProperty("user.home"), "Documents" + File.separator + "SysML-AI-QA");
     }
 
     public static File getLogFile() {
@@ -91,7 +91,7 @@ public final class EvaluationLog {
                 }
             }
         } catch (IOException ex) {
-            System.err.println("[Schrödinger's Block] Archivierung fehlgeschlagen: " + ex.getMessage());
+            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Archivierung fehlgeschlagen: " + ex.getMessage());
         }
     }
 
@@ -113,7 +113,7 @@ public final class EvaluationLog {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return true;
         } catch (IOException e) {
-            System.err.println("[Schrödinger's Block] Log konnte nicht geschrieben werden: " + e.getMessage());
+            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Log konnte nicht geschrieben werden: " + e.getMessage());
             return false;
         }
     }

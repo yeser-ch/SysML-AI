@@ -305,7 +305,7 @@ public class GeminiExplanationService implements ExplanationService {
 
         StringBuilder body = new StringBuilder("{");
         body.append("\"model\":\"models/").append(escapeJson(model)).append("\",");
-        body.append("\"displayName\":\"SchroedingersBlock ").append(exportSha).append("\",");
+        body.append("\"displayName\":\"SysML-AI-QA ").append(exportSha).append("\",");
         body.append("\"systemInstruction\":{\"parts\":[{\"text\":\"").append(escapeJson(systemPrompt)).append("\"}]},");
         if (s.grounding) body.append("\"tools\":[{\"google_search\":{}}],");
         body.append("\"contents\":[").append(modelTurn).append("],");
@@ -672,7 +672,7 @@ public class GeminiExplanationService implements ExplanationService {
     }
 
     private void log(String msg) {
-        String prefixed = "[Schrödinger's Block] " + msg;
+        String prefixed = SchroedingersBlockPlugin.LOG_PREFIX + msg;
         try {
             javax.swing.SwingUtilities.invokeLater(() -> {
                 try {

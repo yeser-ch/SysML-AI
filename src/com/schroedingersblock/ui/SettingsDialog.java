@@ -7,13 +7,13 @@ import java.util.prefs.Preferences;
 
 /**
  * Nur noch für den API-Key. Alle anderen Einstellungen (Modell, Grounding, Stil, Temperatur …)
- * stehen jetzt direkt im "Ask the model"-Fenster.
+ * stehen jetzt direkt im "Ask AI about the model"-Fenster.
  */
 public class SettingsDialog extends JFrame {
     private JPasswordField apiKeyField;
 
     public SettingsDialog() {
-        setTitle("Schrödinger's Block – API key");
+        setTitle(SchroedingersBlockPlugin.DISPLAY_NAME + " – API key");
         setSize(520, 170);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -43,7 +43,7 @@ public class SettingsDialog extends JFrame {
         formPanel.add(show, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3;
-        JLabel hint = new JLabel("Model, grounding and answer style are set in the \"Ask the model\" window.");
+        JLabel hint = new JLabel("Model, grounding and answer style are set in the \"Ask AI about the model\" window.");
         hint.setForeground(Color.GRAY);
         formPanel.add(hint, gbc);
         add(formPanel, BorderLayout.CENTER);

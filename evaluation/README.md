@@ -14,7 +14,7 @@ Vorlage: `testcases_template.csv` (in Excel öffnen, Trennzeichen `;`). Die Beis
 Deutsche Spaltennamen (`id`, `kategorie`, `frage`, `erwartete_antwort`) gehen auch. Zeilen mit `#` am Anfang der ID werden übersprungen.
 
 ## 2. Testlauf starten
-„Ask the model…“ → Einstellungen wählen → **Run test suite…** → CSV auswählen.
+„Ask AI about the model…“ → Einstellungen wählen → **Run test suite…** → CSV auswählen.
 Im Dialog: mehrere Modelle mit Komma trennen (z. B. `gemini-3.8-flash, gemini-3.5-flash-lite`).
 - Jede Frage läuft in einem **neuen Chat**, ohne Fallback-Modell.
 - **Repetitions** > 1: jede Frage wird mehrfach gestellt → Konsistenz messbar (Spalte `answer_sha`: gleiche Prüfsumme = wortgleiche Antwort).
@@ -23,7 +23,7 @@ Im Dialog: mehrere Modelle mit Komma trennen (z. B. `gemini-3.8-flash, gemini-3.
 - „Stop test run“ bricht nach der laufenden Anfrage ab; bisherige Ergebnisse bleiben gespeichert.
 
 ## 3. Ergebnisse
-Ordner `Dokumente/SchroedingersBlock/` (Button „Open results“):
+Ordner `Dokumente/SysML-AI-QA/` (Button „Open results“):
 
 | Datei | Inhalt |
 |---|---|

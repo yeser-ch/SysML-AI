@@ -1,7 +1,7 @@
 package com.schroedingersblock.api;
 
 /**
- * Alle Einstellungen einer Anfrage – kommen direkt aus dem "Ask the model"-Fenster.
+ * Alle Einstellungen einer Anfrage – kommen direkt aus dem "Ask AI about the model"-Fenster.
  * Werden pro Antwort ins Evaluations-Log geschrieben, damit Versuche reproduzierbar sind.
  */
 public class AskSettings {

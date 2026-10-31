@@ -1,5 +1,6 @@
 /**
- * Hauptklasse des Plugins "Schrödinger's Block".
+ * Hauptklasse des Plugins "SysML AI Q&A" (Weiterentwicklung von "Schrödinger's Block").
+ * Interne Namen (Paket, Plugin-ID, Einstellungen) bleiben "schroedingersblock", damit Updates kompatibel sind.
  * Übernimmt die Registrierung der Menüs in den entsprechenden Diagramm-
  * und Strukturbaum-Kontexten sowie die initiale Abfrage der Datenschutz-Zustimmung.
  */
@@ -19,13 +20,20 @@ import javax.swing.JOptionPane;
 import java.util.prefs.Preferences;
 
 public class SchroedingersBlockPlugin extends Plugin {
+    /** Sichtbarer Name des Werkzeugs (Fenstertitel, Menü, Meldungen). Hier ändern, um es umzubenennen. */
+    public static final String DISPLAY_NAME = "SysML AI Q&A";
+    /** Menüpunkt im Rechtsklick- und Tools-Menü. */
+    public static final String MENU_LABEL = "Ask AI about the model...";
+    /** Präfix für Einträge im CATIA-Meldungsfenster. */
+    public static final String LOG_PREFIX = "[" + DISPLAY_NAME + "] ";
+
     public static final String PRIVACY_KEY = "data_privacy_accepted";
     public static final String API_KEY_PREF = "gemini_api_key";
     public static final String DEFAULT_MODE_PREF = "schroedingersblock_default_mode";
     // (Niko) Schalter für Google-Search-Grounding (Default an beim ersten Start; auf Free Tier nur mit gemini-2.5 nutzbar)
     public static final String GROUNDING_PREF = "schroedingersblock_grounding_enabled";
 
-    // Einstellungen des neuen "Ask the model"-Fensters (alle auf einer Oberfläche, werden hier persistiert)
+    // Einstellungen des neuen "Ask AI about the model"-Fensters (alle auf einer Oberfläche, werden hier persistiert)
     public static final String MODEL_PREF = "schroedingersblock_model";
     public static final String TEMPERATURE_PREF = "schroedingersblock_temperature";
     public static final String MAX_TOKENS_PREF = "schroedingersblock_max_tokens";
@@ -93,7 +101,7 @@ public class SchroedingersBlockPlugin extends Plugin {
                 // Suche nach dem Tools-Menü
                 ActionsCategory toolsMenu = (ActionsCategory) manager.getActionFor("TOOLS");
                 if (toolsMenu != null) {
-                    // "Ask the model" auch ohne Rechtsklick erreichbar (fragt zum ganzen Modell)
+                    // "Ask AI about the model" auch ohne Rechtsklick erreichbar (fragt zum ganzen Modell)
                     toolsMenu.addAction(new ShowExplanationAction(null));
                     // Einstellungs-Action (API-Key)
                     toolsMenu.addAction(new OpenSettingsAction());
@@ -111,7 +119,7 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static void askPrivacyConsent(Preferences prefs) {
         int choice = JOptionPane.showConfirmDialog(null,
                 "Privacy Notice: \nBy using this plugin, model data will be sent to an external AI provider.\nDo you agree?",
-                "Data Privacy",
+                DISPLAY_NAME + " – Data privacy",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
 
@@ -126,7 +134,7 @@ public class SchroedingersBlockPlugin extends Plugin {
     public static void askApiKey(Preferences prefs) {
         String newKey = JOptionPane.showInputDialog(null,
                 "Please enter your Gemini API Key:\n(This will be saved locally on your device)",
-                "API Key Configuration",
+                DISPLAY_NAME + " – API key",
                 JOptionPane.QUESTION_MESSAGE);
 
         // Nur speichern, wenn der Nutzer nicht "Abbrechen" gedrückt hat und das Feld nicht leer ist
@@ -150,7 +158,7 @@ public class SchroedingersBlockPlugin extends Plugin {
                             // KORREKTUR: Rückgabewert auswerten, um die IDE-Warnung zu beheben
                             boolean deleted = file.delete();
                             if (!deleted) {
-                                System.err.println("[Schrödinger's Block] Warning: File could not be deleted: " + file.getName());
+                                System.err.println(LOG_PREFIX + "Warning: File could not be deleted: " + file.getName());
                             }
                         }
                     }
