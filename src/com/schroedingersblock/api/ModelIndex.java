@@ -36,7 +36,7 @@ public class ModelIndex {
         public final List<Relation> outgoing = new ArrayList<>();
         public final List<Relation> incoming = new ArrayList<>();
 
-        Elem(String id, String name, String type, String ownerId, List<String> stereotypes) {
+        public Elem(String id, String name, String type, String ownerId, List<String> stereotypes) {
             this.id = id;
             this.name = name;
             this.type = type;

@@ -44,9 +44,33 @@ public final class QuickQuestions {
      * @param elementMode true = Fragen zum Element, false = Fragen zum ganzen Modell
      */
     public static List<Question> generate(ModelIndex idx, String focusId, long seed, boolean elementMode) {
-        ModelIndex.Elem focus = idx.get(focusId);
-        if (elementMode && focus != null) return elementQuestions(idx, focus, new Random(seed));
+        return generate(idx, focusId, null, null, seed, elementMode);
+    }
+
+    /**
+     * Wie oben; focusName/focusType werden genutzt, falls das Element im Export nicht per ID zu finden ist
+     * (dann Suche über den Namen, sonst Element-Fragen ohne Beziehungsdaten).
+     */
+    public static List<Question> generate(ModelIndex idx, String focusId, String focusName, String focusType,
+                                          long seed, boolean elementMode) {
+        ModelIndex.Elem focus = findFocus(idx, focusId, focusName);
+        if (elementMode) {
+            if (focus == null && focusName != null && !focusName.isBlank()) {
+                focus = new ModelIndex.Elem(focusId == null ? "" : focusId, focusName,
+                        focusType == null ? "" : focusType, "", new ArrayList<>());
+            }
+            if (focus != null) return elementQuestions(idx, focus, new Random(seed));
+        }
         return modelQuestions(idx, new Random(seed));
+    }
+
+    /** Fokus-Element im Export: zuerst über die ID, sonst über den (eindeutigen) Namen. */
+    public static ModelIndex.Elem findFocus(ModelIndex idx, String focusId, String focusName) {
+        ModelIndex.Elem e = idx.get(focusId);
+        if (e != null || focusName == null || focusName.isBlank()) return e;
+        List<ModelIndex.Elem> byName = idx.elements.values().stream()
+                .filter(x -> focusName.trim().equals(x.name.trim())).collect(Collectors.toList());
+        return byName.isEmpty() ? null : byName.stream().max(Comparator.comparingInt(ModelIndex.Elem::degree)).get();
     }
 
     // ═══════════════════════════════════════════════════════════════════════

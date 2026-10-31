@@ -322,7 +322,14 @@ public class ExplanationDialog extends JFrame {
             ((javax.swing.border.TitledBorder) quickPanel.getBorder()).setTitle(elementQuestions
                     ? "Quick questions about " + getFocusName() + " (click to insert, then edit and send)"
                     : "Quick questions about the whole model (click to insert, then edit and send)");
-            for (QuickQuestions.Question q : QuickQuestions.generate(idx, focusId, quickSeed, elementQuestions)) {
+            String focusName = focusElement == null ? null : getFocusName();
+            String focusType = focusElement == null ? null : focusElement.getHumanType();
+            if (elementQuestions) {
+                boolean found = QuickQuestions.findFocus(idx, focusId, focusName) != null;
+                logInfo("Quick questions for element '" + focusName + "' – found in export: " + (found ? "yes" : "no")
+                        + " (export has " + idx.elements.size() + " elements)");
+            }
+            for (QuickQuestions.Question q : QuickQuestions.generate(idx, focusId, focusName, focusType, quickSeed, elementQuestions)) {
                 String label = q.category + ": " + q.label;
                 if (label.length() > 70) label = label.substring(0, 69) + "…";
                 JButton b = new JButton(label);
@@ -893,6 +900,12 @@ public class ExplanationDialog extends JFrame {
     // ═══════════════════════════════════════════════════════════════════════
     // Hilfsfunktionen
     // ═══════════════════════════════════════════════════════════════════════
+
+    private static void logInfo(String msg) {
+        try {
+            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + msg);
+        } catch (Throwable ignored) { }
+    }
 
     private String getFocusName() {
         if (focusElement instanceof NamedElement) {
