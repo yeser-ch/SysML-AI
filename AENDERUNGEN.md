@@ -1,12 +1,13 @@
-# Änderungen WS 2026/27 – „SysML AI Q&A“ (Weiterentwicklung von Schrödinger's Block)
+# Änderungen WS 2026/27 – SysML AI Q&A
 
-Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Commit 2606f7d)
+Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
 ## Was ist neu
 
 | Vorher | Jetzt |
 |---|---|
-| Rechtsklick → „Schrödinger's Block“ → „Element View“ / „Model View“, danach RUN mit festem Prompt | Rechtsklick → **„Ask AI about the model…“** (direkt im Menü, auch unter *Tools*), Frage frei eintippen. Sichtbarer Name des Werkzeugs: **SysML AI Q&A** (interne Namen bleiben `schroedingersblock`, damit Updates und gespeicherte Einstellungen funktionieren) |
+| Rechtsklick → Untermenü → „Element View“ / „Model View“, danach RUN mit festem Prompt | Rechtsklick → **„Ask AI (SysML AI Q&A)“ → „Ask AI about the model…“**, oder Menüleiste **„Ask AI“**; Frage frei eintippen |
+| Alter Projektname, Paket und Plugin-ID | Name **SysML AI Q&A**, Paket `de.hm.sysmlaiqa`, Plugin-ID `de.hm.sysmlaiqa.plugin`, JAR `sysml-ai-qa.jar`. API-Key und Einstellungen werden beim ersten Start übernommen, die alte Installation verschiebt `install.bat` ins Backup |
 | 4 feste Prompt-Dateien (Basic/Expert × Element/Model View) | 1 editierbarer System-Prompt `prompts/System_Prompt.md` + eigene Frage |
 | Auch „Model View“ exportierte nur einen Ausschnitt (Tiefe 5) | Standard: **ganzes Modell** (`sysml_flat_export.vm`); Ausschnitt optional wählbar |
 | Einstellungen verteilt (Tools → Settings), Modell/Temperatur fest im Code | **Alles in einem Fenster**: Modell, Antwortstil, Kontext, Temperatur, Max Tokens, Grounding, neuer Chat pro Frage, Fallback |
@@ -27,7 +28,7 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 
 ## Geänderte Dateien
 - `ui/ExplanationDialog.java` – neues Fenster (komplett neu)
-- `ui/ShowExplanationAction.java`, `core/MenuConfigurator.java`, `core/SchroedingersBlockPlugin.java` – ein Menüeintrag, neue Einstellungs-Keys
+- `ui/ShowExplanationAction.java`, `core/MenuConfigurator.java`, `core/SysmlAiQaPlugin.java` – ein Menüeintrag, neue Einstellungs-Keys
 - `ui/SettingsDialog.java` – nur noch API-Key
 - `api/GeminiExplanationService.java`, `api/ExplanationService.java`, `api/PromptLoader.java` – überarbeitet
 - `api/AskSettings.java`, `api/EvaluationLog.java` – neu

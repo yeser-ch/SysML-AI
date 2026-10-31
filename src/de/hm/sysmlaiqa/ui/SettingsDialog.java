@@ -1,6 +1,6 @@
-package com.schroedingersblock.ui;
+package de.hm.sysmlaiqa.ui;
 
-import com.schroedingersblock.core.SchroedingersBlockPlugin;
+import de.hm.sysmlaiqa.core.SysmlAiQaPlugin;
 import javax.swing.*;
 import java.awt.*;
 import java.util.prefs.Preferences;
@@ -13,7 +13,7 @@ public class SettingsDialog extends JFrame {
     private JPasswordField apiKeyField;
 
     public SettingsDialog() {
-        setTitle(SchroedingersBlockPlugin.DISPLAY_NAME + " – API key");
+        setTitle(SysmlAiQaPlugin.DISPLAY_NAME + " – API key");
         setSize(520, 170);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -59,13 +59,13 @@ public class SettingsDialog extends JFrame {
     }
 
     private void loadSettings() {
-        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
-        apiKeyField.setText(prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, ""));
+        Preferences prefs = Preferences.userNodeForPackage(SysmlAiQaPlugin.class);
+        apiKeyField.setText(prefs.get(SysmlAiQaPlugin.API_KEY_PREF, ""));
     }
 
     private void saveSettings() {
-        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
-        prefs.put(SchroedingersBlockPlugin.API_KEY_PREF, new String(apiKeyField.getPassword()).trim());
+        Preferences prefs = Preferences.userNodeForPackage(SysmlAiQaPlugin.class);
+        prefs.put(SysmlAiQaPlugin.API_KEY_PREF, new String(apiKeyField.getPassword()).trim());
         JOptionPane.showMessageDialog(this, "API key saved.", "Info", JOptionPane.INFORMATION_MESSAGE);
         dispose();
     }

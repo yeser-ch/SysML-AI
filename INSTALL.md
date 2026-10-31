@@ -30,7 +30,7 @@ Es gibt zwei Wege:
 5. Im schwarzen Fenster läuft die Installation in drei Schritten durch. Am Ende steht **„Fertig! SysML AI Q&A … ist installiert.“** → beliebige Taste drücken.
 6. **CATIA starten.** Kontrolle: Menü **Window → Notification Window**. Dort steht die Zeile `Plugin loaded (version …)`.
 
-Eine ältere Version von SysML AI Q&A (auch die Vorgängerversion *Schrödinger's Block*) wird dabei ersetzt. API-Key und Einstellungen bleiben erhalten.
+Eine ältere Version wird dabei ersetzt. Liegt noch eine Version mit der früheren Plugin-ID im plugins-Ordner, verschiebt das Skript sie nach `Dokumente\SysML-AI-QA\backup\`. API-Key und Einstellungen übernimmt das Plugin beim ersten Start automatisch.
 
 ---
 
@@ -70,7 +70,7 @@ Alle drei fragen selbst nach Administratorrechten. CATIA vorher schließen.
 
 ```
 build.bat -CatiaDir "C:\Program Files\Magic Systems of Systems Architect"
-build.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\com.schroedingersblock.plugin"
+build.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\de.hm.sysmlaiqa.plugin"
 build.bat -JdkDir "C:\Program Files\Eclipse Adoptium\jdk-21…"
 build.bat -NoInstall        (nur bauen und Paket erstellen)
 ```
@@ -81,7 +81,7 @@ Dieselben Optionen funktionieren auch mit `update.bat`. Mit `install.bat` gehen 
 
 ## Neue Version an andere verteilen (Team)
 
-1. Falls sich etwas Wesentliches geändert hat: die Versionsnummer `PLUGIN_VERSION` in `src/com/schroedingersblock/api/EvaluationRecord.java` erhöhen. Sie steht in jeder Log-Zeile und im Dateinamen des Pakets.
+1. Falls sich etwas Wesentliches geändert hat: die Versionsnummer `PLUGIN_VERSION` in `src/de/hm/sysmlaiqa/api/EvaluationRecord.java` erhöhen. Sie steht in jeder Log-Zeile und im Dateinamen des Pakets.
 2. `update.bat` (oder `build.bat`) ausführen. Danach liegt das Paket unter `dist\SysML-AI-QA_v<Version>.zip`.
 3. Kurz in CATIA testen.
 4. Auf GitHub: **Releases → Draft a new release**.
@@ -95,10 +95,10 @@ Die ZIP gehört **nicht** in den Code (sie steht in `.gitignore`). Sie wird nur 
 ## Update, zurück zur alten Version, Deinstallation
 
 - **Update:** neue ZIP herunterladen, entpacken, `install.bat` starten. API-Key, Einstellungen und ein selbst geänderter `System_Prompt.md` bleiben erhalten. Die neue Fassung des Prompts liegt dann daneben als `System_Prompt.md.new`.
-- **Zurück zur vorherigen Version:** im Plugin-Ordner `schroedingers-block.jar` löschen und `schroedingers-block.jar.bak` in `schroedingers-block.jar` umbenennen.
-- **Deinstallation:** CATIA schließen und den Ordner `<CATIA-Ordner>\plugins\com.schroedingersblock.plugin` löschen (braucht Adminrechte). Die Ergebnisse unter `Dokumente\SysML-AI-QA\` bleiben erhalten und können von Hand gelöscht werden.
+- **Zurück zur vorherigen Version:** im Plugin-Ordner `sysml-ai-qa.jar` löschen und `sysml-ai-qa.jar.bak` in `sysml-ai-qa.jar` umbenennen.
+- **Deinstallation:** CATIA schließen und den Ordner `<CATIA-Ordner>\plugins\de.hm.sysmlaiqa.plugin` löschen (braucht Adminrechte). Die Ergebnisse unter `Dokumente\SysML-AI-QA\` bleiben erhalten und können von Hand gelöscht werden.
 
-Der Plugin-Ordner liegt normalerweise unter `C:\Program Files\Magic Systems of Systems Architect\plugins\com.schroedingersblock.plugin`. Das Installationsskript zeigt den genauen Pfad an.
+Der Plugin-Ordner liegt normalerweise unter `C:\Program Files\Magic Systems of Systems Architect\plugins\de.hm.sysmlaiqa.plugin`. Das Installationsskript zeigt den genauen Pfad an.
 
 ---
 

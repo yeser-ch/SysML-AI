@@ -3,15 +3,16 @@
   ------------------------------------------------------------------
   Einfach install.bat doppelklicken. Das Skript
     1. findet die CATIA-Installation,
-    2. findet den Plugin-Ordner (vorhandene Installation oder <CATIA>\plugins\com.schroedingersblock.plugin),
-    3. kopiert JAR, plugin.xml, Export-Templates und System-Prompt dorthin
+    2. findet den Plugin-Ordner (vorhandene Installation oder <CATIA>\plugins\de.hm.sysmlaiqa.plugin),
+    3. verschiebt eine Installation der Ausgangsversion (andere Plugin-ID) nach Dokumente\SysML-AI-QA\backup,
+    4. kopiert JAR, plugin.xml, Export-Templates und System-Prompt dorthin
        (eine vorhandene JAR wird als .bak gesichert, ein von euch geänderter System-Prompt bleibt erhalten).
 
   Wird auch von build.ps1 aufgerufen (dann mit -CatiaDir und -SourceDir).
 
   Optionen (nur falls die automatische Suche nicht klappt):
     install.bat -CatiaDir "C:\Program Files\Magic Systems of Systems Architect"
-    install.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\com.schroedingersblock.plugin"
+    install.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\de.hm.sysmlaiqa.plugin"
 #>
 param(
     [string]$CatiaDir = "",
@@ -21,8 +22,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$PluginId = 'com.schroedingersblock.plugin'
-$JarName = 'schroedingers-block.jar'
+$PluginId = 'de.hm.sysmlaiqa.plugin'
+$JarName = 'sysml-ai-qa.jar'
+# Ausgangsversion mit anderer Plugin-ID: wird beim Installieren aus dem plugins-Ordner entfernt (sonst lädt CATIA beide)
+$LegacyPluginId = 'com.schroedingersblock.plugin'
 if (-not $SourceDir) { $SourceDir = Join-Path $PSScriptRoot 'plugin' }
 
 function Step($m) { Write-Host ''; Write-Host "== $m" -ForegroundColor Cyan }
@@ -55,7 +58,7 @@ $verFile = Join-Path $SourceDir 'VERSION.txt'
 if (Test-Path $verFile) { $version = (Get-Content $verFile -Raw).Trim() }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Step '1/3  CATIA-Installation suchen'
+Step '1/4  CATIA-Installation suchen'
 # ─────────────────────────────────────────────────────────────────────────────
 # CATIA Magic / Magic Systems of Systems Architect / Cameo: Hauptordner enthält 'bin', 'lib' (mit .jar-Dateien) und 'plugins'
 function Test-CatiaDir($d) {
@@ -114,10 +117,10 @@ if (-not $CatiaDir) {
 Ok "CATIA: $CatiaDir"
 
 # ─────────────────────────────────────────────────────────────────────────────
-Step '2/3  Plugin-Ordner bestimmen'
+Step '2/4  Plugin-Ordner bestimmen'
 # ─────────────────────────────────────────────────────────────────────────────
 if (-not $PluginDir) {
-    # Vorhandene Installation (auch der Vorgängerversion Schrödinger's Block) bevorzugen
+    # Vorhandene Installation bevorzugen
     $pluginCandidates = New-Object System.Collections.Generic.List[string]
     $pluginCandidates.Add((Join-Path $CatiaDir "plugins/$PluginId"))
     foreach ($base in @($env:LOCALAPPDATA, $env:APPDATA, $HOME) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique) {
@@ -153,9 +156,6 @@ try {
 }
 Ok "Plugin-Ordner: $PluginDir"
 
-# ─────────────────────────────────────────────────────────────────────────────
-Step '3/3  Dateien kopieren'
-# ─────────────────────────────────────────────────────────────────────────────
 # Läuft CATIA noch? (Die JAR ist dann gesperrt, und CATIA lädt Plugins nur beim Start)
 function Get-CatiaProcess {
     Get-Process -ErrorAction SilentlyContinue | Where-Object {
@@ -168,6 +168,48 @@ while (Get-CatiaProcess) {
     [void](Ask 'Danach Enter drücken')
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+Step '3/4  Ältere Version mit anderer Plugin-ID entfernen'
+# ─────────────────────────────────────────────────────────────────────────────
+# CATIA lädt jeden Unterordner von 'plugins' mit plugin.xml. Bliebe die Ausgangsversion liegen, wären beide aktiv.
+# Sie wird deshalb nicht gelöscht, sondern nach Dokumente\SysML-AI-QA\backup verschoben.
+$legacyCandidates = New-Object System.Collections.Generic.List[string]
+$legacyCandidates.Add((Join-Path $CatiaDir "plugins/$LegacyPluginId"))
+foreach ($base in @($env:LOCALAPPDATA, $env:APPDATA, $HOME) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique) {
+    foreach ($magic in Get-ChildItem -LiteralPath $base -Directory -Force -Filter '.magic*' -ErrorAction SilentlyContinue) {
+        foreach ($ver in Get-ChildItem -LiteralPath $magic.FullName -Directory -Force -ErrorAction SilentlyContinue) {
+            $legacyCandidates.Add((Join-Path $ver.FullName "plugins/$LegacyPluginId"))
+        }
+    }
+}
+$legacyDirs = @($legacyCandidates | Select-Object -Unique | Where-Object { Test-Path -LiteralPath $_ })
+$legacyPrompt = $null
+$legacyBackup = $null
+if ($legacyDirs.Count -eq 0) {
+    Info 'Keine gefunden.'
+}
+$i = 0
+foreach ($d in $legacyDirs) {
+    $i++
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $dest = Join-Path $HOME ("Documents/SysML-AI-QA/backup/old-plugin_$stamp" + $(if ($legacyDirs.Count -gt 1) { "_$i" } else { '' }))
+    try {
+        New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
+        Copy-Item -LiteralPath $d -Destination $dest -Recurse -Force
+        Remove-Item -LiteralPath $d -Recurse -Force
+    } catch {
+        Fail ("Die ältere Version in '$d' konnte nicht entfernt werden: $($_.Exception.Message)`n" +
+              "   Ist CATIA geschlossen und läuft das Skript als Administrator?")
+    }
+    Ok "Ältere Version verschoben nach: $dest"
+    $legacyBackup = $dest
+    $p = Join-Path $dest 'prompts/System_Prompt.md'
+    if (Test-Path $p) { $legacyPrompt = $p }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+Step '4/4  Dateien kopieren'
+# ─────────────────────────────────────────────────────────────────────────────
 $targetJar = Join-Path $PluginDir $JarName
 try {
     if (Test-Path $targetJar) {
@@ -187,7 +229,13 @@ try {
     New-Item -ItemType Directory -Force -Path $promptsDir | Out-Null
     $newPrompt = Join-Path $SourceDir 'prompts/System_Prompt.md'
     $installedPrompt = Join-Path $promptsDir 'System_Prompt.md'
-    if ((Test-Path $installedPrompt) -and ((Get-FileHash $installedPrompt).Hash -ne (Get-FileHash $newPrompt).Hash)) {
+    if (-not (Test-Path $installedPrompt) -and $legacyPrompt -and
+        ((Get-FileHash $legacyPrompt).Hash -ne (Get-FileHash $newPrompt).Hash)) {
+        # Selbst geänderten System-Prompt der älteren Version übernehmen
+        Copy-Item $legacyPrompt $installedPrompt -Force
+        Copy-Item $newPrompt "$installedPrompt.new" -Force
+        Warn 'Der System-Prompt der älteren Version wurde übernommen. Neue Version liegt daneben als System_Prompt.md.new.'
+    } elseif ((Test-Path $installedPrompt) -and ((Get-FileHash $installedPrompt).Hash -ne (Get-FileHash $newPrompt).Hash)) {
         Copy-Item $newPrompt "$installedPrompt.new" -Force
         Warn 'System_Prompt.md wurde von euch geändert und bleibt erhalten. Neue Version liegt daneben als System_Prompt.md.new.'
     } else {
@@ -206,4 +254,9 @@ if ($version) { Ok "Fertig! SysML AI Q&A $version ist installiert." } else { Ok 
 Info 'Jetzt CATIA starten. Kontrolle: Window -> Notification Window zeigt "Plugin loaded (version ...)".'
 Info 'Aufruf: Rechtsklick auf ein Element -> "Ask AI (SysML AI Q&A)" oder oben in der Menüleiste "Ask AI".'
 if (Test-Path "$targetJar.bak") { Info "Zurück zur vorherigen Version: $JarName.bak im Plugin-Ordner wieder in $JarName umbenennen." }
+if ($legacyBackup) {
+    Info 'API-Key und Einstellungen der älteren Version übernimmt das Plugin beim ersten Start automatisch.'
+    Info "Zurück zur älteren Version: den Ordner '$PluginId' im plugins-Ordner löschen und den Ordner aus"
+    Info "   $legacyBackup  wieder als '$LegacyPluginId' in den plugins-Ordner kopieren."
+}
 exit 0

@@ -14,7 +14,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 
 - **Installieren:** [`INSTALL.md`](INSTALL.md) – fertiges Paket unter *Releases* herunterladen, entpacken, `install.bat` doppelklicken. Kein Java nötig.
 - **Testläufe und Auswertung:** [`evaluation/README.md`](evaluation/README.md)
-- **Änderungen gegenüber der Ausgangsversion:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
+- **Änderungen im WS 2026/27:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
 
 ## Was das Plugin kann
 
@@ -32,22 +32,22 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 
 | Ordner / Datei | Inhalt |
 | --- | --- |
-| `src/com/schroedingersblock/core/` | Start des Plugins, Menüs in Tree, Diagrammen, Tabellen und Menüleiste |
-| `src/com/schroedingersblock/ui/` | Fenster: Fragen, Einstellungen, Schnellfragen, Chat, API-Key |
-| `src/com/schroedingersblock/data_extraction/` | Modellexport als JSON über Velocity-Templates (ganzes Modell oder Umgebung eines Elements) |
-| `src/com/schroedingersblock/api/` | Gemini-Anbindung (Cache, Retry, Rate-Limits), System-Prompt, Testsuite, Protokoll, ID-Check |
+| `src/de/hm/sysmlaiqa/core/` | Start des Plugins, Menüs in Tree, Diagrammen, Tabellen und Menüleiste |
+| `src/de/hm/sysmlaiqa/ui/` | Fenster: Fragen, Einstellungen, Schnellfragen, Chat, API-Key |
+| `src/de/hm/sysmlaiqa/data_extraction/` | Modellexport als JSON über Velocity-Templates (ganzes Modell oder Umgebung eines Elements) |
+| `src/de/hm/sysmlaiqa/api/` | Gemini-Anbindung (Cache, Retry, Rate-Limits), System-Prompt, Testsuite, Protokoll, ID-Check |
 | `resources/System_Prompt.md` | System-Prompt (wird installiert und lässt sich in CATIA ohne neu zu bauen ändern) |
 | `evaluation/` | Vorlage für Testfälle und Erklärung der Log-Spalten |
-| `Catia_Model/` | CATIA-Modelle aus der Ausgangsversion |
+| `Catia_Model/` | CATIA-Modelle (Anforderungen und Systemmodell des Plugins) |
 | `build.*`, `update.*`, `install.*` | Bauen, Aktualisieren, Installieren (siehe [`INSTALL.md`](INSTALL.md)) |
 
-Der Paketname `com.schroedingersblock` und die Plugin-ID `com.schroedingersblock.plugin` stammen aus der Ausgangsversion. Sie bleiben bewusst unverändert, damit Updates eine bestehende Installation ersetzen und API-Key und Einstellungen erhalten bleiben.
+Paket: `de.hm.sysmlaiqa`, Plugin-ID: `de.hm.sysmlaiqa.plugin`, JAR: `sysml-ai-qa.jar`.
 
 ### Wichtigste Klassen
 
 | Klasse | Aufgabe |
 | --- | --- |
-| `SchroedingersBlockPlugin` | Start und Ende des Plugins, Registrierung der Menüs, Einstellungs-Keys |
+| `SysmlAiQaPlugin` | Start und Ende des Plugins, Registrierung der Menüs, Einstellungs-Keys |
 | `MenuConfigurator` | Menüeintrag „Ask AI (SysML AI Q&A)“ im Kontextmenü |
 | `ShowExplanationAction` | Klick auf den Menüeintrag: Fokuselement ermitteln (auch aus Tabellen), Datenschutz und API-Key prüfen |
 | `ExplanationDialog` | Hauptfenster: Einstellungen, Schnellfragen, Chat, Testsuite |
@@ -81,4 +81,4 @@ Nach jeder Änderung an `.java`-Dateien muss neu gebaut werden. Änderungen am S
 
 ## Herkunft
 
-SysML AI Q&A baut auf dem Plugin *Schrödinger's Block* auf, das eine Projektgruppe im Sommersemester 2026 an der Hochschule München entwickelt hat ([Original-Repository](https://github.com/hirtleo/SchroedingersBlock)). Übernommen wurden die Plugin-Grundstruktur, die Velocity-Exporte, Datenschutzabfrage und API-Key-Verwaltung. Was seitdem neu ist, steht in [`AENDERUNGEN.md`](AENDERUNGEN.md).
+SysML AI Q&A baut auf einem Plugin auf, das eine Projektgruppe im Sommersemester 2026 an der Hochschule München entwickelt hat ([Original-Repository](https://github.com/hirtleo/SchroedingersBlock)). Übernommen wurden die Plugin-Grundstruktur, die Velocity-Exporte, Datenschutzabfrage und API-Key-Verwaltung. Was seitdem neu ist, steht in [`AENDERUNGEN.md`](AENDERUNGEN.md).

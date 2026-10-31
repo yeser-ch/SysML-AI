@@ -1,4 +1,4 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 import java.io.File;
 import java.io.IOException;
@@ -91,7 +91,7 @@ public final class EvaluationLog {
                 }
             }
         } catch (IOException ex) {
-            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Archiving failed: " + ex.getMessage());
+            System.err.println(de.hm.sysmlaiqa.core.SysmlAiQaPlugin.LOG_PREFIX + "Archiving failed: " + ex.getMessage());
         }
     }
 
@@ -113,7 +113,7 @@ public final class EvaluationLog {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return true;
         } catch (IOException e) {
-            System.err.println(com.schroedingersblock.core.SchroedingersBlockPlugin.LOG_PREFIX + "Could not write log: " + e.getMessage());
+            System.err.println(de.hm.sysmlaiqa.core.SysmlAiQaPlugin.LOG_PREFIX + "Could not write log: " + e.getMessage());
             return false;
         }
     }

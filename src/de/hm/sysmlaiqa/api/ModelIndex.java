@@ -1,4 +1,4 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 import java.util.ArrayList;
 import java.util.HashMap;

@@ -1,10 +1,10 @@
 ﻿<#
-  SysML AI Q&A (Weiterentwicklung von Schrödinger's Block) – Plugin bauen und in CATIA Magic installieren
+  SysML AI Q&A – Plugin bauen und in CATIA Magic installieren
   ------------------------------------------------------------------
   Einfach build.bat doppelklicken. Das Skript
     1. findet die CATIA-Installation (für die Bibliotheken),
     2. findet ein Java JDK (javac),
-    3. kompiliert den Code in src\ zu build\schroedingers-block.jar,
+    3. kompiliert den Code in src\ zu build\sysml-ai-qa.jar,
     4. legt ein Installationspaket an: dist\SysML-AI-QA_v<Version>.zip
        (für neue Nutzer: entpacken, install.bat doppelklicken – ohne Java, ohne Git),
     5. installiert das Paket mit install.ps1 in CATIA
@@ -12,7 +12,7 @@
 
   Optionen (nur falls die automatische Suche nicht klappt):
     build.bat -CatiaDir "C:\Program Files\...\CATIA Magic ... 2026x"
-    build.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\com.schroedingersblock.plugin"
+    build.bat -PluginDir "C:\Program Files\Magic Systems of Systems Architect\plugins\de.hm.sysmlaiqa.plugin"
     build.bat -JdkDir "C:\Program Files\Eclipse Adoptium\jdk-21..."
     build.bat -NoInstall      (nur bauen und Paket erstellen, nichts installieren)
 #>
@@ -26,8 +26,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Repo = $PSScriptRoot
-$PluginId = 'com.schroedingersblock.plugin'
-$JarName = 'schroedingers-block.jar'
+$PluginId = 'de.hm.sysmlaiqa.plugin'
+$JarName = 'sysml-ai-qa.jar'
 $Release = 17          # wie die Vorgängerversion (lief in CATIA Magic 2026x)
 $OnWindows = ($env:OS -eq 'Windows_NT')
 $ExeSuffix = if ($OnWindows) { '.exe' } else { '' }
@@ -180,7 +180,7 @@ try {
         $p = Join-Path $CatiaDir $sub
         if (Test-Path $p) {
             $jars += Get-ChildItem -LiteralPath $p -Recurse -Filter '*.jar' -File -ErrorAction SilentlyContinue |
-                     Where-Object { $_.FullName -notmatch 'schroedingersblock' } |
+                     Where-Object { $_.FullName -notmatch 'sysmlaiqa|schroedingersblock' }   # eigenes Plugin (auch alte Version) nicht mitnehmen |
                      ForEach-Object { Fwd $_.FullName }
         }
     }
@@ -236,7 +236,7 @@ try {
 Step '5/6  Installationspaket erstellen'
 # ─────────────────────────────────────────────────────────────────────────────
 $version = 'dev'
-$verSrc = Join-Path $Repo 'src/com/schroedingersblock/api/EvaluationRecord.java'
+$verSrc = Join-Path $Repo 'src/de/hm/sysmlaiqa/api/EvaluationRecord.java'
 if ((Test-Path $verSrc) -and ((Get-Content $verSrc -Raw) -match 'PLUGIN_VERSION\s*=\s*"([^"]+)"')) { $version = $Matches[1] }
 $pkgName = "SysML-AI-QA_v$version"
 $pkgRoot = Join-Path $Repo 'build/package'
@@ -249,7 +249,7 @@ try {
     Copy-Item (Join-Path $Repo "build/$JarName") (Join-Path $plug $JarName) -Force
     Copy-Item (Join-Path $Repo 'plugin.xml') (Join-Path $plug 'plugin.xml') -Force
     foreach ($vm in @('sysml_flat_export.vm', 'sysml_partial_export.vm')) {
-        Copy-Item (Join-Path $Repo "src/com/schroedingersblock/data_extraction/$vm") (Join-Path $plug "data_extraction/$vm") -Force
+        Copy-Item (Join-Path $Repo "src/de/hm/sysmlaiqa/data_extraction/$vm") (Join-Path $plug "data_extraction/$vm") -Force
     }
     Copy-Item (Join-Path $Repo 'resources/System_Prompt.md') (Join-Path $plug 'prompts/System_Prompt.md') -Force
     [System.IO.File]::WriteAllText((Join-Path $plug 'VERSION.txt'), $version)

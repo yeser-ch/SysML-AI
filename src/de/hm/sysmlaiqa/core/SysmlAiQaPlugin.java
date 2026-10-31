@@ -1,11 +1,10 @@
 /**
- * Hauptklasse des Plugins "SysML AI Q&A" (Weiterentwicklung von "Schrödinger's Block").
- * Interne Namen (Paket, Plugin-ID, Einstellungen) bleiben "schroedingersblock", damit Updates kompatibel sind.
+ * Hauptklasse des Plugins "SysML AI Q&A".
  * Übernimmt die Registrierung der Menüs in den entsprechenden Diagramm-
  * und Strukturbaum-Kontexten sowie die initiale Abfrage der Datenschutz-Zustimmung.
  */
 
-package com.schroedingersblock.core;
+package de.hm.sysmlaiqa.core;
 
 import com.nomagic.actions.AMConfigurator;
 import com.nomagic.actions.ActionsCategory;
@@ -15,13 +14,13 @@ import java.util.ArrayList;
 import java.util.List;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.actions.ActionsConfiguratorsManager;
-import com.schroedingersblock.ui.OpenSettingsAction;
-import com.schroedingersblock.ui.ShowExplanationAction;
+import de.hm.sysmlaiqa.ui.OpenSettingsAction;
+import de.hm.sysmlaiqa.ui.ShowExplanationAction;
 
 import javax.swing.JOptionPane;
 import java.util.prefs.Preferences;
 
-public class SchroedingersBlockPlugin extends Plugin {
+public class SysmlAiQaPlugin extends Plugin {
     /** Sichtbarer Name des Werkzeugs (Fenstertitel, Menü, Meldungen). Hier ändern, um es umzubenennen. */
     public static final String DISPLAY_NAME = "SysML AI Q&A";
     /** Menüpunkt im Rechtsklick- und Tools-Menü. */
@@ -31,27 +30,33 @@ public class SchroedingersBlockPlugin extends Plugin {
 
     public static final String PRIVACY_KEY = "data_privacy_accepted";
     public static final String API_KEY_PREF = "gemini_api_key";
-    public static final String DEFAULT_MODE_PREF = "schroedingersblock_default_mode";
-    // (Niko) Schalter für Google-Search-Grounding (Default an beim ersten Start; auf Free Tier nur mit gemini-2.5 nutzbar)
-    public static final String GROUNDING_PREF = "schroedingersblock_grounding_enabled";
+    public static final String DEFAULT_MODE_PREF = "sysmlaiqa_default_mode";
+    // Schalter für Google-Search-Grounding (Standard: aus, siehe init())
+    public static final String GROUNDING_PREF = "sysmlaiqa_grounding_enabled";
 
     // Einstellungen des neuen "Ask AI about the model"-Fensters (alle auf einer Oberfläche, werden hier persistiert)
-    public static final String MODEL_PREF = "schroedingersblock_model";
-    public static final String TEMPERATURE_PREF = "schroedingersblock_temperature";
-    public static final String MAX_TOKENS_PREF = "schroedingersblock_max_tokens";
-    public static final String SCOPE_PREF = "schroedingersblock_context_scope";
-    public static final String FRESH_CHAT_PREF = "schroedingersblock_fresh_chat";
-    public static final String FALLBACK_PREF = "schroedingersblock_model_fallback";
-    public static final String REQUIRE_IDS_PREF = "schroedingersblock_require_ids";
-    public static final String REPETITIONS_PREF = "schroedingersblock_repetitions";
-    public static final String PAUSE_PREF = "schroedingersblock_batch_pause_s";
-    public static final String CACHE_MODEL_PREF = "schroedingersblock_cache_model";
-    public static final String THINKING_PREF = "schroedingersblock_thinking";
-    public static final String SETTINGS_VERSION_PREF = "schroedingersblock_settings_version";
+    public static final String MODEL_PREF = "sysmlaiqa_model";
+    public static final String TEMPERATURE_PREF = "sysmlaiqa_temperature";
+    public static final String MAX_TOKENS_PREF = "sysmlaiqa_max_tokens";
+    public static final String SCOPE_PREF = "sysmlaiqa_context_scope";
+    public static final String FRESH_CHAT_PREF = "sysmlaiqa_fresh_chat";
+    public static final String FALLBACK_PREF = "sysmlaiqa_model_fallback";
+    public static final String REQUIRE_IDS_PREF = "sysmlaiqa_require_ids";
+    public static final String REPETITIONS_PREF = "sysmlaiqa_repetitions";
+    public static final String PAUSE_PREF = "sysmlaiqa_batch_pause_s";
+    public static final String CACHE_MODEL_PREF = "sysmlaiqa_cache_model";
+    public static final String THINKING_PREF = "sysmlaiqa_thinking";
+    public static final String SETTINGS_VERSION_PREF = "sysmlaiqa_settings_version";
+    public static final String LEGACY_IMPORTED_PREF = "sysmlaiqa_legacy_settings_imported";
+
+    /** Einstellungsknoten und Schlüsselpräfix der Ausgangsversion (nur für die einmalige Übernahme). */
+    private static final String LEGACY_NODE = "com/schroedingersblock/core";
+    private static final String LEGACY_KEY_PREFIX = "schroedingersblock_";
 
     @Override
     public void init() {
-        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class); //zum speichern des Datenschutz
+        Preferences prefs = Preferences.userNodeForPackage(SysmlAiQaPlugin.class); //zum speichern des Datenschutz
+        String imported = importLegacySettings(prefs);
 
         // Beim allerersten Start noch kein gespeicherter Wert vorhanden -> Default an setzen.
         // Danach bleibt der zuletzt vom Nutzer gewählte Wert über Neustarts hinweg erhalten.
@@ -84,8 +89,8 @@ public class SchroedingersBlockPlugin extends Plugin {
                 public void configure(ActionsManager manager) {
                     // Eigenes Menü "Ask AI" in der Menüleiste (gut auffindbar, unabhängig von der internen ID des Tools-Menüs).
                     // Die Auswahl (Baum, Diagramm, Tabellenzeile) wird erst beim Klick ermittelt.
-                    if (manager.getActionFor("SCHROEDINGER_MAIN_MENU") != null) return;
-                    ActionsCategory menu = new ActionsCategory("SCHROEDINGER_MAIN_MENU", "Ask AI");
+                    if (manager.getActionFor("SYSMLAIQA_MAIN_MENU") != null) return;
+                    ActionsCategory menu = new ActionsCategory("SYSMLAIQA_MAIN_MENU", "Ask AI");
                     menu.setNested(true);
                     menu.addAction(new ShowExplanationAction(null, false, true));
                     menu.addAction(new ShowExplanationAction(null, true, true));
@@ -141,8 +146,9 @@ public class SchroedingersBlockPlugin extends Plugin {
         }
 
         // Kontrollmeldung im CATIA-Meldungsfenster (zeigt, welche Version geladen ist)
-        String msg = LOG_PREFIX + "Plugin loaded (version " + com.schroedingersblock.api.EvaluationRecord.PLUGIN_VERSION
+        String msg = LOG_PREFIX + "Plugin loaded (version " + de.hm.sysmlaiqa.api.EvaluationRecord.PLUGIN_VERSION
                 + ", " + registered + "/" + diagramTypes.length + " diagram/table types)"
+                + (imported == null ? "" : " – " + imported)
                 + (problems.isEmpty() ? "" : " – problems: " + String.join("; ", problems));
         System.out.println(msg);
         javax.swing.SwingUtilities.invokeLater(() -> {
@@ -150,6 +156,38 @@ public class SchroedingersBlockPlugin extends Plugin {
                 com.nomagic.magicdraw.core.Application.getInstance().getGUILog().log(msg);
             } catch (Throwable ignored) { }
         });
+    }
+
+    /**
+     * Übernimmt einmalig API-Key, Datenschutz-Zustimmung und Einstellungen aus der Ausgangsversion
+     * (anderer Paketname = anderer Einstellungsknoten). Vorhandene neue Werte werden nicht überschrieben.
+     *
+     * @return Hinweis für die Logzeile oder null, wenn nichts übernommen wurde
+     */
+    static String importLegacySettings(Preferences now) {
+        try {
+            if (now.getBoolean(LEGACY_IMPORTED_PREF, false)) return null;
+            int count = 0;
+            Preferences root = Preferences.userRoot();
+            if (root.nodeExists(LEGACY_NODE)) {
+                Preferences old = root.node(LEGACY_NODE);
+                for (String key : old.keys()) {
+                    String newKey = key.startsWith(LEGACY_KEY_PREFIX)
+                            ? "sysmlaiqa_" + key.substring(LEGACY_KEY_PREFIX.length()) : key;
+                    String value = old.get(key, null);
+                    if (value != null && now.get(newKey, null) == null) {
+                        now.put(newKey, value);
+                        count++;
+                    }
+                }
+            }
+            now.putBoolean(LEGACY_IMPORTED_PREF, true);
+            now.flush();
+            return count == 0 ? null : "imported " + count + " settings (incl. API key) from the previous version";
+        } catch (Exception e) {
+            System.err.println(LOG_PREFIX + "Could not import settings of the previous version: " + e.getMessage());
+            return null;
+        }
     }
 
     // Zeigt das DatenschutzustimmungsFenster an und speichert die Antwort
@@ -185,7 +223,7 @@ public class SchroedingersBlockPlugin extends Plugin {
         try {
             // Pfad zum raw_model_data Ordner ermitteln
             // Temporäre Exporte löschen (Kopien für die Auswertung liegen in archive/exports)
-            File exportDir = com.schroedingersblock.data_extraction.DataExtractionService.getExportDirectory();
+            File exportDir = de.hm.sysmlaiqa.data_extraction.DataExtractionService.getExportDirectory();
 
             if (exportDir.exists() && exportDir.isDirectory()) {
                 File[] files = exportDir.listFiles();

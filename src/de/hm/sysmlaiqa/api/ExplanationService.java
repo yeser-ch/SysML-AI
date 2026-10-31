@@ -1,4 +1,4 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 /**
  * Schnittstelle zwischen UI und LLM.

@@ -1,4 +1,4 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;

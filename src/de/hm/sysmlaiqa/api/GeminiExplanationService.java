@@ -1,7 +1,7 @@
-package com.schroedingersblock.api;
+package de.hm.sysmlaiqa.api;
 
 import com.nomagic.magicdraw.core.Application;
-import com.schroedingersblock.core.SchroedingersBlockPlugin;
+import de.hm.sysmlaiqa.core.SysmlAiQaPlugin;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.plugins.PluginDescriptor;
 import com.nomagic.magicdraw.plugins.PluginUtils;
@@ -41,8 +41,8 @@ import java.util.regex.Pattern;
  */
 public class GeminiExplanationService implements ExplanationService {
 
-    // Überschreibbar nur für Tests (-Dschroedingersblock.apiBase=...)
-    private static final String API_BASE = System.getProperty("schroedingersblock.apiBase", "https://generativelanguage.googleapis.com/v1beta");
+    // Überschreibbar nur für Tests (-Dsysmlaiqa.apiBase=...)
+    private static final String API_BASE = System.getProperty("sysmlaiqa.apiBase", "https://generativelanguage.googleapis.com/v1beta");
 
     /**
      * Vorschlagsliste für das Modell-Dropdown (Stand Okt. 2026; "Refresh" lädt die echte Liste).
@@ -670,12 +670,12 @@ public class GeminiExplanationService implements ExplanationService {
     // ═══════════════════════════════════════════════════════════════════════
 
     private String getApiKey() {
-        return Preferences.userNodeForPackage(SchroedingersBlockPlugin.class)
-                .get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+        return Preferences.userNodeForPackage(SysmlAiQaPlugin.class)
+                .get(SysmlAiQaPlugin.API_KEY_PREF, "");
     }
 
     public static File getBaseDirectory() {
-        String pluginId = "com.schroedingersblock.plugin";
+        String pluginId = "de.hm.sysmlaiqa.plugin";
         try {
             for (Plugin plugin : PluginUtils.getPlugins()) {
                 PluginDescriptor descriptor = plugin.getDescriptor();
@@ -711,7 +711,7 @@ public class GeminiExplanationService implements ExplanationService {
     }
 
     private void log(String msg) {
-        String prefixed = SchroedingersBlockPlugin.LOG_PREFIX + msg;
+        String prefixed = SysmlAiQaPlugin.LOG_PREFIX + msg;
         try {
             javax.swing.SwingUtilities.invokeLater(() -> {
                 try {

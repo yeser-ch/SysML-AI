@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin id="com.schroedingersblock.plugin"
+<plugin id="de.hm.sysmlaiqa.plugin"
         name="SysML AI Q&amp;A"
         version="3.1"
         provider-name="SE Projekt Team"
-        class="com.schroedingersblock.core.SchroedingersBlockPlugin">
+        class="de.hm.sysmlaiqa.core.SysmlAiQaPlugin">
     <runtime>
-        <library name="schroedingers-block.jar"/>
+        <library name="sysml-ai-qa.jar"/>
     </runtime>
 </plugin>

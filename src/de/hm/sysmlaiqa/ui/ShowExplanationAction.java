@@ -3,10 +3,10 @@
  * Prüft Datenschutz-Zustimmung und API-Key und öffnet dann das Frage-Fenster.
  */
 
-package com.schroedingersblock.ui;
+package de.hm.sysmlaiqa.ui;
 
 import com.nomagic.magicdraw.actions.MDAction;
-import com.schroedingersblock.core.SchroedingersBlockPlugin;
+import de.hm.sysmlaiqa.core.SysmlAiQaPlugin;
 import com.nomagic.uml2.ext.magicdraw.classes.mdkernel.Element;
 import javax.swing.JOptionPane;
 import java.awt.event.ActionEvent;
@@ -41,23 +41,23 @@ public class ShowExplanationAction extends MDAction {
         this.elementMode = elementMode;
         this.resolveSelectionOnClick = resolveSelectionOnClick;
         setDescription(elementMode
-                ? SchroedingersBlockPlugin.DISPLAY_NAME + ": ask an AI about this element and its surroundings."
-                : SchroedingersBlockPlugin.DISPLAY_NAME + ": ask an AI any question about this SysML model.");
+                ? SysmlAiQaPlugin.DISPLAY_NAME + ": ask an AI about this element and its surroundings."
+                : SysmlAiQaPlugin.DISPLAY_NAME + ": ask an AI any question about this SysML model.");
     }
 
     private static String id(boolean elementMode, boolean tools) {
-        return "SCHROEDINGER_ASK_" + (elementMode ? "ELEMENT" : "MODEL") + (tools ? "_TOOLS" : "");
+        return "SYSMLAIQA_ASK_" + (elementMode ? "ELEMENT" : "MODEL") + (tools ? "_TOOLS" : "");
     }
 
     private static String label(boolean elementMode, boolean tools) {
-        if (!elementMode) return SchroedingersBlockPlugin.MENU_LABEL;
+        if (!elementMode) return SysmlAiQaPlugin.MENU_LABEL;
         return tools ? SELECTED_ELEMENT_LABEL : ELEMENT_LABEL;
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
         if (Application.getInstance().getProject() == null) {
-            JOptionPane.showMessageDialog(null, "Open a project first.", SchroedingersBlockPlugin.DISPLAY_NAME,
+            JOptionPane.showMessageDialog(null, "Open a project first.", SysmlAiQaPlugin.DISPLAY_NAME,
                     JOptionPane.INFORMATION_MESSAGE);
             return;
         }
@@ -92,19 +92,19 @@ public class ShowExplanationAction extends MDAction {
     private void proceed(Element focus) {
         if (elementMode && focus == null) {
             try {
-                Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX
+                Application.getInstance().getGUILog().log(SysmlAiQaPlugin.LOG_PREFIX
                         + "Selection not found. Diagnosis: " + lastTableDiagnosis);
             } catch (Throwable ignored) { }
             JOptionPane.showMessageDialog(null,
                     "No element selected.\n\nSelect an element in the containment tree, a diagram or a table row first.\n"
                             + "If it still does not work in a table: right-click the row -> 'Select in Containment Tree' (Alt+B),\n"
                             + "then right-click the element in the tree -> 'Ask AI about this element...'.",
-                    SchroedingersBlockPlugin.DISPLAY_NAME, JOptionPane.INFORMATION_MESSAGE);
+                    SysmlAiQaPlugin.DISPLAY_NAME, JOptionPane.INFORMATION_MESSAGE);
             return;
         }
 
-        Preferences prefs = Preferences.userNodeForPackage(SchroedingersBlockPlugin.class);
-        String consent = prefs.get(SchroedingersBlockPlugin.PRIVACY_KEY, "UNKNOWN");
+        Preferences prefs = Preferences.userNodeForPackage(SysmlAiQaPlugin.class);
+        String consent = prefs.get(SysmlAiQaPlugin.PRIVACY_KEY, "UNKNOWN");
 
         if ("ACCEPTED".equals(consent)) {
             checkApiKeyAndOpenDialog(prefs, focus);
@@ -115,8 +115,8 @@ public class ShowExplanationAction extends MDAction {
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.ERROR_MESSAGE);
             if (choice == JOptionPane.YES_OPTION) {
-                SchroedingersBlockPlugin.askPrivacyConsent(prefs);
-                if ("ACCEPTED".equals(prefs.get(SchroedingersBlockPlugin.PRIVACY_KEY, "UNKNOWN"))) {
+                SysmlAiQaPlugin.askPrivacyConsent(prefs);
+                if ("ACCEPTED".equals(prefs.get(SysmlAiQaPlugin.PRIVACY_KEY, "UNKNOWN"))) {
                     checkApiKeyAndOpenDialog(prefs, focus);
                 }
             }
@@ -124,15 +124,15 @@ public class ShowExplanationAction extends MDAction {
     }
 
     private void checkApiKeyAndOpenDialog(Preferences prefs, Element focus) {
-        String apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+        String apiKey = prefs.get(SysmlAiQaPlugin.API_KEY_PREF, "");
         if (apiKey.isEmpty()) {
-            SchroedingersBlockPlugin.askApiKey(prefs);
-            apiKey = prefs.get(SchroedingersBlockPlugin.API_KEY_PREF, "");
+            SysmlAiQaPlugin.askApiKey(prefs);
+            apiKey = prefs.get(SysmlAiQaPlugin.API_KEY_PREF, "");
         }
         if (!apiKey.isEmpty()) {
             new ExplanationDialog(focus, elementMode).setVisible(true);
         } else {
-            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + "Cancelled: no API key configured.");
+            Application.getInstance().getGUILog().log(SysmlAiQaPlugin.LOG_PREFIX + "Cancelled: no API key configured.");
         }
     }
 
@@ -184,7 +184,7 @@ public class ShowExplanationAction extends MDAction {
 
     private static void logInfo(String msg) {
         try {
-            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + msg);
+            Application.getInstance().getGUILog().log(SysmlAiQaPlugin.LOG_PREFIX + msg);
         } catch (Throwable ignored) { }
     }
 
