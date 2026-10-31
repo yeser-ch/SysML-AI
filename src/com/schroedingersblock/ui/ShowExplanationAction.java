@@ -65,6 +65,10 @@ public class ShowExplanationAction extends MDAction {
         Element focus = focusElement;
         if (resolveSelectionOnClick) focus = currentSelection();
         if (elementMode && focus == null) {
+            try {
+                Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX
+                        + "Selection not found. Diagnosis: " + lastTableDiagnosis);
+            } catch (Throwable ignored) { }
             JOptionPane.showMessageDialog(null,
                     "No element selected.\n\nSelect an element in the containment tree, a diagram or a table row first.\n"
                             + "If it still does not work in a table: right-click the row -> 'Select in Containment Tree' (Alt+B),\n"
@@ -135,32 +139,94 @@ public class ShowExplanationAction extends MDAction {
         return null;
     }
 
-    /** Sucht die zuletzt fokussierte JTable und liefert das Modellelement der markierten Zeile. */
+    /**
+     * Sucht eine Tabelle mit markierter Zeile und liefert deren Modellelement.
+     * Reihenfolge: Tabelle mit Tastaturfokus, dann alle sichtbaren Tabellen in allen Fenstern.
+     * Findet sie nichts, wird der Aufbau ins Notification Window geschrieben (Diagnose).
+     */
     private static Element selectedTableRowElement() {
-        java.awt.Component c = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
-        javax.swing.JTable table = null;
-        while (c != null) {
-            if (c instanceof javax.swing.JTable) { table = (javax.swing.JTable) c; break; }
-            c = c.getParent();
+        StringBuilder diag = new StringBuilder();
+        java.awt.Component focus = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+        diag.append("focus=").append(focus == null ? "null" : focus.getClass().getName());
+        // 1. Tabelle im Fokus (oder deren Eltern)
+        for (java.awt.Component c = focus; c != null; c = c.getParent()) {
+            if (c instanceof javax.swing.JTable) {
+                Element el = elementFromTable((javax.swing.JTable) c, diag);
+                if (el != null) return el;
+                break;
+            }
         }
-        if (table == null) return null;
+        // 2. Alle sichtbaren Tabellen in allen Fenstern
+        for (java.awt.Window w : java.awt.Window.getWindows()) {
+            if (!w.isShowing()) continue;
+            java.util.List<javax.swing.JTable> tables = new java.util.ArrayList<>();
+            collectTables(w, tables);
+            for (javax.swing.JTable t : tables) {
+                if (!t.isShowing() || t.getSelectedRow() < 0) continue;
+                Element el = elementFromTable(t, diag);
+                if (el != null) return el;
+            }
+        }
+        lastTableDiagnosis = diag.toString();
+        return null;
+    }
+
+    static String lastTableDiagnosis = "";
+
+    private static void collectTables(java.awt.Component c, java.util.List<javax.swing.JTable> out) {
+        if (c instanceof javax.swing.JTable) out.add((javax.swing.JTable) c);
+        if (c instanceof java.awt.Container) {
+            for (java.awt.Component child : ((java.awt.Container) c).getComponents()) collectTables(child, out);
+        }
+    }
+
+    private static Element elementFromTable(javax.swing.JTable table, StringBuilder diag) {
         int row = table.getSelectedRow();
+        diag.append(" | table=").append(table.getClass().getName()).append(" model=")
+                .append(table.getModel().getClass().getName()).append(" row=").append(row);
         if (row < 0) return null;
-        // Erst die Spalte mit dem Namen/Element (meist vorne), dann alle anderen
+        // a) Methoden des Tabellenmodells, die eine Zeile in ein Objekt übersetzen
+        int modelRow = row;
+        try { modelRow = table.convertRowIndexToModel(row); } catch (Throwable ignored) { }
+        Object model = table.getModel();
+        for (String m : new String[]{"getRowElement", "getElementAt", "getRowObject", "getObjectAt", "getRow", "getRowValue", "getNodeForRow", "getValueAt"}) {
+            try {
+                java.lang.reflect.Method meth = model.getClass().getMethod(m, int.class);
+                Element el = asElement(meth.invoke(model, modelRow), 0);
+                if (el != null) return el;
+            } catch (Throwable ignored) { }
+        }
+        // b) Zellwerte der Zeile
         for (int col = 0; col < table.getColumnCount(); col++) {
-            Element el = asElement(table.getValueAt(row, col));
+            Object v = null;
+            try { v = table.getValueAt(row, col); } catch (Throwable ignored) { }
+            if (col < 4) diag.append(" col").append(col).append("=").append(v == null ? "null" : v.getClass().getName());
+            Element el = asElement(v, 0);
             if (el != null) return el;
         }
         return null;
     }
 
-    private static Element asElement(Object value) {
-        if (value == null) return null;
+    /** Versucht, aus einem beliebigen Tabellen-/Baumobjekt das Modellelement zu holen (bis 2 Ebenen tief). */
+    private static Element asElement(Object value, int depth) {
+        if (value == null || depth > 2) return null;
         if (value instanceof Element) return (Element) value;
-        for (String m : new String[]{"getElement", "getUserObject", "getValue", "getRowElement"}) {
+        if (value instanceof Object[]) {
+            for (Object o : (Object[]) value) { Element el = asElement(o, depth + 1); if (el != null) return el; }
+            return null;
+        }
+        if (value instanceof Collection) {
+            for (Object o : (Collection<?>) value) { Element el = asElement(o, depth + 1); if (el != null) return el; }
+            return null;
+        }
+        for (String m : new String[]{"getElement", "getUserObject", "getValue", "getRowElement", "getObject",
+                "getModelElement", "getData", "getRowObject", "getTarget"}) {
             try {
                 Object v = call(value, m);
-                if (v instanceof Element) return (Element) v;
+                if (v != null && v != value) {
+                    Element el = asElement(v, depth + 1);
+                    if (el != null) return el;
+                }
             } catch (Throwable ignored) { }
         }
         return null;
