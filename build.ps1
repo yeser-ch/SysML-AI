@@ -66,9 +66,13 @@ if (-not (Test-Path (Join-Path $Repo 'src'))) {
 # ─────────────────────────────────────────────────────────────────────────────
 Step '1/5  CATIA-Installation suchen'
 # ─────────────────────────────────────────────────────────────────────────────
+# CATIA Magic / Magic Systems of Systems Architect / Cameo: Hauptordner enthält 'bin' und 'lib' (mit .jar-Dateien)
 function Test-CatiaDir($d) {
     if (-not $d -or -not (Test-Path $d)) { return $false }
-    return (Test-Path (Join-Path $d 'lib/md.jar')) -or (Test-Path (Join-Path $d 'lib/md_api.jar'))
+    if ((Test-Path (Join-Path $d 'lib/md.jar')) -or (Test-Path (Join-Path $d 'lib/md_api.jar'))) { return $true }
+    $lib = Join-Path $d 'lib'
+    if (-not (Test-Path (Join-Path $d 'bin')) -or -not (Test-Path $lib)) { return $false }
+    return [bool](Get-ChildItem -LiteralPath $lib -Recurse -Filter '*.jar' -File -ErrorAction SilentlyContinue | Select-Object -First 1)
 }
 
 if ($CatiaDir -and -not (Test-CatiaDir $CatiaDir)) {
@@ -91,7 +95,7 @@ if (-not $CatiaDir) {
     if ($candidates.Count -gt 0) {
         # Bevorzugt 2026x und Magic/CATIA im Namen
         $CatiaDir = $candidates | Sort-Object @{ Expression = { ($_ -match '2026') -as [int] }; Descending = $true },
-                                              @{ Expression = { ($_ -match 'Magic|CATIA|Cameo') -as [int] }; Descending = $true } |
+                                              @{ Expression = { ($_ -match 'Magic|CATIA|Cameo|Architect') -as [int] }; Descending = $true } |
                     Select-Object -First 1
         if ($candidates.Count -gt 1) {
             Info 'Mehrere Installationen gefunden:'
@@ -104,7 +108,10 @@ if (-not $CatiaDir) {
     Info "So findest du den Ordner: Startmenü -> Rechtsklick auf CATIA Magic -> 'Dateispeicherort öffnen'"
     Info "-> nochmal Rechtsklick auf die Verknüpfung -> 'Dateispeicherort öffnen' -> eine Ebene hoch (Ordner mit 'bin' und 'lib')."
     $CatiaDir = Ask 'Pfad zum CATIA-Ordner einfügen und Enter drücken'
-    if (-not (Test-CatiaDir $CatiaDir)) { Fail "Im Ordner '$CatiaDir' gibt es keine CATIA-Bibliotheken (lib\md.jar)." }
+    # Falls jemand den Pfad zur .exe oder zum bin-Ordner einfügt: auf den Hauptordner zurückgehen
+    if ($CatiaDir -match '\.exe$') { $CatiaDir = Split-Path $CatiaDir -Parent }
+    if ((Split-Path $CatiaDir -Leaf) -eq 'bin') { $CatiaDir = Split-Path $CatiaDir -Parent }
+    if (-not (Test-CatiaDir $CatiaDir)) { Fail "Im Ordner '$CatiaDir' gibt es keine CATIA-Bibliotheken (Ordner 'lib' mit .jar-Dateien)." }
 }
 Ok "CATIA: $CatiaDir"
 
