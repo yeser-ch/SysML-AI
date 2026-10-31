@@ -27,8 +27,9 @@ Ordner `Dokumente/SysML-AI-QA/` (Button „Open results“):
 
 | Datei | Inhalt |
 |---|---|
-| `runs/run_<datum-zeit>.csv` | ein Testlauf – **diese Datei bewerten** |
-| `answers_log.csv` | alles, auch Chat-Fragen (`run_id = chat`) |
+| `runs/run_<datum-zeit>.xlsx` | ein Testlauf, formatiert für Excel – **diese Datei bewerten** |
+| `answers_log.xlsx` | alles, auch Chat-Fragen (`run_id = chat`), formatiert – wird nach jeder Antwort neu erzeugt |
+| `runs/run_<datum-zeit>.csv`, `answers_log.csv` | dieselben Daten als Rohdaten (Quelle für die .xlsx, für Auswertungen mit Python/R) |
 | `archive/prompts/<sha>.md` | System-Prompt im Wortlaut, Dateiname = `system_prompt_sha` |
 | `archive/exports/<sha>.json` | Modell-Export, Dateiname = `export_sha` |
 
@@ -40,7 +41,7 @@ Wichtige Spalten: `model_used`, `model_version` (**tatsächlich antwortendes Mod
 Alles sind normale Dateien – ihr dürft sie bearbeiten und löschen:
 - **Testfälle** (eure CSV): beliebig ändern, Zeilen löschen/hinzufügen. Das Plugin liest sie bei jedem Start eines Testlaufs neu.
 - **Ergebnisdateien**: Das Plugin hängt nur Zeilen an und liest sie nie zurück. Zeilen oder ganze Dateien löschen ist kein Problem.
-- **Empfehlung zum Bewerten:** Run-Datei in Excel öffnen und **als .xlsx speichern** (z. B. `run_…_bewertet.xlsx`), dort bewerten. So bleiben die Rohdaten unverändert, und Excel zerstört keine Umlaute (Excels normales CSV-Format ist nicht UTF-8).
+- **Empfehlung zum Bewerten:** in `runs/run_….xlsx` bewerten (Spalte `rating` hat eine Auswahlliste). Diese Datei wird nach dem Testlauf nicht mehr verändert. Die CSV bleibt als unveränderte Rohdaten erhalten. `answers_log.xlsx` wird bei jeder Antwort neu erzeugt – dort nicht bewerten.
 - Ist eine Ergebnisdatei gerade in Excel geöffnet, kann das Plugin nicht hineinschreiben (Windows sperrt sie). Dann landet die Zeile in `…_while-open.csv` und im Chat erscheint ein Hinweis.
 - Die Kopfzeile nicht umbenennen – sonst legt das Plugin eine neue Datei an und benennt die alte in `…_old_….csv` um.
 - `archive/` nur löschen, wenn ihr die Prüfsummen nicht mehr nachschlagen müsst.

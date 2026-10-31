@@ -15,7 +15,8 @@ import java.util.List;
  *
  * Ordner: Dokumente/SysML-AI-QA/
  *   answers_log.csv          – alle Antworten (Chat und Testläufe)
- *   runs/run_<id>.csv        – eine Datei pro Testlauf (gleiche Spalten, zum Bewerten)
+ *   answers_log.xlsx         – dieselben Daten formatiert für Excel (wird nach jeder Antwort neu erzeugt)
+ *   runs/run_<id>.csv/.xlsx  – eine Datei pro Testlauf (gleiche Spalten, zum Bewerten)
  *   archive/prompts/<sha>.md – jeder verwendete System-Prompt im Wortlaut
  *   archive/exports/<sha>.json – jeder verwendete Modell-Export
  *
@@ -64,7 +65,12 @@ public final class EvaluationLog {
     public static synchronized String append(EvaluationRecord r, File runFile) {
         StringBuilder warn = new StringBuilder();
         for (File f : runFile == null ? new File[]{getLogFile()} : new File[]{getLogFile(), runFile}) {
-            if (writeLine(f, r)) continue;
+            if (writeLine(f, r)) {
+                // Lesbare Excel-Ansicht daneben neu erzeugen (die CSV bleibt die Rohdatenquelle)
+                String xw = ExcelExport.writeFor(f);
+                if (xw != null) warn.append(xw).append(' ');
+                continue;
+            }
             File alt = new File(f.getParentFile(), f.getName().replace(".csv", "_while-open.csv"));
             if (writeLine(alt, r)) {
                 warn.append(f.getName()).append(" is open in another program – saved to ").append(alt.getName()).append(". ");
