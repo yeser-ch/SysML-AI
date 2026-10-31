@@ -90,7 +90,7 @@ Steht dort stattdessen `FEHLER: …` in Rot, hilft die Tabelle [Wenn etwas nicht
 Das Plugin braucht einen persönlichen Schlüssel für die Gemini-API von Google. Er ist im Free Tier kostenlos.
 
 1. <https://aistudio.google.com/apikey> öffnen und mit dem Google-Konto anmelden.
-2. **Create API key** klicken.
+2. Oben rechts **API-Schlüssel erstellen** klicken (englische Oberfläche: *Create API key*). Unter *Abrechnungsstufe* sollte **Kostenlose Stufe** stehen.
 3. Den angezeigten Key **kopieren** (Strg+C). Der Key ist wie ein Passwort: nicht weitergeben und nicht auf Screenshots zeigen.
 
 ![API-Key in Google AI Studio erstellen](docs/images/start-01-aistudio-key.png)
