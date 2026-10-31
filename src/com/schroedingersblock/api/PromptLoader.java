@@ -28,7 +28,7 @@ public class PromptLoader {
             "Answer in technical detail for an experienced systems engineer. "
                     + "Name the concrete model elements (with their names) that support each statement.";
 
-    /** Fallback, falls die Datei fehlt – inhaltlich identisch zu installer/ressources/System_Prompt.md. */
+    /** Fallback, falls die Datei fehlt – inhaltlich identisch zu resources/System_Prompt.md. */
     private static final String DEFAULT_SYSTEM_PROMPT =
             "You are an assistant for SysML v1 models created in CATIA Magic.\n"
                     + "With the first user message you receive the model as a JSON export: a flat list of elements, "

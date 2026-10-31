@@ -34,7 +34,7 @@ Branch: `feature/free-prompt-full-model` (Basis: `main` der Vorgängergruppe, Co
 - `api/Evaluation.java`, `api/EvaluationRecord.java`, `api/ModelExport.java`, `api/IdChecker.java`, `api/TestSuite.java`, `api/Hashing.java` – neu (Evaluation)
 - `evaluation/README.md`, `evaluation/testcases_template.csv` – Anleitung und Vorlage für Testfälle
 - `data_extraction/DataExtractionService.java` – `exportModel(...)` mit Scope ganzes Modell / Umgebung
-- `installer/ressources/` – `System_Prompt.md` und `sysml_flat_export.vm` neu, 4 alte Prompt-Dateien entfernt; Installer kopiert die neuen Dateien
+- `resources/System_Prompt.md` – neuer System-Prompt (ersetzt die 4 festen Prompt-Dateien); der alte Installer-Ordner `installer/` wurde entfernt, installiert wird mit `install.bat`
 
 ## Evaluation
 Siehe [`evaluation/README.md`](evaluation/README.md).
@@ -44,7 +44,6 @@ Ausführliche Anleitung: [`INSTALL.md`](INSTALL.md).
 
 - **Nutzer:** fertiges Paket `SysML-AI-QA_v….zip` (GitHub → Releases) entpacken → CATIA schließen → `install.bat` doppelklicken. Kein Java nötig.
 - **Entwickler:** `update.bat` (neuester Stand von GitHub) oder `build.bat` (eigener Ordner). Beide brauchen ein JDK 17+, bauen die JAR, legen das Paket für Nutzer unter `dist\` ab und installieren es mit `install.ps1`.
-- Der alte Installer `installer/target/SchroedingersBlock-Installer.jar` enthält noch die Version der Vorgängergruppe und sollte nicht verwendet werden.
 
 ## Offene Punkte / Risiken
 - **Nur gegen Platzhalter-Klassen kompiliert**, nicht in CATIA getestet. Das Build-Skript wurde mit PowerShell 7 gegen eine nachgebaute CATIA-Ordnerstruktur getestet, nicht auf Windows.

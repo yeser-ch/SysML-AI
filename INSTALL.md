@@ -1,6 +1,6 @@
 # SysML AI Q&A – Installation
 
-SysML AI Q&A ist ein Plugin für **CATIA Magic / Magic Systems of Systems Architect 2026x**. Es stellt einer KI (Google Gemini) Fragen zum geöffneten SysML-Modell und protokolliert jede Antwort für die Auswertung. Es ist die Weiterentwicklung von *Schrödinger's Block* (SoSe 2026) im Projekt „How well does AI understand the SysML model?“ (HM München, WS 2026/27).
+SysML AI Q&A ist ein Plugin für **CATIA Magic / Magic Systems of Systems Architect 2026x**. Es stellt einer KI (Google Gemini) Fragen zum geöffneten SysML-Modell und protokolliert jede Antwort für die Auswertung. Entwickelt im Projekt „How well does AI understand the SysML model?“ (Systems Engineering Project, HM München, WS 2026/27).
 
 Es gibt zwei Wege:
 
@@ -8,8 +8,6 @@ Es gibt zwei Wege:
 | --- | --- | --- |
 | **A – Fertiges Paket** | Nutzer, Betreuer, neue Teammitglieder | nur CATIA und Adminrechte |
 | **B – Selbst bauen** | Entwickler, die den Code ändern | zusätzlich ein Java JDK 17+ |
-
-> **Nicht verwenden:** `installer/target/SchroedingersBlock-Installer.jar` im Repository. Er enthält noch die alte Version *Schrödinger's Block*.
 
 ---
 
@@ -32,7 +30,7 @@ Es gibt zwei Wege:
 5. Im schwarzen Fenster läuft die Installation in drei Schritten durch. Am Ende steht **„Fertig! SysML AI Q&A … ist installiert.“** → beliebige Taste drücken.
 6. **CATIA starten.** Kontrolle: Menü **Window → Notification Window**. Dort steht die Zeile `Plugin loaded (version …)`.
 
-Eine vorhandene Installation von *Schrödinger's Block* oder einer älteren Version von SysML AI Q&A wird dabei ersetzt. API-Key und Einstellungen bleiben erhalten.
+Eine ältere Version von SysML AI Q&A (auch die Vorgängerversion *Schrödinger's Block*) wird dabei ersetzt. API-Key und Einstellungen bleiben erhalten.
 
 ---
 

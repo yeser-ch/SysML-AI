@@ -130,7 +130,7 @@ public class GeminiExplanationService implements ExplanationService {
         if (old.isEmpty() || apiKey.isEmpty()) return;
         Thread t = new Thread(() -> {
             for (CacheEntry e : old) deleteCache(e.name, apiKey);
-        }, "SchroedingersBlock-cache-cleanup");
+        }, "SysML-AI-QA-cache-cleanup");
         t.setDaemon(true);
         t.start();
     }
