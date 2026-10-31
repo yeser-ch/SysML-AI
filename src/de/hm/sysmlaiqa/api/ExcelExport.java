@@ -32,9 +32,9 @@ public final class ExcelExport {
 
     /** Spalten, die vorne stehen und sichtbar bleiben (in dieser Reihenfolge), mit Breite in Zeichen. */
     private static final Object[][] MAIN = {
-            {"run_id", 16}, {"test_id", 9}, {"category", 9}, {"repetition", 10}, {"timestamp", 19},
-            {"question", 45}, {"expected_answer", 35}, {"answer", 75}, {"rating", 15}, {"rating_notes", 30},
-            {"model_version", 22}, {"success", 9}, {"duration_s", 11}, {"ids_unknown", 12},
+            {"run_id", 17}, {"test_id", 11}, {"category", 12}, {"repetition", 13}, {"timestamp", 20},
+            {"question", 45}, {"expected_answer", 35}, {"answer", 75}, {"rating", 17}, {"rating_notes", 30},
+            {"model_version", 22}, {"success", 11}, {"duration_s", 13}, {"ids_unknown", 14},
     };
 
     /** Spalten mit Zahlen (werden in Excel als Zahl gespeichert, damit Filter und Summen funktionieren). */
@@ -153,7 +153,7 @@ public final class ExcelExport {
         }
         int mainCount = order.size();
         for (int i = 0; i < header.size(); i++) {
-            if (!order.contains(i)) { order.add(i); widths.add(Math.max(10, Math.min(24, header.get(i).length() + 2))); }
+            if (!order.contains(i)) { order.add(i); widths.add(Math.max(12, Math.min(26, header.get(i).length() + 4))); }
         }
 
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -386,7 +386,6 @@ public final class ExcelExport {
      */
     private static final String STYLES = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-            + "<numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"0.##\"/></numFmts>"
             + "<fonts count=\"3\">"
             + "<font><sz val=\"10\"/><name val=\"Calibri\"/><family val=\"2\"/></font>"
             + "<font><b/><sz val=\"10\"/><color rgb=\"FFFFFFFF\"/><name val=\"Calibri\"/><family val=\"2\"/></font>"
@@ -411,7 +410,7 @@ public final class ExcelExport {
             + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
             + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\"/></xf>"
             + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf>"
-            + "<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyNumberFormat=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\"/></xf>"
+            + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\"/></xf>"
             + "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" wrapText=\"1\"/></xf>"
             + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"3\" borderId=\"1\" xfId=\"0\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf>"
             + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"4\" borderId=\"1\" xfId=\"0\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf>"
