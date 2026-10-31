@@ -251,7 +251,7 @@ try {
     foreach ($vm in @('sysml_flat_export.vm', 'sysml_partial_export.vm')) {
         Copy-Item (Join-Path $Repo "src/com/schroedingersblock/data_extraction/$vm") (Join-Path $plug "data_extraction/$vm") -Force
     }
-    Copy-Item (Join-Path $Repo 'installer/ressources/System_Prompt.md') (Join-Path $plug 'prompts/System_Prompt.md') -Force
+    Copy-Item (Join-Path $Repo 'resources/System_Prompt.md') (Join-Path $plug 'prompts/System_Prompt.md') -Force
     [System.IO.File]::WriteAllText((Join-Path $plug 'VERSION.txt'), $version)
     foreach ($f in @('install.bat', 'install.ps1', 'INSTALL.md')) {
         Copy-Item (Join-Path $Repo $f) (Join-Path $pkgDir $f) -Force

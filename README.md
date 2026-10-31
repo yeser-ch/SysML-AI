@@ -2,7 +2,7 @@
 
 **Fragen an eine KI zum eigenen SysML-Modell – direkt in CATIA Magic, mit vollständiger Protokollierung für die Auswertung.**
 
-Weiterentwicklung des Plugins *Schrödinger's Block* (SoSe 2026) im Projekt **„How well does AI understand the SysML model?“** – Systems Engineering Project, Hochschule München, WS 2026/27.
+Entwickelt im Projekt **„How well does AI understand the SysML model?“** – Systems Engineering Project, Hochschule München, WS 2026/27.
 
 | | |
 | --- | --- |
@@ -10,193 +10,75 @@ Weiterentwicklung des Plugins *Schrödinger's Block* (SoSe 2026) im Projekt **�
 | **KI** | Google Gemini API (eigener, kostenloser API-Key) |
 | **Aktueller Stand** | Branch `feature/free-prompt-full-model` |
 
-### Loslegen
+## Loslegen
 
-- **Installieren:** [`INSTALL.md`](INSTALL.md) – fertiges Paket aus den *Releases* herunterladen, entpacken, `install.bat` doppelklicken. Kein Java nötig.
-- **Was ist neu gegenüber Schrödinger's Block:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
+- **Installieren:** [`INSTALL.md`](INSTALL.md) – fertiges Paket unter *Releases* herunterladen, entpacken, `install.bat` doppelklicken. Kein Java nötig.
 - **Testläufe und Auswertung:** [`evaluation/README.md`](evaluation/README.md)
+- **Änderungen gegenüber der Ausgangsversion:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
 
-### Was das Plugin kann
+## Was das Plugin kann
 
 - Freie Fragen zum ganzen Modell oder zu einem ausgewählten Element stellen, mit Folgefragen im Chat
 - Schnellfragen als Vorlagen nach den vier Kategorien A Retrieval, B Structure, C Semantics, D Uncertainty
 - Alle Versuchsparameter in einem Fenster: KI-Modell, Temperatur, Thinking, Kontext, Grounding, Fallback, Wiederholungen
-- Testsuite aus einer CSV-Datei automatisch abarbeiten, jede Antwort mit Versuchsaufbau protokollieren (CSV für Excel)
+- Eine Testsuite aus einer CSV-Datei automatisch abarbeiten und jede Antwort mit Versuchsaufbau protokollieren (CSV für Excel)
 - Zitierte Element-IDs gegen das Modell prüfen
 
 ---
 
-> **Hinweis:** Alles ab hier ist der Entwickler-Guide der Vorgängergruppe *Schrödinger's Block* (SoSe 2026). Er beschreibt deren Workflow und Stand und ist teilweise veraltet. So gibt es den `DummyExplanationService` nicht mehr, und `build.ps1` ist inzwischen fertig (siehe [`INSTALL.md`](INSTALL.md), Weg B).
+## Für Entwickler
 
-## SchroedingersBlock (Vorgängergruppe)
-📘 AI4MBSE - Entwickler Guide & Workflow
+### Aufbau des Repositorys
 
+| Ordner / Datei | Inhalt |
+| --- | --- |
+| `src/com/schroedingersblock/core/` | Start des Plugins, Menüs in Tree, Diagrammen, Tabellen und Menüleiste |
+| `src/com/schroedingersblock/ui/` | Fenster: Fragen, Einstellungen, Schnellfragen, Chat, API-Key |
+| `src/com/schroedingersblock/data_extraction/` | Modellexport als JSON über Velocity-Templates (ganzes Modell oder Umgebung eines Elements) |
+| `src/com/schroedingersblock/api/` | Gemini-Anbindung (Cache, Retry, Rate-Limits), System-Prompt, Testsuite, Protokoll, ID-Check |
+| `resources/System_Prompt.md` | System-Prompt (wird installiert und lässt sich in CATIA ohne neu zu bauen ändern) |
+| `evaluation/` | Vorlage für Testfälle und Erklärung der Log-Spalten |
+| `Catia_Model/` | CATIA-Modelle aus der Ausgangsversion |
+| `build.*`, `update.*`, `install.*` | Bauen, Aktualisieren, Installieren (siehe [`INSTALL.md`](INSTALL.md)) |
 
+Der Paketname `com.schroedingersblock` und die Plugin-ID `com.schroedingersblock.plugin` stammen aus der Ausgangsversion. Sie bleiben bewusst unverändert, damit Updates eine bestehende Installation ersetzen und API-Key und Einstellungen erhalten bleiben.
+
+### Wichtigste Klassen
+
+| Klasse | Aufgabe |
+| --- | --- |
+| `SchroedingersBlockPlugin` | Start und Ende des Plugins, Registrierung der Menüs, Einstellungs-Keys |
+| `MenuConfigurator` | Menüeintrag „Ask AI (SysML AI Q&A)“ im Kontextmenü |
+| `ShowExplanationAction` | Klick auf den Menüeintrag: Fokuselement ermitteln (auch aus Tabellen), Datenschutz und API-Key prüfen |
+| `ExplanationDialog` | Hauptfenster: Einstellungen, Schnellfragen, Chat, Testsuite |
+| `DataExtractionService` | Export des Modells als JSON |
+| `GeminiExplanationService` | Anfragen an Gemini, Modell-Cache, Wiederholungen, Rate-Limits |
+| `PromptLoader` | System-Prompt laden und Platzhalter füllen |
+| `TestSuite`, `Evaluation` | Testfälle aus CSV abarbeiten, Wiederholungen |
+| `EvaluationLog`, `EvaluationRecord` | Protokoll jeder Antwort (CSV) und Archiv von Prompt und Export |
+| `IdChecker`, `ModelIndex` | Zitierte Element-IDs prüfen, Modellstruktur für Schnellfragen |
+| `QuickQuestions` | Fragevorlagen nach Kategorie A–D |
+
+### Bauen und testen
+
+1. Einmalig ein **JDK 17 oder neuer** installieren (z. B. Eclipse Temurin 21, siehe [`INSTALL.md`](INSTALL.md), Weg B).
+2. CATIA schließen.
+3. **`build.bat`** im Repository-Ordner doppelklicken. Das baut den lokalen Code, legt das Installationspaket unter `dist\` ab und installiert es.
+   Ohne lokalen Clone geht es auch mit **`update.bat`**: Es lädt den neuesten Stand des Branches von GitHub.
+4. CATIA starten und unter **Window → Notification Window** prüfen, ob `Plugin loaded (version …)` mit der erwarteten Version erscheint.
+
+Nach jeder Änderung an `.java`-Dateien muss neu gebaut werden. Änderungen am System-Prompt kann man auch direkt im installierten Plugin-Ordner unter `prompts\System_Prompt.md` machen. Aber Achtung: Der System-Prompt ist eine Versuchsvariable, jede Änderung muss dokumentiert werden.
+
+### Zusammenarbeit (Vorschlag)
+
+- `feature/free-prompt-full-model` ist der aktuelle Arbeitsstand.
+- Neue Arbeit in einem eigenen Branch davon beginnen (z. B. `feature/<thema>`) und per Pull Request zurückführen. So bleibt der gemeinsame Stand lauffähig.
+- Vor dem Pull Request einmal bauen und in CATIA testen.
+- Bei einer neuen Version `PLUGIN_VERSION` in `api/EvaluationRecord.java` erhöhen. Sie steht in jeder Log-Zeile und macht Messungen eindeutig zuordenbar.
+- Neue Versionen für andere als Release mit dem Paket aus `dist\` veröffentlichen (siehe [`INSTALL.md`](INSTALL.md)).
 
 ---
-Willkommen im Projekt! Diese Anleitung definiert unseren gemeinsamen Workflow und erklärt die technische Architektur unseres Plugins, damit wir effizient zusammenarbeiten können.
----
 
----
+## Herkunft
 
-### 🚀 Aktueller Status (main)
-Der main-Branch enthält die stabilste Version des Plugins.
-Das Grundgerüst des Plugins enthält:
-
-    UI-Integration: Rechtsklick-Menü in allen relevanten SysML-Diagrammen und im Strukturbaum.
-
-    Datenfluss: Erfolgreiche Erfassung des selektierten Elements (targetElement).
-
-    User Interface: Asynchrones Chat-Fenster (Swing) für KI-Interaktionen.
-
-    Compliance: Integrierte Datenschutz-Abfrage (Privacy Consent).
-
-    API-Brücke: Bereitgestelltes Interface für die Anbindung von LLMs.
-
-
-### 🏗️ Projekt-Architektur (Die Kern-Skripte)
-
-Damit du im Code sofort weißt, wo du Änderungen vornehmen musst, sind hier unsere zentralen Java-Klassen und ihre jeweiligen Zuständigkeiten (Rollen) erklärt:
-
-* `SchroedingersBlockPlugin.java`
-    * **Funktion:** Verwaltet den Start- und den Stopp-Zyklus des Plugins und registriert unsere Menüs im CATIA-System.
-
-* `MenuConfigurator.java`
-    * **Funktion:** Findet exakt heraus, auf welches SysML-Element (z.b.:Block, Requirement, Diagramm, etc.) der Nutzer geklickt hat und fängt es ab.
-
-* `ShowExplanationAction.java`
-    * **Funktion:** Reagiert auf den Klick im Menü, überprüft die Datenschutz-Zustimmung und öffnet bei Erfolg das Chat-Fenster.
-
-* `ExplanationDialog.java`
-    * **Funktion:** Die grafische Benutzeroberfläche (UI). Nutzt Multithreading (`SwingWorker`), damit CATIA während der KI-Ladezeiten nicht einfriert.
-
-*  `ExplanationService.java`
-    * **Funktion:** Das Interface (für die LLM-API),definiert wie unsere UI Daten an die Künstliche Intelligenz sendet und empfängt.
-
-* `DummyExplanationService.java`
-    * **Funktion:** Ein Platzhalter für das LLM-API-Team. Liefert aktuell noch statische Test-Antworten, um das UI zu testen, ohne echtes Internet zu benötigen.
-----
-
-### Speziell für LLM-API & Daten-Export
-
-Eure Hauptbaustelle ist der `DummyExplanationService.java`. Dieser muss durch echte Logik ersetzt werden.
-
-**1. Eure Eingangsdaten (Was ihr von der UI bekommt):**
-Die UI übergibt euch über das Interface `ExplanationService` zwei entscheidende Parameter:
-*  **`targetElement` (Typ: `Element`):** Das rohe CATIA-Element, auf das der Nutzer geklickt hat.
-* **`mode` (Typ: `String`):** Der Kontext der Anfrage (z. B. `"Element View"` oder `"Model View"`).
-
---------
-
-----
-
-
-
-
-### 📚 Glossar: Local vs. Origin
-
-💻 Local (Lokal)
-Das ist dein Laptop. Änderungen, die du hier machst (speichern, committen), sieht erst mal nur DU. Wenn dein Laptop kaputt geht, sind "lokale" Änderungen weg.
-
-Befehle: git commit, git checkout, .\build.ps1
-
-☁️ Origin (Remote/Server)
-Das ist GitHub (die Cloud). Erst wenn du etwas hierhin "pushst", können es die anderen (Simon, Moritz, etc.) sehen.
-
-git push: Schiebt deine lokalen Änderungen auf den Server (Origin).
-git pull: Holt Änderungen vom Server auf deinen Laptop (Local).
-git fetch: Schaut auf dem Server nach Neuerungen, lädt sie aber noch nicht in deine Dateien.
-
-### 🌳 Unsere Branching-Strategie (Der 3-Ebenen-Workflow)
-
-Wir arbeiten nach einem strengen hierarchischen Prinzip. Bitte haltet euch daran, um Merge-Konflikte zu vermeiden.
-
-1. Ebene: main (Heilig!)
-Hier liegt der funktionierende Code.
-Niemals direkt hierhin pushen.
-Niemals direkt von features/ hierhin mergen.
-
-2. Ebene: Persönliche Branches (Julius, Nikolaj, Florian, Max, Leo)
-Jedes Teammitglied hat seinen eigenen Branch (z.B. Leo).
-Dies ist dein persönlicher "Sammelplatz" (Staging Area).
-Verantwortung: Du bist dafür zuständig, dass dein Branch regelmäßig in main gemerged wird. Es dürfen sich keine riesigen Änderungen anstauen!
-
-3. Ebene: features/ (Die Werkstatt)
-In diesem Unterordner befinden sich die Branches, in denen die eigentliche Entwicklung stattfindet.
-Wenn du etwas Neues entwickeln oder ausprobieren willst, erstelle hier einen Branch (z.B. features/neue-buttons).
-Regel: Diese Features werden immer von deinem persönlichen Branch abgeleitet und auch nur dorthin zurück gepusht.
-🛠️ Workflow: Wie entwickle ich ein neues Feature?
-
-Schritt 1: Feature-Branch erstellen
-Du leitest deinen Feature-Branch immer von deinem persönlichen Branch ab (nie vom main!).
-
-Stelle sicher, dass dein persönlicher Branch aktuell ist und erstelle dann den Feature-Branch. Beispiel für Leo:
-
-## 1. Auf deinen persönlichen Branch wechseln
-git checkout Leo
-
-## 2. Den neuesten Stand holen (falls du woanders gearbeitet hast)
-git pull origin Leo
-
-## 3. Neuen Feature Branch davon ableiten (WICHTIG!)
-git checkout -b features/neue-buttons Leo
-Schritt 2: Entwickeln & Builden (Wichtig!)
-
-Bevor du deine Änderungen in CATIA Magic testen kannst, muss der Java-Code kompiliert werden. Das Plugin funktioniert sonst nicht mit dem neuen Code.
-
-Befehl: Führe im Terminal im Projektordner folgendes aus:
-
-.\build.ps1  *** - Den Teil müssen wir für unser Projekt wahrscheinlich noch etwas anpassen. - ***
-
-Wann muss ich das tun?
-
-Einmalig vor der allerersten Nutzung.
-Jedes Mal, wenn du .java Code geändert hast und die Änderung in CATIA sehen willst.
-Schritt 3: Arbeit sichern (Commit & Push)
-
-Halte deine Features klein! Konzentriere dich auf eine Aufgabe. Wenn fertig:
-
-git add .
-git commit -m "Feat: Beschreibung was ich gemacht habe"
-
-## Pushen in den feature branch auf dem Server
-git push origin features/mein-neues-feature
-Schritt 4: In den persönlichen Branch bringen
-
-Wenn das Feature fertig ist, bringst du es in deinen Namens-Branch zurück.
-
-## Zurück zu deinem Branch wechseln
-git checkout <DeinName>
-
-## Feature reinholen (mergen)
-git merge features/mein-neues-feature
-
-## Auf den Server laden
-git push origin <DeinName>
-Schritt 5: In den Main bringen (Der Abschluss)
-
-Regelmäßig (z.B. wenn das Feature stabil läuft) muss dein Namens-Branch in den main gemerged werden. Dies machen wir idealerweise über einen Pull Request in GitHub oder (nach Absprache im Team) lokal.
-
-🔄 Tägliche Routine: Update vom Main (Drift verhindern!)
-
-Da wir zu fünft arbeiten, ändert sich der main Branch ständig. Damit dein persönlicher Branch nicht veraltet ("abweicht") und du später keine riesigen Merge-Konflikte lösen musst, musst du die Änderungen der anderen regelmäßig in deinen Branch holen.
-
-## 1. Sicherstellen, dass du auf deinem persönlichen Branch bist
-git checkout <DeinName>
-
-## 2. Den neuesten Stand vom Server (GitHub) herunterladen (noch nicht mergen)
-git fetch origin
-
-## 3. Den main vom Server in deinen lokalen Branch mergen
-git merge origin/main
-# ⚠️ Goldene Regeln
-
-Klein anfangen: Entwickle kleine Bausteine und merge sie oft in deinen persönlichen Branch.
-Verantwortung: Du bist für deinen Namens-Branch verantwortlich. Halte ihn sauber und synchronisiere ihn oft mit main.
-Build Skript: Vergiss nicht .\build.ps1 auszuführen, sonst wunderst du dich, warum CATIA deine Änderungen nicht anzeigt.
-Hierarchie:
-main <--- DeinName <--- features/...
-
-
-
-
+SysML AI Q&A baut auf dem Plugin *Schrödinger's Block* auf, das eine Projektgruppe im Sommersemester 2026 an der Hochschule München entwickelt hat ([Original-Repository](https://github.com/hirtleo/SchroedingersBlock)). Übernommen wurden die Plugin-Grundstruktur, die Velocity-Exporte, Datenschutzabfrage und API-Key-Verwaltung. Was seitdem neu ist, steht in [`AENDERUNGEN.md`](AENDERUNGEN.md).
