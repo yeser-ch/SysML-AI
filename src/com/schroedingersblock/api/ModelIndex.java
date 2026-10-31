@@ -142,6 +142,29 @@ public class ModelIndex {
         return new ArrayList<>(result.values());
     }
 
+    /** Elemente mit genau dieser Distanz (Anzahl Beziehungen) von e – per Breitensuche. */
+    public List<Elem> atDistance(Elem e, int distance) {
+        Map<String, Integer> dist = new HashMap<>();
+        List<Elem> frontier = new ArrayList<>();
+        dist.put(e.id, 0);
+        frontier.add(e);
+        for (int d = 1; d <= distance && !frontier.isEmpty(); d++) {
+            List<Elem> next = new ArrayList<>();
+            for (Elem f : frontier) {
+                for (Elem n : neighbours(f)) {
+                    if (!dist.containsKey(n.id)) {
+                        dist.put(n.id, d);
+                        next.add(n);
+                    }
+                }
+            }
+            frontier = next;
+        }
+        List<Elem> out = new ArrayList<>();
+        for (Elem x : frontier) if (x.hasName()) out.add(x);
+        return out;
+    }
+
     private static String field(String seg, String key) {
         Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\":\"").matcher(seg);
         if (!m.find()) return "";
