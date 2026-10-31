@@ -66,8 +66,9 @@ public class ShowExplanationAction extends MDAction {
         if (resolveSelectionOnClick) focus = currentSelection();
         if (elementMode && focus == null) {
             JOptionPane.showMessageDialog(null,
-                    "No element selected.\n\nSelect an element in the containment tree or in a diagram first.\n"
-                            + "In a table: right-click the row -> 'Select in Containment Tree' (Alt+B), then try again.",
+                    "No element selected.\n\nSelect an element in the containment tree, a diagram or a table row first.\n"
+                            + "If it still does not work in a table: right-click the row -> 'Select in Containment Tree' (Alt+B),\n"
+                            + "then right-click the element in the tree -> 'Ask AI about this element...'.",
                     SchroedingersBlockPlugin.DISPLAY_NAME, JOptionPane.INFORMATION_MESSAGE);
             return;
         }
@@ -111,6 +112,11 @@ public class ShowExplanationAction extends MDAction {
      */
     static Element currentSelection() {
         Object project = Application.getInstance().getProject();
+        // 0. Markierte Zeile in einer Tabelle (Requirement Table usw.): Tabelle mit dem Tastaturfokus auslesen
+        try {
+            Element el = selectedTableRowElement();
+            if (el != null) return el;
+        } catch (Throwable ignored) { }
         // 1. Aktives Diagramm / aktive Tabelle
         try {
             Object diagram = call(project, "getActiveDiagram");
@@ -126,6 +132,37 @@ public class ShowExplanationAction extends MDAction {
             Object user = call(node, "getUserObject");
             if (user instanceof Element) return (Element) user;
         } catch (Throwable ignored) { }
+        return null;
+    }
+
+    /** Sucht die zuletzt fokussierte JTable und liefert das Modellelement der markierten Zeile. */
+    private static Element selectedTableRowElement() {
+        java.awt.Component c = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+        javax.swing.JTable table = null;
+        while (c != null) {
+            if (c instanceof javax.swing.JTable) { table = (javax.swing.JTable) c; break; }
+            c = c.getParent();
+        }
+        if (table == null) return null;
+        int row = table.getSelectedRow();
+        if (row < 0) return null;
+        // Erst die Spalte mit dem Namen/Element (meist vorne), dann alle anderen
+        for (int col = 0; col < table.getColumnCount(); col++) {
+            Element el = asElement(table.getValueAt(row, col));
+            if (el != null) return el;
+        }
+        return null;
+    }
+
+    private static Element asElement(Object value) {
+        if (value == null) return null;
+        if (value instanceof Element) return (Element) value;
+        for (String m : new String[]{"getElement", "getUserObject", "getValue", "getRowElement"}) {
+            try {
+                Object v = call(value, m);
+                if (v instanceof Element) return (Element) v;
+            } catch (Throwable ignored) { }
+        }
         return null;
     }
 
