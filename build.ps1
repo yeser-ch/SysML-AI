@@ -275,7 +275,18 @@ try {
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($pkgDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+    # Einträge selbst anlegen: Windows PowerShell 5.1 schreibt sonst "\" statt "/" in die ZIP (nicht standardkonform)
+    $fs = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::Create)
+    $za = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($f in Get-ChildItem -LiteralPath $pkgDir -Recurse -File) {
+            $rel = $pkgName + '/' + (($f.FullName.Substring($pkgDir.Length).TrimStart('\', '/')) -replace '\\', '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $f.FullName, $rel, [System.IO.Compression.CompressionLevel]::Optimal)
+        }
+    } finally {
+        $za.Dispose()
+        $fs.Dispose()
+    }
     Ok ("Paket: $zipPath  ({0:N0} KB)" -f ((Get-Item $zipPath).Length / 1KB))
     Info 'Diese ZIP an neue Nutzer weitergeben (z. B. GitHub -> Releases). Sie brauchen kein Java und kein Git.'
 } catch {
