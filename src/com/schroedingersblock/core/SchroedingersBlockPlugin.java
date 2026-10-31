@@ -11,6 +11,8 @@ import com.nomagic.actions.AMConfigurator;
 import com.nomagic.actions.ActionsCategory;
 import com.nomagic.actions.ActionsManager;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import com.nomagic.magicdraw.plugins.Plugin;
 import com.nomagic.magicdraw.actions.ActionsConfiguratorsManager;
 import com.schroedingersblock.ui.OpenSettingsAction;
@@ -73,11 +75,41 @@ public class SchroedingersBlockPlugin extends Plugin {
 
         MenuConfigurator configurator = new MenuConfigurator(); //Pluginmenu instanzeiren mit dem namen configurator
         ActionsConfiguratorsManager manager = ActionsConfiguratorsManager.getInstance();
+        List<String> problems = new ArrayList<>();
 
-        // Menü links im Strukturbaum anzeigen
-        manager.addContainmentBrowserContextConfigurator(configurator);
+        // 1. Tools-Menü ZUERST anmelden – darf nicht an einem Fehler bei den Diagrammtypen scheitern
+        try {
+            manager.addMainMenuConfigurator(new AMConfigurator() {
+                @Override
+                public void configure(ActionsManager manager) {
+                    // Eigenes Menü "Ask AI" in der Menüleiste (gut auffindbar, unabhängig von der internen ID des Tools-Menüs).
+                    // Die Auswahl (Baum, Diagramm, Tabellenzeile) wird erst beim Klick ermittelt.
+                    if (manager.getActionFor("SCHROEDINGER_MAIN_MENU") != null) return;
+                    ActionsCategory menu = new ActionsCategory("SCHROEDINGER_MAIN_MENU", "Ask AI");
+                    menu.setNested(true);
+                    menu.addAction(new ShowExplanationAction(null, false, true));
+                    menu.addAction(new ShowExplanationAction(null, true, true));
+                    menu.addAction(new OpenSettingsAction());
+                    manager.addCategory(menu);
+                }
 
-        // Menü in den folgenden Diagrammen anzeigen:
+                @Override
+                public int getPriority() {
+                    return AMConfigurator.MEDIUM_PRIORITY;
+                }
+            });
+        } catch (Throwable t) {
+            problems.add("Tools menu: " + t);
+        }
+
+        // 2. Rechtsklick im Modellbaum
+        try {
+            manager.addContainmentBrowserContextConfigurator(configurator);
+        } catch (Throwable t) {
+            problems.add("Containment tree: " + t);
+        }
+
+        // 3. Rechtsklick in Diagrammen und Tabellen (wie in der Vorgängerversion, die in Requirement-Tabellen funktionierte)
         String[] diagramTypes = {
                 "SysML Block Definition Diagram",
                 "SysML Internal Block Diagram",
@@ -90,50 +122,33 @@ public class SchroedingersBlockPlugin extends Plugin {
                 "SysML Sequence Diagram",
                 "SysML Package Diagram",
                 "SysML Use Case Diagram",
+                // zusätzlich (je nach Version andere Typnamen)
                 "SysML Requirement Diagram",
                 "SysML Activity Diagram",
                 "SysML Parametric Diagram",
-                // Tabellen und Matrizen (Typnamen je nach Version unterschiedlich – unbekannte Namen schaden nicht)
                 "Requirement Table",
                 "Generic Table",
-                "Instance Table",
-                "Glossary Table",
-                "Metric Table",
-                "Dependency Matrix",
-                "Requirement Matrix",
-                "Satisfy Requirement Matrix",
-                "Verify Requirement Matrix",
-                "Refine Requirement Matrix",
-                "Derive Requirement Matrix",
-                "Allocation Matrix"
+                "Any Diagram"
         };
-
-        // Zusätzlich für ALLE Diagrammtypen anmelden (deckt z. B. Requirement-Diagramme ab, deren Typname je nach
-        // Version anders heißt). Doppelte Einträge verhindert MenuConfigurator über die Action-ID.
-        manager.addDiagramContextConfigurator("Any Diagram", configurator);
-
+        int registered = 0;
         for (String type : diagramTypes) {
-            manager.addDiagramContextConfigurator(type, configurator); // Das Menü wird für jeden Typ in der obrigen Liste angemeldet
+            try {
+                manager.addDiagramContextConfigurator(type, configurator);
+                registered++;
+            } catch (Throwable t) {
+                problems.add(type + ": " + t);
+            }
         }
 
-        ActionsConfiguratorsManager.getInstance().addMainMenuConfigurator(new AMConfigurator() {
-            @Override
-            public void configure(ActionsManager manager) {
-                // Suche nach dem Tools-Menü
-                ActionsCategory toolsMenu = (ActionsCategory) manager.getActionFor("TOOLS");
-                if (toolsMenu != null) {
-                    // Auch ohne Rechtsklick erreichbar (z. B. aus Tabellen): Auswahl wird beim Klick ermittelt
-                    toolsMenu.addAction(new ShowExplanationAction(null, false, true));
-                    toolsMenu.addAction(new ShowExplanationAction(null, true, true));
-                    // Einstellungs-Action (API-Key)
-                    toolsMenu.addAction(new OpenSettingsAction());
-                }
-            }
-
-            @Override
-            public int getPriority() {
-                return AMConfigurator.MEDIUM_PRIORITY;
-            }
+        // Kontrollmeldung im CATIA-Meldungsfenster (zeigt, welche Version geladen ist)
+        String msg = LOG_PREFIX + "Plugin loaded (version " + com.schroedingersblock.api.EvaluationRecord.PLUGIN_VERSION
+                + ", " + registered + "/" + diagramTypes.length + " diagram/table types)"
+                + (problems.isEmpty() ? "" : " – problems: " + String.join("; ", problems));
+        System.out.println(msg);
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            try {
+                com.nomagic.magicdraw.core.Application.getInstance().getGUILog().log(msg);
+            } catch (Throwable ignored) { }
         });
     }
 

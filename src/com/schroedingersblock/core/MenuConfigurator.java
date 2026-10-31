@@ -51,7 +51,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
         addMenu(mngr, targetElement);
     }
 
-    // Menüpunkt "Ask AI about the model..." direkt im Rechtsklick-Menü (ohne Untermenü)
+    // Untermenü "Ask AI" mit "Ask AI about the model..." und "Ask AI about this element..."
     private void addMenu(ActionsManager mngr, Element targetElement) {
         if (mngr.getActionFor("SCHROEDINGER_ROOT") != null) {
             return;
@@ -65,8 +65,9 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
             }
         }
 
-        ActionsCategory category = new ActionsCategory("SCHROEDINGER_ROOT", SchroedingersBlockPlugin.DISPLAY_NAME);
-        category.setNested(false); // Eintrag erscheint direkt im Menü, nicht in einem Untermenü
+        // Untermenü "Ask AI" (wie in der Vorgängerversion verschachtelt – nur so erscheint es auch in Requirement-Tabellen)
+        ActionsCategory category = new ActionsCategory("SCHROEDINGER_ROOT", "Ask AI (" + SchroedingersBlockPlugin.DISPLAY_NAME + ")");
+        category.setNested(true);
 
         category.setDescription("Ask an AI questions about this SysML model");
 

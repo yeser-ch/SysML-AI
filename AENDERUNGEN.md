@@ -45,7 +45,7 @@ Einmalig: Java JDK 17 oder neuer installieren (z. B. Eclipse Temurin 21 von http
 1. Diesen Branch holen (`git checkout feature/free-prompt-full-model` + `git pull`, oder als ZIP herunterladen).
 2. CATIA schließen.
 3. **`build.bat` doppelklicken.** Das Skript findet CATIA, das JDK und den Plugin-Ordner, kompiliert, baut `schroedingers-block.jar` und kopiert alles in den Plugin-Ordner (alte JAR → `.bak`).
-4. CATIA starten → Rechtsklick auf ein Element → **„Ask AI about the model…“**.
+4. CATIA starten → Rechtsklick auf ein Element → **„Ask AI (SysML AI Q&A)“ → „Ask AI about the model…“ / „Ask AI about this element…“**, oder oben in der Menüleiste **„Ask AI“**.
 
 **Updates:** Nach jeder Code-Änderung auf GitHub: CATIA schließen, **`update.bat` doppelklicken** (lädt den neuesten Stand, baut und installiert; fragt selbst nach Administratorrechten). `build.bat` baut dagegen den Code aus dem eigenen Ordner (für lokale Änderungen).
 Falls die automatische Suche nicht klappt: `build.bat -CatiaDir "<CATIA-Ordner>" -PluginDir "<Plugin-Ordner>"`. Nur bauen: `build.bat -NoInstall`.
