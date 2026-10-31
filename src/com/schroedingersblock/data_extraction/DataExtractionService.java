@@ -21,7 +21,12 @@ public class DataExtractionService {
     private static final String PLUGIN_ID = "com.schroedingersblock.plugin";
     private static final String DATA_EXTRACTION_DIR = "data_extraction";
     private static final String TEMPLATE_NAME_PARTIAL = "sysml_partial_export.vm";
-    private static final String TARGET_SUBDIR = "raw_model_data";
+    private static final String TARGET_SUBDIR = "exports";
+
+    /** Ordner für temporäre Modell-Exporte (beschreibbar ohne Administratorrechte). Beim Schließen von CATIA geleert. */
+    public static File getExportDirectory() {
+        return new File(com.schroedingersblock.api.EvaluationLog.getBaseDir(), TARGET_SUBDIR);
+    }
 
     private static final String TEMPLATE_NAME_FULL = "sysml_flat_export.vm";
 
@@ -65,7 +70,9 @@ public class DataExtractionService {
                 return null;
             }
 
-            File targetDir = new File(baseDir, DATA_EXTRACTION_DIR + File.separator + TARGET_SUBDIR);
+            // Exporte in den Benutzerordner schreiben (Dokumente/SysML-AI-QA/exports):
+            // Der Plugin-Ordner liegt oft unter C:\Program Files und ist ohne Administratorrechte schreibgeschützt.
+            File targetDir = getExportDirectory();
             if (!targetDir.exists() && !targetDir.mkdirs()) {
                 log.log("[DataExtractionService] Fehler: Zielordner konnte nicht erstellt werden: " + targetDir.getAbsolutePath());
                 return null;

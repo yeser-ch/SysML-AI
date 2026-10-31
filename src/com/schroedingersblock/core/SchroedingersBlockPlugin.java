@@ -88,8 +88,15 @@ public class SchroedingersBlockPlugin extends Plugin {
                 "SysML State Machine Diagram",
                 "SysML Sequence Diagram",
                 "SysML Package Diagram",
-                "SysML Use Case Diagram"
+                "SysML Use Case Diagram",
+                "SysML Requirement Diagram",
+                "SysML Activity Diagram",
+                "SysML Parametric Diagram"
         };
+
+        // Zusätzlich für ALLE Diagrammtypen anmelden (deckt z. B. Requirement-Diagramme ab, deren Typname je nach
+        // Version anders heißt). Doppelte Einträge verhindert MenuConfigurator über die Action-ID.
+        manager.addDiagramContextConfigurator("Any Diagram", configurator);
 
         for (String type : diagramTypes) {
             manager.addDiagramContextConfigurator(type, configurator); // Das Menü wird für jeden Typ in der obrigen Liste angemeldet
@@ -147,8 +154,8 @@ public class SchroedingersBlockPlugin extends Plugin {
     public boolean close() {
         try {
             // Pfad zum raw_model_data Ordner ermitteln
-            File pluginDir = new File(System.getProperty("user.dir"), "plugins" + File.separator + "com.schroedingersblock.plugin");
-            File exportDir = new File(pluginDir, "data_extraction" + File.separator + "raw_model_data");
+            // Temporäre Exporte löschen (Kopien für die Auswertung liegen in archive/exports)
+            File exportDir = com.schroedingersblock.data_extraction.DataExtractionService.getExportDirectory();
 
             if (exportDir.exists() && exportDir.isDirectory()) {
                 File[] files = exportDir.listFiles();
