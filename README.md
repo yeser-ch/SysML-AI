@@ -12,7 +12,8 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 
 ## Loslegen
 
-- **Installieren:** [`INSTALL.md`](INSTALL.md) – fertiges Paket unter *Releases* herunterladen, entpacken, `install.bat` doppelklicken. Kein Java nötig.
+- **Installieren:** [`INSTALL.md`](INSTALL.md) – Schritt für Schritt mit Bildern: fertiges Paket unter *Releases* herunterladen, entpacken, `install.bat` doppelklicken. Kein Java nötig.
+- **Bedienen:** [`HANDBUCH.md`](HANDBUCH.md) – das Fenster, alle Einstellungen, Schnellfragen, Testläufe und Ergebnisse erklärt
 - **Testläufe und Auswertung:** [`evaluation/README.md`](evaluation/README.md)
 - **Änderungen im WS 2026/27:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
 

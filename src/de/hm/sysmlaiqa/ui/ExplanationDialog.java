@@ -216,13 +216,11 @@ public class ExplanationDialog extends JFrame {
                 + "Changing AI model, answer style, ID check or grounding uploads once more automatically.<br>"
                 + "Not available for every model on the free tier – then the model is sent with each question.</html>");
         for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox, cacheModelBox}) cb.addActionListener(e -> saveSettings());
-        JPanel checks = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // Zwei Zeilen, damit bei schmalem Fenster keine Option abgeschnitten wird
+        JPanel checks = new JPanel(new GridLayout(2, 2, 8, 0));
         checks.add(cacheModelBox);
-        checks.add(Box.createHorizontalStrut(8));
         checks.add(groundingBox);
-        checks.add(Box.createHorizontalStrut(8));
         checks.add(freshChatBox);
-        checks.add(Box.createHorizontalStrut(8));
         checks.add(fallbackBox);
         maxTokensSpinner = new JSpinner(new SpinnerNumberModel(8192, 256, 65536, 256));
         maxTokensSpinner.setToolTipText("Maximum length of the answer (incl. internal reasoning of thinking models).");
@@ -257,6 +255,8 @@ public class ExplanationDialog extends JFrame {
         // Zeile 4: Status + Buttons
         exportStatusLabel = new JLabel("Exporting model …");
         exportStatusLabel.setForeground(Color.DARK_GRAY);
+        // Feste Breite: ein langer Status soll die rechte Spalte nicht zusammendrücken (voller Text im Tooltip)
+        exportStatusLabel.setPreferredSize(new Dimension(300, exportStatusLabel.getPreferredSize().height));
         JButton reexportBtn = new JButton("Resend model");
         reexportBtn.setToolTipText("Exports the model again from CATIA (use after changes) and uploads it with the next question.");
         reexportBtn.addActionListener(e -> {
@@ -533,6 +533,7 @@ public class ExplanationDialog extends JFrame {
                         String info = String.format("Model ready: %d elements · %d relations · %.0f KB · ~%,d tokens · export %s",
                                 ex.elementCount, ex.relationCount, ex.sizeKb(), ex.approxTokens(), ex.sha);
                         exportStatusLabel.setText(info);
+                        exportStatusLabel.setToolTipText(info);
                         addMessage("System", escapeHtml(info) + "<br>"
                                 + (cacheModelBox.isSelected()
                                 ? "The model will be uploaded once with your first question; after that only questions are sent."
@@ -965,6 +966,7 @@ public class ExplanationDialog extends JFrame {
         html = html.replaceAll("(?m)^#\\s+(.+)$", "<b style='color:#2C3E50; font-size:13px'>$1</b>");
         html = html.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
         html = html.replaceAll("(?m)^\\s*[*-]\\s+(.+)$", "&nbsp;&nbsp;• $1");
+        html = html.replaceAll("(?<![\\w*])\\*(?![\\s*])([^*\\n]+?)(?<!\\s)\\*(?![\\w*])", "<i>$1</i>");
         html = html.replaceAll("`([^`\\n]+)`", "<code>$1</code>");
         return html;
     }
