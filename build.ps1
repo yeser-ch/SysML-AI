@@ -179,8 +179,9 @@ try {
     foreach ($sub in @('lib', 'plugins')) {
         $p = Join-Path $CatiaDir $sub
         if (Test-Path $p) {
+            # Eigenes Plugin (auch eine alte Version) nicht mitnehmen; vollständige Pfade als Text
             $jars += Get-ChildItem -LiteralPath $p -Recurse -Filter '*.jar' -File -ErrorAction SilentlyContinue |
-                     Where-Object { $_.FullName -notmatch 'sysmlaiqa|schroedingersblock' }   # eigenes Plugin (auch alte Version) nicht mitnehmen |
+                     Where-Object { $_.FullName -notmatch 'sysmlaiqa|schroedingersblock' } |
                      ForEach-Object { Fwd $_.FullName }
         }
     }
