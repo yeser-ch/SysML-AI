@@ -189,20 +189,29 @@ Im Testlauf gilt immer: jede Frage in einem neuen Chat, kein Fallback-Modell. Be
 
 | Datei / Ordner | Inhalt |
 | --- | --- |
-| `answers_log.csv` | jede Antwort, auch aus dem Chat (`run_id = chat`) |
-| `runs\run_<Datum-Uhrzeit>.csv` | ein Testlauf. **Diese Datei bewerten** |
+| **`answers_log.xlsx`** | jede Antwort, auch aus dem Chat (`run_id = chat`), formatiert für Excel |
+| **`runs\run_<Datum-Uhrzeit>.xlsx`** | ein Testlauf, formatiert für Excel. **Diese Datei bewerten** |
+| `answers_log.csv`, `runs\….csv` | dieselben Daten als Rohdaten (für Auswertungen mit Python, R usw.) |
 | `archive\prompts\` | jeder verwendete System-Prompt im Wortlaut |
 | `archive\exports\` | jeder verwendete Modellexport |
 | `backup\` | nur falls bei der Installation eine sehr alte Version verschoben wurde |
 
-Die CSV-Dateien öffnen direkt in Excel. Jede Zeile ist eine Antwort mit allen Einstellungen, Messwerten und Prüfsummen. Die Spalten **rating** und **rating_notes** sind leer: Dort tragt ihr eure Bewertung ein.
+Die **.xlsx**-Dateien sind zum Lesen und Bewerten gedacht. Jede Zeile ist eine Antwort:
+
+- Vorne stehen die wichtigen Spalten: Testlauf, Testfall, Kategorie, Frage, Referenzantwort, Antwort, Bewertung, Modellversion, Erfolg, Dauer und erfundene IDs.
+- Die Kopfzeile bleibt beim Scrollen stehen, jede Spalte hat einen Filter (Pfeil in der Kopfzeile).
+- **rating** und **rating_notes** (gelb) sind für eure Bewertung. In *rating* gibt es eine Auswahlliste (*correct, partial, wrong, hallucinated, correctly_refused*), eigene Werte sind auch erlaubt.
+- Lange Antworten sind gekürzt sichtbar. Ganzer Text: Zelle anklicken und oben in der Bearbeitungsleiste lesen oder die Zeile größer ziehen. Markdown-Zeichen wie `**` sind entfernt, der Originaltext steht in der CSV.
+- Technische Spalten (Tokens, Prüfsummen, Einstellungen …) sind eingeklappt. Mit dem **+** über der Spalte *ids_unknown* klappt man sie auf.
+- Das zweite Blatt **Columns** erklärt jede Spalte.
 
 ![Ergebnisdatei in Excel](docs/images/results-02-excel.png)
 
 Tipps:
 
-- Zum Bewerten die Datei **als `.xlsx` speichern** (z. B. `run_…_bewertet.xlsx`). So bleiben die Rohdaten unverändert, und Umlaute gehen nicht kaputt.
-- Ist eine Ergebnisdatei gerade in Excel offen, schreibt das Plugin in eine Ersatzdatei `…_while-open.csv` und meldet das im Chat.
+- **Bewerten in der Datei des Testlaufs** (`runs\run_….xlsx`). Sie wird nur während des Laufs geschrieben und danach nicht mehr verändert.
+- **`answers_log.xlsx` nicht zum Bewerten nutzen.** Sie wird nach jeder Antwort neu erzeugt, Einträge darin gehen verloren. Wer dort bewerten will: *Datei → Speichern unter* mit neuem Namen.
+- Ist eine `.xlsx` gerade in Excel offen, kann das Plugin sie nicht aktualisieren und meldet das im Chat. Nach dem Schließen wird sie beim nächsten Mal (oder über **Open results**) nachgezogen.
 - Alle Spalten sind in [`evaluation/README.md`](evaluation/README.md) erklärt.
 
 ---

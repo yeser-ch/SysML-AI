@@ -885,6 +885,7 @@ public class ExplanationDialog extends JFrame {
     private void openResultsFolder() {
         File dir = EvaluationLog.getBaseDir();
         if (!dir.exists()) dir.mkdirs();
+        de.hm.sysmlaiqa.api.ExcelExport.refreshAll(dir);   // Excel-Ansichten für ältere Logs nachholen
         try {
             Desktop.getDesktop().open(dir);
         } catch (Exception ex) {
