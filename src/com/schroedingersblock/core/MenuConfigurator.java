@@ -49,7 +49,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
         addMenu(mngr, targetElement);
     }
 
-    // Hauptmenü-Eintrag "Schrödinger's Block" mit dropdownmenü
+    // Menüpunkt "Ask AI about the model..." direkt im Rechtsklick-Menü (ohne Untermenü)
     private void addMenu(ActionsManager mngr, Element targetElement) {
         if (mngr.getActionFor("SCHROEDINGER_ROOT") != null) {
             return;
@@ -63,10 +63,10 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
             }
         }
 
-        ActionsCategory category = new ActionsCategory("SCHROEDINGER_ROOT", "Schrödinger's Block");
-        category.setNested(true);
+        ActionsCategory category = new ActionsCategory("SCHROEDINGER_ROOT", SchroedingersBlockPlugin.DISPLAY_NAME);
+        category.setNested(false); // Eintrag erscheint direkt im Menü, nicht in einem Untermenü
 
-        category.setDescription("AI-powered SysML analysis tool");
+        category.setDescription("Ask an AI questions about this SysML model");
 
         // Ein einziger Einstieg: Fenster öffnen, Frage frei eingeben.
         // Das angeklickte Element wird als "Fokus" mitgegeben (z. B. für Schnellfragen),

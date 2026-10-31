@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin id="com.schroedingersblock.plugin"
-        name="Schrödingers Block Plugin"
+        name="SysML AI Q&amp;A (Schrödinger's Block)"
         version="2.2"
         provider-name="SE Projekt Team"
         class="com.schroedingersblock.core.SchroedingersBlockPlugin">

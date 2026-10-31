@@ -1,5 +1,5 @@
 /**
- * "Ask the model"-Fenster: Einstellungen, Schnellfragen, Chat und freie Frage-Eingabe auf EINER Oberfläche.
+ * "Ask AI about the model"-Fenster: Einstellungen, Schnellfragen, Chat und freie Frage-Eingabe auf EINER Oberfläche.
  *
  * Ablauf:
  * 1. Beim Öffnen wird das Modell exportiert (Standard: ganzes Modell).
@@ -95,7 +95,7 @@ public class ExplanationDialog extends JFrame {
     public ExplanationDialog(Element focusElement) {
         this.focusElement = focusElement;
 
-        setTitle("Schrödinger's Block – Ask the model");
+        setTitle(SchroedingersBlockPlugin.DISPLAY_NAME + " – Ask AI about the model");
         setSize(800, 900);
         setLocationRelativeTo(null);
         setAlwaysOnTop(true);

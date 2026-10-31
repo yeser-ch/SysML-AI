@@ -1,5 +1,5 @@
 /**
- * Benutzerinteraktion beim Klick auf den Plugin-Menüeintrag "Ask the model".
+ * Benutzerinteraktion beim Klick auf den Menüeintrag "Ask AI about the model...".
  * Überprüft Datenschutz-Zustimmung und API-Key und öffnet dann das Frage-Fenster.
  */
 
@@ -23,16 +23,16 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
      */
     public ShowExplanationAction(Element focusElement) {
         super(focusElement == null ? "SCHROEDINGER_ASK_MODEL_TOOLS" : "SCHROEDINGER_ASK_MODEL",
-                focusElement == null ? "Schrödinger's Block – Ask the model..." : "Ask the model...",
+                SchroedingersBlockPlugin.MENU_LABEL,
                 null, null);
         this.focusElement = focusElement;
-        setDescription("Ask the AI any question about the SysML model.");
+        setDescription(SchroedingersBlockPlugin.DISPLAY_NAME + ": ask an AI any question about this SysML model.");
     }
 
     @Override
     public void actionPerformed(ActionEvent e) { //Bei Klick auf das Menü
         if (Application.getInstance().getProject() == null) {
-            JOptionPane.showMessageDialog(null, "Open a project first.", "Schrödinger's Block",
+            JOptionPane.showMessageDialog(null, "Open a project first.", SchroedingersBlockPlugin.DISPLAY_NAME,
                     JOptionPane.INFORMATION_MESSAGE);
             return;
         }
@@ -70,7 +70,7 @@ public class ShowExplanationAction extends MDAction { //MagicDraw-Button
         if (!apiKey.isEmpty()) {
             new ExplanationDialog(focusElement).setVisible(true);
         } else {
-            Application.getInstance().getGUILog().log("[Schrödinger's Block] Info: Abgebrochen, da kein API-Key hinterlegt wurde.");
+            Application.getInstance().getGUILog().log(SchroedingersBlockPlugin.LOG_PREFIX + "Info: Abgebrochen, da kein API-Key hinterlegt wurde.");
         }
     }
 }

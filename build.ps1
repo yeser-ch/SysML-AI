@@ -1,5 +1,5 @@
 ﻿<#
-  Schrödinger's Block – Plugin bauen und in CATIA Magic installieren
+  SysML AI Q&A (Weiterentwicklung von Schrödinger's Block) – Plugin bauen und in CATIA Magic installieren
   ------------------------------------------------------------------
   Einfach build.bat doppelklicken. Das Skript
     1. findet die CATIA-Installation (für die Bibliotheken),
@@ -304,6 +304,6 @@ try {
 
 Write-Host ''
 Ok 'Fertig! Das neue Plugin ist installiert.'
-Info 'Jetzt CATIA starten -> Rechtsklick auf ein Element -> "Schrödinger''s Block" -> "Ask the model..."'
+Info 'Jetzt CATIA starten -> Rechtsklick auf ein Element -> "Ask AI about the model..."'
 Info "Zurück zur alten Version: $JarName.bak im Plugin-Ordner wieder in $JarName umbenennen."
 exit 0
