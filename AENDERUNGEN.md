@@ -45,7 +45,7 @@ Einmalig: Java JDK 17 oder neuer installieren (z. B. Eclipse Temurin 21 von http
 3. **`build.bat` doppelklicken.** Das Skript findet CATIA, das JDK und den Plugin-Ordner, kompiliert, baut `schroedingers-block.jar` und kopiert alles in den Plugin-Ordner (alte JAR → `.bak`).
 4. CATIA starten → Rechtsklick auf ein Element → **„Ask AI about the model…“**.
 
-Nach jeder Code-Änderung: CATIA schließen, `build.bat` erneut ausführen.
+**Updates:** Nach jeder Code-Änderung auf GitHub: CATIA schließen, **`update.bat` doppelklicken** (lädt den neuesten Stand, baut und installiert; fragt selbst nach Administratorrechten). `build.bat` baut dagegen den Code aus dem eigenen Ordner (für lokale Änderungen).
 Falls die automatische Suche nicht klappt: `build.bat -CatiaDir "<CATIA-Ordner>" -PluginDir "<Plugin-Ordner>"`. Nur bauen: `build.bat -NoInstall`.
 Hinweis: Die JAR im Installer (`installer/ressources/`) ist noch die alte Version.
 
