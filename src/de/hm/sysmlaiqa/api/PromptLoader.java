@@ -10,7 +10,7 @@ import java.nio.file.Files;
  *
  * Neu: Es gibt keine festen Fragen mehr. Der Nutzer tippt seine Frage frei ein.
  * - System-Prompt: prompts/System_Prompt.md (editierbar, ohne neu zu kompilieren).
- *   Platzhalter {answerStyle} wird je nach Basic/Expert ersetzt.
+ *   (Einen Antwortstil Basic/Expert gibt es nicht mehr; ein alter Platzhalter {answerStyle} wird entfernt.)
  * - Erste Nachricht eines Chats: Modelldaten (JSON) + optionaler Fokus + Frage.
  * - Folgefragen im selben Chat: nur die Frage (Modell ist schon im Verlauf).
  *
@@ -22,12 +22,6 @@ public class PromptLoader {
     private static final String PROMPT_DIR = "prompts";
     private static final String SYSTEM_PROMPT_FILE = "System_Prompt.md";
 
-    static final String STYLE_BASIC =
-            "Answer briefly and in plain language (at most three short paragraphs).";
-    static final String STYLE_EXPERT =
-            "Answer in technical detail for an experienced systems engineer. "
-                    + "Name the concrete model elements (with their names) that support each statement.";
-
     /** Fallback, falls die Datei fehlt – inhaltlich identisch zu resources/System_Prompt.md. */
     private static final String DEFAULT_SYSTEM_PROMPT =
             "You are an assistant for SysML v1 models created in CATIA Magic.\n"
@@ -37,7 +31,6 @@ public class PromptLoader {
                     + "Relations reference other elements by id.\n"
                     + "Answer the user's questions about this model. Base your answers on the model data.\n"
                     + "Answer in the language of the question.\n"
-                    + "{answerStyle}\n"
                     + "{idInstruction}";
 
     /** Wird angehängt (oder ersetzt {idInstruction}), wenn "Cite IDs" aktiv ist. */
@@ -45,11 +38,11 @@ public class PromptLoader {
             "Whenever you mention a model element, add its id from the JSON directly after the name "
                     + "in the form [id:<id>], for example: Battery [id:_19_0_abc_123].";
 
-    public static String buildSystemPrompt(File baseDir, String detailLevel) {
-        return buildSystemPrompt(baseDir, detailLevel, false);
+    public static String buildSystemPrompt(File baseDir) {
+        return buildSystemPrompt(baseDir, false);
     }
 
-    public static String buildSystemPrompt(File baseDir, String detailLevel, boolean requireIds) {
+    public static String buildSystemPrompt(File baseDir, boolean requireIds) {
         String template = DEFAULT_SYSTEM_PROMPT;
         File promptFile = new File(baseDir, PROMPT_DIR + File.separator + SYSTEM_PROMPT_FILE);
         if (promptFile.exists()) {
@@ -59,8 +52,9 @@ public class PromptLoader {
                 // Fallback auf DEFAULT_SYSTEM_PROMPT
             }
         }
-        String style = "Expert".equalsIgnoreCase(detailLevel) ? STYLE_EXPERT : STYLE_BASIC;
-        String result = template.replace("{answerStyle}", style);
+        // Ältere System_Prompt.md (install.bat behält sie bei) enthält noch {answerStyle}: samt Zeile entfernen
+        String result = template.replaceAll("(?m)^[ \\t]*\\{answerStyle\\}[ \\t]*\\R?", "")
+                .replace("{answerStyle}", "");
         String ids = requireIds ? ID_INSTRUCTION : "";
         if (result.contains("{idInstruction}")) {
             result = result.replace("{idInstruction}", ids);

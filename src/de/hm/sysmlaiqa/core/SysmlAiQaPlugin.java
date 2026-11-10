@@ -30,7 +30,6 @@ public class SysmlAiQaPlugin extends Plugin {
 
     public static final String PRIVACY_KEY = "data_privacy_accepted";
     public static final String API_KEY_PREF = "gemini_api_key";
-    public static final String DEFAULT_MODE_PREF = "sysmlaiqa_default_mode";
     // Schalter für Google-Search-Grounding (Standard: aus, siehe init())
     public static final String GROUNDING_PREF = "sysmlaiqa_grounding_enabled";
 

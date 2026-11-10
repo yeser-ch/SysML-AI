@@ -43,7 +43,7 @@ public class SettingsDialog extends JFrame {
         formPanel.add(show, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3;
-        JLabel hint = new JLabel("Model, grounding and answer style are set in the \"Ask AI about the model\" window.");
+        JLabel hint = new JLabel("Model, grounding and all other options are set in the \"Ask AI about the model\" window.");
         hint.setForeground(Color.GRAY);
         formPanel.add(hint, gbc);
         add(formPanel, BorderLayout.CENTER);

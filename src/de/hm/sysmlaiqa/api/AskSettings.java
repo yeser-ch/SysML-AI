@@ -8,7 +8,6 @@ public class AskSettings {
     public String model = "gemini-3.8-flash";
     public double temperature = 0.0;
     public int maxOutputTokens = 8192;
-    public String detailLevel = "Basic";     // "Basic" oder "Expert"
     public boolean grounding = false;        // Google-Suche (verfälscht Evaluation, daher Standard aus)
     public boolean freshChat = true;         // jede Frage in einem neuen Chat (unabhängige Antworten)
     public boolean allowFallback = false;    // bei Überlastung automatisch anderes Modell nutzen
@@ -26,7 +25,6 @@ public class AskSettings {
         c.model = model;
         c.temperature = temperature;
         c.maxOutputTokens = maxOutputTokens;
-        c.detailLevel = detailLevel;
         c.grounding = grounding;
         c.freshChat = freshChat;
         c.allowFallback = allowFallback;

@@ -62,7 +62,6 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | --- | --- | --- | --- |
 | 1 | **AI model** | Welches Gemini-Modell antwortet. Auswählen oder eine Modell-ID eintippen. Vorgeschlagen sind `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` und `gemini-3.1-flash-lite` | `gemini-3.8-flash` |
 | 1b | **Refresh** | Lädt die Liste aller Modelle, die für deinen API-Key verfügbar sind. Wichtig für den Vergleich verschiedener Modellgrößen | – |
-| 2 | **Answer style** | *Basic*: kurz und einfach. *Expert*: ausführlich, nennt die Modellelemente. Ändert den System-Prompt | Basic |
 | 3 | **Context** | Welcher Teil des Modells an die KI geht. *Whole model*: alles außer den SysML/UML-Bibliotheken. *Selected element + surroundings*: nur das Element, seine Besitzer, Nachbarn und Beziehungen (kleiner und schneller). Nur verfügbar, wenn ein Element ausgewählt ist. Ein Wechsel startet einen neuen Export | je nach Menüpunkt |
 | 4 | **Thinking** | Wie viel die KI vor der Antwort „nachdenkt“: *Model default*, *Minimal*, *Low*, *Medium*, *High*. Weniger Denken ist schneller, kann aber bei indirekten Zusammenhängen schlechter sein. Kann ein Modell die Stufe nicht, wird der Modell-Standard genommen (steht im Log) | Model default |
 | 5 | **Upload model once** | An: Das Modell wird mit der ersten Frage einmal bei Google hochgeladen (60 Minuten gültig), danach geht nur noch die Frage raus. Das spart Zeit und Tokens. Nicht jedes Modell erlaubt das im Free Tier (z. B. Flash-Lite), dann wird das Modell automatisch mit jeder Frage geschickt | an |
@@ -225,7 +224,7 @@ Tipps:
 | Fallback model | aus | keine vermischten Modelle |
 | New chat per question | an | Fragen beeinflussen sich nicht gegenseitig |
 | Thinking | innerhalb eines Experiments fest | beeinflusst Qualität und Dauer |
-| Answer style, Cite element IDs | innerhalb eines Experiments fest | ändern den System-Prompt |
+| Cite element IDs | innerhalb eines Experiments fest | ändert den System-Prompt |
 | Repetitions | mehr als 1 (Anzahl im Team festlegen) | macht Schwankungen sichtbar |
 | Context | *Whole model* | alle Fragen bekommen dieselbe Grundlage |
 

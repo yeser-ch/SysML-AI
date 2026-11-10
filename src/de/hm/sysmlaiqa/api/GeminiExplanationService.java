@@ -147,7 +147,7 @@ public class GeminiExplanationService implements ExplanationService {
         boolean firstInChat = conversationHistory.isEmpty();
         String questionTurn = contentJson("user",
                 PromptLoader.buildQuestionMessage(focusInfo, question, firstInChat || !focusSentInChat));
-        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.detailLevel, s.requireIds);
+        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.requireIds);
         String modelTurn = contentJson("user", PromptLoader.buildModelMessage(modelJson));
         String exportSha = Hashing.sha256Short(modelJson);
         String promptSha = Hashing.sha256Short(systemPrompt);

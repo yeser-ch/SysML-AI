@@ -59,7 +59,6 @@ public class ExplanationDialog extends JFrame {
 
     // Einstellungen
     private JComboBox<String> modelBox;
-    private JComboBox<String> styleBox;
     private JComboBox<String> scopeBox;
     private JSpinner temperatureSpinner;
     private JSpinner maxTokensSpinner;
@@ -172,7 +171,7 @@ public class ExplanationDialog extends JFrame {
         c.fill = GridBagConstraints.HORIZONTAL;
         c.anchor = GridBagConstraints.WEST;
 
-        // Zeile 0: KI-Modell + Antwortstil
+        // Zeile 0: KI-Modell + Denktiefe
         modelBox = new JComboBox<>();
         modelBox.setEditable(true);
         modelBox.setToolTipText("Gemini model ID. Pick one or type any model ID. 'Refresh' loads all models available for your API key.");
@@ -183,10 +182,6 @@ public class ExplanationDialog extends JFrame {
         JPanel modelRow = new JPanel(new BorderLayout(4, 0));
         modelRow.add(modelBox, BorderLayout.CENTER);
         modelRow.add(refreshBtn, BorderLayout.EAST);
-        styleBox = new JComboBox<>(new String[]{"Basic", "Expert"});
-        styleBox.setToolTipText("Basic: short, plain language. Expert: detailed, names the model elements.");
-        styleBox.addActionListener(e -> saveSettings());
-        addRow(p, c, 0, "AI model:", modelRow, "Answer style:", styleBox);
 
         // Zeile 1: Kontext + Temperatur
         scopeBox = new JComboBox<>(focusElement == null ? new String[]{SCOPE_FULL} : new String[]{SCOPE_FULL, SCOPE_FOCUS});
@@ -200,7 +195,8 @@ public class ExplanationDialog extends JFrame {
                 + "but possibly worse reasoning about indirect links. Keep it constant within an experiment<br>"
                 + "(it is logged). Not every model supports every level – then the model default is used.</html>");
         thinkingBox.addActionListener(e -> saveSettings());
-        addRow(p, c, 1, "Context:", scopeBox, "Thinking:", thinkingBox);
+        addRow(p, c, 0, "AI model:", modelRow, "Thinking:", thinkingBox);
+        addRow(p, c, 1, "Context:", scopeBox, "Temperature:", temperatureSpinner);
 
         // Zeile 2: Optionen + Max Tokens
         groundingBox = new JCheckBox("Grounding");
@@ -213,7 +209,7 @@ public class ExplanationDialog extends JFrame {
         cacheModelBox = new JCheckBox("Upload model once");
         cacheModelBox.setToolTipText("<html>On: the model is uploaded to Google once (cache, valid 60 min) with the first question.<br>"
                 + "After that only your question is sent. Click 'Resend model' after changing the model in CATIA.<br>"
-                + "Changing AI model, answer style, ID check or grounding uploads once more automatically.<br>"
+                + "Changing AI model, ID check or grounding uploads once more automatically.<br>"
                 + "Not available for every model on the free tier – then the model is sent with each question.</html>");
         for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox, cacheModelBox}) cb.addActionListener(e -> saveSettings());
         // Zwei Zeilen, damit bei schmalem Fenster keine Option abgeschnitten wird
@@ -225,7 +221,7 @@ public class ExplanationDialog extends JFrame {
         maxTokensSpinner = new JSpinner(new SpinnerNumberModel(8192, 256, 65536, 256));
         maxTokensSpinner.setToolTipText("Maximum length of the answer (incl. internal reasoning of thinking models).");
         maxTokensSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 2, "Options:", checks, "Temperature:", temperatureSpinner);
+        addRow(p, c, 2, "Options:", checks, "Max tokens:", maxTokensSpinner);
 
         // Zeile 3: Evaluation – ID-Check, Testlauf, Wiederholungen
         requireIdsBox = new JCheckBox("Cite element IDs (hallucination check)");
@@ -250,7 +246,7 @@ public class ExplanationDialog extends JFrame {
         repetitionsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 20, 1));
         repetitionsSpinner.setToolTipText("How often each question is asked (each time in a new chat). >1 shows how consistent the answers are.");
         repetitionsSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 3, "Evaluation:", evalRow, "Max tokens:", maxTokensSpinner);
+        addRow(p, c, 3, "Evaluation:", evalRow, "Repetitions:", repetitionsSpinner);
 
         // Zeile 4: Status + Buttons
         exportStatusLabel = new JLabel("Exporting model …");
@@ -273,11 +269,9 @@ public class ExplanationDialog extends JFrame {
         buttons.add(apiKeyBtn);
         buttons.add(logBtn);
 
-        c.gridy = 4; c.gridx = 0; c.gridwidth = 2; c.weightx = 1;
+        c.gridy = 4; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
         p.add(exportStatusLabel, c);
         c.gridwidth = 1;
-        c.gridx = 2; c.weightx = 0; p.add(new JLabel("Repetitions:"), c);
-        c.gridx = 3; c.weightx = 0.3; p.add(repetitionsSpinner, c);
         c.gridy = 5; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
         p.add(buttons, c);
         c.gridwidth = 1;
@@ -398,7 +392,6 @@ public class ExplanationDialog extends JFrame {
         String model = prefs.get(SysmlAiQaPlugin.MODEL_PREF, GeminiExplanationService.DEFAULT_MODELS[0]);
         for (String m : GeminiExplanationService.mergeModelLists(null, model)) modelBox.addItem(m);
         modelBox.setSelectedItem(model);
-        styleBox.setSelectedItem(prefs.get(SysmlAiQaPlugin.DEFAULT_MODE_PREF, "Basic"));
         scopeBox.setSelectedItem(elementMode ? SCOPE_FOCUS : SCOPE_FULL);
         thinkingBox.setSelectedItem(prefs.get(SysmlAiQaPlugin.THINKING_PREF, "Model default"));
         temperatureSpinner.setValue(prefs.getDouble(SysmlAiQaPlugin.TEMPERATURE_PREF, 0.0));
@@ -413,14 +406,13 @@ public class ExplanationDialog extends JFrame {
     }
 
     private void saveSettings() {
-        if (loading || modelBox == null || styleBox == null || scopeBox == null || temperatureSpinner == null
+        if (loading || modelBox == null || scopeBox == null || temperatureSpinner == null
                 || maxTokensSpinner == null || repetitionsSpinner == null || groundingBox == null
                 || freshChatBox == null || fallbackBox == null || requireIdsBox == null || cacheModelBox == null
                 || thinkingBox == null) {
             return;
         }
         prefs.put(SysmlAiQaPlugin.MODEL_PREF, currentModel());
-        prefs.put(SysmlAiQaPlugin.DEFAULT_MODE_PREF, (String) styleBox.getSelectedItem());
         prefs.put(SysmlAiQaPlugin.THINKING_PREF, (String) thinkingBox.getSelectedItem());
         prefs.putDouble(SysmlAiQaPlugin.TEMPERATURE_PREF, ((Number) temperatureSpinner.getValue()).doubleValue());
         prefs.putInt(SysmlAiQaPlugin.MAX_TOKENS_PREF, ((Number) maxTokensSpinner.getValue()).intValue());
@@ -446,7 +438,6 @@ public class ExplanationDialog extends JFrame {
     private AskSettings currentSettings() {
         AskSettings s = new AskSettings();
         s.model = currentModel();
-        s.detailLevel = (String) styleBox.getSelectedItem();
         s.temperature = Math.round(((Number) temperatureSpinner.getValue()).doubleValue() * 10) / 10.0;
         s.maxOutputTokens = ((Number) maxTokensSpinner.getValue()).intValue();
         s.grounding = groundingBox.isSelected();
