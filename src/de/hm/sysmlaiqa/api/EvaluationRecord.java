@@ -8,7 +8,7 @@ import java.util.List;
 /** Ein Datensatz = eine Antwort mit vollständigem Versuchsaufbau (eine Zeile im Log). */
 public class EvaluationRecord {
 
-    public static final String PLUGIN_VERSION = "3.1-ws2627";
+    public static final String PLUGIN_VERSION = "3.2-ws2627";
 
     public String runId = "chat";
     public String testId = "";
@@ -39,7 +39,7 @@ public class EvaluationRecord {
                 s.model, a == null ? "" : a.modelUsed, a == null ? "" : a.modelVersion,
                 a == null ? "false" : String.valueOf(a.success),
                 a == null || a.finishReason == null ? "" : a.finishReason,
-                s.detailLevel, String.valueOf(s.temperature), String.valueOf(s.maxOutputTokens),
+                String.valueOf(s.temperature), String.valueOf(s.maxOutputTokens),
                 s.thinkingLevel, a == null ? "" : a.thinkingUsed,
                 String.valueOf(s.grounding), String.valueOf(s.freshChat), String.valueOf(s.requireIds), s.scope,
                 focusElement == null ? "" : focusElement, systemPromptSha,

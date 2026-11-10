@@ -30,7 +30,7 @@ public final class EvaluationLog {
             "run_id", "test_id", "category", "repetition", "timestamp",
             "question", "expected_answer", "answer", "rating", "rating_notes",
             "model_requested", "model_used", "model_version", "success", "finish_reason",
-            "detail_level", "temperature", "max_tokens", "thinking_level", "thinking_used", "grounding", "fresh_chat", "require_ids", "scope",
+            "temperature", "max_tokens", "thinking_level", "thinking_used", "grounding", "fresh_chat", "require_ids", "scope",
             "focus_element", "system_prompt_sha", "export_file", "export_sha", "export_kb",
             "export_elements", "export_relations", "model_transfer", "prompt_tokens", "cached_tokens",
             "answer_tokens", "thoughts_tokens", "duration_s", "rate_limit_wait_s",
@@ -136,6 +136,8 @@ public final class EvaluationLog {
         if (!first.equals(HEADER)) {
             File old = new File(f.getParentFile(), f.getName().replace(".csv", "_old_" + newRunId() + ".csv"));
             Files.move(f.toPath(), old.toPath());
+            // Alte Zeilen bleiben erhalten – auch als lesbare Excel-Datei daneben
+            ExcelExport.writeFor(old);
         }
     }
 

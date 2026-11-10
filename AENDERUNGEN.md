@@ -2,15 +2,23 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.2 – Antwortstil entfernt
+
+- Die Auswahl **Answer style (Basic/Expert)** ist entfernt: Für die Evaluation gibt es nur noch einen System-Prompt. Die Einstellungen sind neu angeordnet (Thinking neben AI model, Repetitions in der Evaluation-Zeile).
+- Eine ältere `prompts/System_Prompt.md` mit dem Platzhalter `{answerStyle}` funktioniert weiter, der Platzhalter wird entfernt.
+- Log: Spalte `detail_level` entfällt. Ein vorhandenes `answers_log.csv` mit den alten Spalten wird beim ersten Eintrag zu `answers_log_old_<Datum>.csv` umbenannt (plus `.xlsx`); es geht nichts verloren.
+- Der System-Prompt ist dadurch ein anderer (neue `system_prompt_sha`) – Ergebnisse vor und nach v3.2 nicht direkt vergleichen.
+- Das Bild `docs/images/settings-numbered.png` im Handbuch zeigt noch den alten Stand.
+
 ## Was ist neu
 
 | Vorher | Jetzt |
 |---|---|
 | Rechtsklick → Untermenü → „Element View“ / „Model View“, danach RUN mit festem Prompt | Rechtsklick → **„Ask AI (SysML AI Q&A)“ → „Ask AI about the model…“**, oder Menüleiste **„Ask AI“**; Frage frei eintippen |
 | Alter Projektname, Paket und Plugin-ID | Name **SysML AI Q&A**, Paket `de.hm.sysmlaiqa`, Plugin-ID `de.hm.sysmlaiqa.plugin`, JAR `sysml-ai-qa.jar`. API-Key und Einstellungen werden beim ersten Start übernommen, die alte Installation verschiebt `install.bat` ins Backup |
-| 4 feste Prompt-Dateien (Basic/Expert × Element/Model View) | 1 editierbarer System-Prompt `prompts/System_Prompt.md` + eigene Frage |
+| 4 feste Prompt-Dateien (Basic/Expert × Element/Model View) | 1 editierbarer System-Prompt `prompts/System_Prompt.md` + eigene Frage (ab v3.2 ohne Antwortstil Basic/Expert) |
 | Auch „Model View“ exportierte nur einen Ausschnitt (Tiefe 5) | Standard: **ganzes Modell** (`sysml_flat_export.vm`); Ausschnitt optional wählbar |
-| Einstellungen verteilt (Tools → Settings), Modell/Temperatur fest im Code | **Alles in einem Fenster**: Modell, Antwortstil, Kontext, Temperatur, Max Tokens, Grounding, neuer Chat pro Frage, Fallback |
+| Einstellungen verteilt (Tools → Settings), Modell/Temperatur fest im Code | **Alles in einem Fenster**: Modell, Kontext, Temperatur, Max Tokens, Grounding, neuer Chat pro Frage, Fallback |
 | Grounding standardmäßig an, erzwingt `gemini-2.5-flash-lite` | Grounding standardmäßig **aus**, erzwingt kein Modell |
 | Stiller Wechsel auf andere Modelle bei Überlastung | Nur wenn „Fallback model“ angehakt; antwortendes Modell wird immer angezeigt |
 | – | **Schnellfragen** nach den Kategorien A–D der Aufgabenstellung, als Vorlagen mit Platzhaltern (`<add requirement>`, `<add element>`); bei „Ask AI about this element…“ ist das ausgewählte Element bzw. Requirement schon eingesetzt |

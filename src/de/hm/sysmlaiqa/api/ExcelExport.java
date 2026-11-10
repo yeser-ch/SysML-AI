@@ -62,7 +62,6 @@ public final class ExcelExport {
                 {"model_version", "Tatsächlich antwortendes Modell laut Google – für Modellvergleiche diese Spalte nehmen"},
                 {"success", "true = Antwort erhalten, false = Fehler (Text in answer)"},
                 {"finish_reason", "STOP = vollständig, MAX_TOKENS = abgeschnitten"},
-                {"detail_level", "Antwortstil Basic / Expert"},
                 {"temperature", "Temperatur (0 = möglichst gleichbleibend)"},
                 {"max_tokens", "Maximale Antwortlänge"},
                 {"thinking_level", "Eingestellte Denktiefe"},

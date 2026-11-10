@@ -23,7 +23,7 @@ public final class Evaluation {
         if (repetition > 1 || settings.repetitions > 1) s.freshChat = true;
 
         String systemPrompt = PromptLoader.buildSystemPrompt(GeminiExplanationService.getBaseDirectory(),
-                s.detailLevel, s.requireIds);
+                s.requireIds);
 
         EvaluationRecord r = new EvaluationRecord();
         r.runId = runId;
