@@ -9,15 +9,15 @@ import java.util.prefs.Preferences;
  * Nur noch für den API-Key. Alle anderen Einstellungen (Modell, Grounding, Stil, Temperatur …)
  * stehen jetzt direkt im "Ask AI about the model"-Fenster.
  */
-public class SettingsDialog extends JFrame {
+public class SettingsDialog extends JDialog {
     private JPasswordField apiKeyField;
 
     public SettingsDialog() {
+        super(ExplanationDialog.catiaMainFrame(), Dialog.ModalityType.MODELESS); // über CATIA, nicht über anderen Programmen
         setTitle(SysmlAiQaPlugin.DISPLAY_NAME + " – API key");
         setSize(520, 170);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setAlwaysOnTop(true);
+        setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
         buildUI();
         loadSettings();
