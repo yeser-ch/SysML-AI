@@ -2,6 +2,11 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.2.1 – Fenster nicht mehr immer im Vordergrund
+
+- Chat-Fenster und API-Key-Fenster waren „always on top“ und lagen über allen Programmen, auch bei minimiertem CATIA. Jetzt gehören sie zum CATIA-Hauptfenster: Sie bleiben über CATIA (man kann weiter im Modell klicken), werden mit CATIA minimiert und liegen nicht mehr über anderen Programmen.
+- Dafür haben die Fenster keinen eigenen Minimieren-Knopf und keinen eigenen Eintrag in der Taskleiste mehr.
+
 ## v3.2 – Antwortstil entfernt
 
 - Die Auswahl **Answer style (Basic/Expert)** ist entfernt: Für die Evaluation gibt es nur noch einen System-Prompt. Die Einstellungen sind neu angeordnet (Thinking neben AI model, Repetitions in der Evaluation-Zeile).

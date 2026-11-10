@@ -43,7 +43,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.prefs.Preferences;
 
-public class ExplanationDialog extends JFrame {
+public class ExplanationDialog extends JDialog {
 
     private static final String SCOPE_FULL = "Whole model";
     private static final String SCOPE_FOCUS = "Selected element + surroundings";
@@ -93,6 +93,9 @@ public class ExplanationDialog extends JFrame {
      *                    (kleiner, schneller). false: ganzes Modell.
      */
     public ExplanationDialog(Element focusElement, boolean elementMode) {
+        // Kein "always on top" mehr: Das Fenster gehört zum CATIA-Hauptfenster. Es bleibt dadurch über CATIA,
+        // wird mit CATIA minimiert und liegt NICHT über anderen Programmen. Nicht modal: CATIA bleibt bedienbar.
+        super(catiaMainFrame(), Dialog.ModalityType.MODELESS);
         this.focusElement = focusElement;
         this.elementMode = elementMode && focusElement != null;
 
@@ -100,13 +103,21 @@ public class ExplanationDialog extends JFrame {
                 ? "Ask AI about " + getFocusName() : "Ask AI about the model"));
         setSize(800, 900);
         setLocationRelativeTo(null);
-        setAlwaysOnTop(true);
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(8, 8));
 
         buildUI();
         loadSettings();
         runExport();
+    }
+
+    /** CATIA-Hauptfenster als Besitzer der Plugin-Fenster (null, falls nicht verfügbar – dann normales Fenster). */
+    static Frame catiaMainFrame() {
+        try {
+            return Application.getInstance().getMainFrame();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     @Override
