@@ -205,9 +205,38 @@ Die ZIP gehört **nicht** in den Code (sie steht in `.gitignore`). Sie wird nur 
 
 ---
 
-## Update, zurück zur alten Version, Deinstallation
+## Plugin aktualisieren (Update)
 
-- **Update:** neue ZIP herunterladen, entpacken, `install.bat` starten. API-Key, Einstellungen und ein selbst geänderter `System_Prompt.md` bleiben erhalten. Die neue Fassung des Prompts liegt dann daneben als `System_Prompt.md.new`.
+Eine neue Version installiert man über die bestehende alte. API-Key, Einstellungen und alle Ergebnisse unter `Dokumente\SysML-AI-QA\` bleiben erhalten.
+
+### Variante 1 – mit `update.bat` (empfohlen, holt automatisch den neuesten Stand)
+
+**Wo liegt `update.bat`?** In dem Ordner, in den du das Projekt (den Quellcode von GitHub) heruntergeladen und entpackt hast, also dort, wo auch `build.bat` und `install.bat` liegen. Wenn du ihn nicht mehr findest: im Explorer oben rechts nach `update.bat` suchen.
+
+Es gibt zwei Dateien mit dem Namen *update*. Starte die mit dem Typ **Windows-Batchdatei** (Zahnrad-Symbol), nicht die PowerShell-Datei:
+
+![update.bat im Projektordner](docs/images/update-01-files.png)
+
+1. **CATIA komplett schließen.**
+2. **`update.bat` doppelklicken** (Typ *Windows-Batchdatei*).
+3. Die Frage nach Administratorrechten mit **Ja** beantworten (wie in [Schritt 4b](#schritt-4--installbat-starten)).
+4. Abwarten: Das schwarze Fenster lädt den neuesten Stand von GitHub, baut das Plugin und installiert es (etwa 1–2 Minuten). Am Ende steht in Grün **„Fertig! … ist installiert.“**
+5. **CATIA starten** und im **Window → Notification Window** prüfen, dass die neue Version geladen wurde: *„Plugin loaded (version …)“*.
+
+Hinweise:
+
+- `update.bat` braucht ein **Java JDK 17+** (siehe [Weg B](#weg-b--selbst-bauen-entwickler)), weil es das Plugin selbst baut. Ohne JDK die Variante 2 nehmen.
+- Es ist egal, wie alt der Ordner mit `update.bat` ist: Der Code wird immer frisch von GitHub geladen, und die Skripte im Ordner werden dabei gleich mit aktualisiert.
+- Meldet das Fenster, dass `System_Prompt.md` *von euch geändert* wurde und erhalten bleibt, ist das in Ordnung. Die neue Fassung liegt daneben als `System_Prompt.md.new`.
+
+### Variante 2 – mit dem fertigen Paket (ohne Java)
+
+Neue ZIP herunterladen (wie in [Schritt 1](#schritt-1--paket-herunterladen)), entpacken und `install.bat` starten. Das Paket enthält keine `update.bat`, ein Update ist hier also immer: neue ZIP + `install.bat`.
+
+---
+
+## Zurück zur alten Version, Deinstallation
+
 - **Zurück zur vorherigen Version:** im Plugin-Ordner `sysml-ai-qa.jar` löschen und `sysml-ai-qa.jar.bak` in `sysml-ai-qa.jar` umbenennen.
 - **Deinstallation:** CATIA schließen und den Ordner `<CATIA-Ordner>\plugins\de.hm.sysmlaiqa.plugin` löschen (braucht Adminrechte). Die Ergebnisse unter `Dokumente\SysML-AI-QA\` bleiben erhalten und können von Hand gelöscht werden.
 
