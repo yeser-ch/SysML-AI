@@ -37,6 +37,10 @@ Beim Öffnen exportiert das Plugin das Modell aus CATIA. Das dauert je nach Mode
 
 ![Das Plugin-Fenster in CATIA nach dem Export (Fenster für ein Element)](docs/images/start-05-plugin-window.png)
 
+Das Fenster für das **ganze Modell** sieht genauso aus, nur steht oben *Ask the AI about your SysML model* und *Context* auf *Whole model*. Ist beim Öffnen ein Element markiert, steht es trotzdem oben (*Selected element: …*), und **Mention selected element** lässt sich einschalten. Während des Exports sind *Context*, *Format* und *Run test suite…* ausgegraut, unten steht *Busy…*. Sobald **Model ready** erscheint, ist alles bedienbar.
+
+![Das Fenster für das ganze Modell in CATIA, während der Export läuft](docs/images/start-06-plugin-window-model.png)
+
 ---
 
 ## 2. Das Fenster im Überblick
