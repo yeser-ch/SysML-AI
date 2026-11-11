@@ -36,7 +36,7 @@ Ordner `Dokumente/SysML-AI-QA/` (Button „Open results“):
 
 Wichtige Spalten: `model_used`, `model_version` (**tatsächlich antwortendes Modell** – Google leitet Aliase um, z. B. `gemini-3.5-flash` → `gemini-3.6-flash`; für den Modellvergleich diese Spalte nehmen), `model_transfer` (`inline` / `cache` / `cache_new`), `cached_tokens`, `temperature`, `system_prompt_sha`, `export_sha`, `export_elements`, `export_relations`, `prompt_tokens`, `answer_tokens`, `finish_reason` (`MAX_TOKENS` = abgeschnitten), `duration_s`, `thinking_level` / `thinking_used` / `thoughts_tokens` (Denktiefe: eingestellt / tatsächlich / verbrauchte Denk-Tokens).
 
-Neu ab 3.3 (Lastenheft FR11):
+Neu ab 3.3 bzw. 3.3.1 (Lastenheft FR11):
 
 | Spalte | Inhalt |
 |---|---|
@@ -48,6 +48,13 @@ Neu ab 3.3 (Lastenheft FR11):
 | `previous_turns` | Frage/Antwort-Paare davor im selben Chat (0 = neuer Chat) |
 | `user_message` | exakte Frage-Nachricht an die KI, inkl. ausgewähltem Element |
 | `focus_element` | ausgewähltes Element, wie es der KI genannt wurde; leer, wenn *Mention selected element* aus war |
+| `allow_fallback`, `upload_once`, `mention_focus` | Schalter *Fallback model*, *Upload model once*, *Mention selected element* |
+| `repetitions_set`, `pause_s` | eingestellte Wiederholungen, Extra-Pause im Testlauf |
+| `relation_depth`, `neighbour_depth` | *Depth* bei *Selected element + surroundings* (sonst leer) |
+| `tool_tokens` | Tokens der Google-Suche (nur bei Grounding) |
+| `total_tokens` | insgesamt verbrauchte Tokens der Anfrage laut Google (Eingabe inkl. Cache + Antwort + Denken + Suche) |
+
+Die `.xlsx` hat zusätzlich das Blatt **Tokens** mit Summen je antwortendem Modell (`model_version`) und insgesamt. Unbekannte Tokenzahlen (z. B. bei Fehlern) sind leer statt `-1`, damit Summen stimmen.
 
 Alle Spalten mit Erklärung stehen im Blatt **Columns** jeder `.xlsx`. Formate und Aufbau einer Anfrage: [`docs/EXPORTFORMATE.md`](../docs/EXPORTFORMATE.md).
 

@@ -21,6 +21,11 @@ public class AskSettings {
     public String scope = "FULL_MODEL";      // nur fürs Log: FULL_MODEL, SELECTION, FOCUS_NEIGHBOURHOOD
     /** Format der Modelldaten: ModelExport.FORMAT_V1 (JSON) oder FORMAT_V2 (SysML-v2-Text). Bestimmt auch den System-Prompt. */
     public String format = ModelExport.FORMAT_V1;
+    /** Nur fürs Log: weitere Einstellungen des Fensters bzw. Testlaufs. */
+    public boolean mentionFocus = false;     // "Mention selected element"
+    public int relationDepth = -1;           // Depth: relations (nur bei Element + Umgebung, sonst -1)
+    public int siblingDepth = -1;            // Depth: neighbours (nur bei Element + Umgebung, sonst -1)
+    public int pauseSec = 0;                 // Testlauf: Extra-Pause zwischen Anfragen
 
     public AskSettings copy() {
         AskSettings c = new AskSettings();
@@ -38,6 +43,10 @@ public class AskSettings {
         c.max429Retries = max429Retries;
         c.scope = scope;
         c.format = format;
+        c.mentionFocus = mentionFocus;
+        c.relationDepth = relationDepth;
+        c.siblingDepth = siblingDepth;
+        c.pauseSec = pauseSec;
         return c;
     }
 }

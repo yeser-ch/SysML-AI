@@ -34,14 +34,17 @@ public final class ExcelExport {
     private static final Object[][] MAIN = {
             {"run_id", 17}, {"test_id", 11}, {"category", 12}, {"repetition", 13}, {"timestamp", 20},
             {"question", 45}, {"expected_answer", 35}, {"answer", 75}, {"rating", 17}, {"rating_notes", 30},
-            {"model_version", 22}, {"success", 11}, {"duration_s", 13}, {"ids_unknown", 14},
+            {"model_version", 22}, {"success", 11}, {"duration_s", 13},
+            {"prompt_tokens", 14}, {"answer_tokens", 14}, {"thoughts_tokens", 15}, {"total_tokens", 14},
+            {"ids_unknown", 14},
     };
 
     /** Spalten mit Zahlen (werden in Excel als Zahl gespeichert, damit Filter und Summen funktionieren). */
     private static final List<String> NUMERIC = Arrays.asList(
             "repetition", "temperature", "max_tokens", "export_kb", "export_elements", "export_relations",
-            "prompt_tokens", "cached_tokens", "answer_tokens", "thoughts_tokens", "duration_s", "rate_limit_wait_s",
-            "ids_cited", "ids_found", "ids_unknown");
+            "prompt_tokens", "cached_tokens", "answer_tokens", "thoughts_tokens", "tool_tokens", "total_tokens",
+            "duration_s", "rate_limit_wait_s", "ids_cited", "ids_found", "ids_unknown", "repetitions_set", "pause_s",
+            "relation_depth", "neighbour_depth", "export_tokens_est", "export_tokens_exact", "previous_turns");
 
     /** Kurze Erklärung für das Blatt "Columns". */
     private static final Map<String, String> DESCRIPTION = new LinkedHashMap<>();
@@ -69,6 +72,13 @@ public final class ExcelExport {
                 {"grounding", "Google-Suche erlaubt"},
                 {"fresh_chat", "Frage ohne vorherigen Chatverlauf"},
                 {"require_ids", "ID-Check eingeschaltet"},
+                {"allow_fallback", "Fallback model eingeschaltet (anderes Modell bei Überlastung erlaubt)"},
+                {"upload_once", "Upload model once eingeschaltet (Modell als Gemini-Cache); was tatsächlich passiert ist: model_transfer"},
+                {"mention_focus", "Mention selected element eingeschaltet"},
+                {"repetitions_set", "Eingestellte Wiederholungen pro Frage"},
+                {"pause_s", "Testlauf: Extra-Pause zwischen Anfragen in Sekunden"},
+                {"relation_depth", "Depth: relations (nur bei Element + Umgebung)"},
+                {"neighbour_depth", "Depth: neighbours (nur bei Element + Umgebung)"},
                 {"scope", "FULL_MODEL = ganzes Modell, SELECTION = ausgewählte Pakete/Elemente, FOCUS_NEIGHBOURHOOD = Element mit Umgebung"},
                 {"focus_element", "Ausgewähltes Element, wie es der KI genannt wurde (leer = nicht mitgeschickt)"},
                 {"system_prompt_sha", "Prüfsumme des System-Prompts (Wortlaut in archive\\prompts)"},
@@ -81,7 +91,7 @@ public final class ExcelExport {
                 {"export_elements", "Anzahl Elemente im Export"},
                 {"export_relations", "Anzahl Beziehungen im Export"},
                 {"export_tokens_est", "Geschätzte Tokens der Modelldaten (Zeichen / 4)"},
-                {"export_tokens_exact", "Exakte Tokens der Modelldaten laut Google (countTokens) mit Modell"},
+                {"export_tokens_exact", "Exakte Tokens der Modelldaten laut Google (countTokens) für das gewählte Modell"},
                 {"previous_turns", "Frage/Antwort-Paare davor im selben Chat (0 = neuer Chat)"},
                 {"user_message", "Exakte Frage-Nachricht an die KI (inkl. ausgewähltem Element)"},
                 {"model_transfer", "inline = Modell mit der Frage gesendet, cache_new = hochgeladen, cache = aus dem Upload"},
@@ -89,6 +99,8 @@ public final class ExcelExport {
                 {"cached_tokens", "Davon aus dem hochgeladenen Modell"},
                 {"answer_tokens", "Länge der Antwort in Tokens"},
                 {"thoughts_tokens", "Tokens für internes Nachdenken"},
+                {"tool_tokens", "Tokens der Google-Suche (nur bei Grounding)"},
+                {"total_tokens", "Insgesamt verbrauchte Tokens dieser Anfrage laut Google (Eingabe + Antwort + Denken + Suche)"},
                 {"duration_s", "Antwortzeit in Sekunden"},
                 {"rate_limit_wait_s", "Wartezeit wegen Google-Limits in Sekunden"},
                 {"ids_cited", "Anzahl genannter Element-IDs (nur mit ID-Check)"},
@@ -173,6 +185,7 @@ public final class ExcelExport {
             put(zip, "xl/workbook.xml", workbook(lastCol, lastRow));
             put(zip, "xl/worksheets/sheet1.xml", answersSheet(rows, header, order, widths, mainCount));
             put(zip, "xl/worksheets/sheet2.xml", columnsSheet(header, order));
+            put(zip, "xl/worksheets/sheet3.xml", summarySheet(rows, header));
         }
         return bos.toByteArray();
     }
@@ -285,12 +298,82 @@ public final class ExcelExport {
         return x.toString();
     }
 
+    /**
+     * Blatt "Tokens": verbrauchte Tokens und Anfragen je tatsächlich antwortendem Modell und insgesamt.
+     * Werte werden beim Erzeugen berechnet (die Datei wird ohnehin aus der CSV neu gebaut).
+     */
+    private static String summarySheet(List<List<String>> rows, List<String> header) {
+        String[] cols = {"prompt_tokens", "cached_tokens", "answer_tokens", "thoughts_tokens", "tool_tokens", "total_tokens"};
+        int iModel = header.indexOf("model_version"), iReq = header.indexOf("model_requested"),
+                iOk = header.indexOf("success"), iDur = header.indexOf("duration_s");
+        Map<String, double[]> sums = new LinkedHashMap<>();   // [Anfragen, erfolgreich, Dauer, Tokens…]
+        double[] all = new double[3 + cols.length];
+        for (int r = 1; r < rows.size(); r++) {
+            List<String> row = rows.get(r);
+            String model = get(row, iModel);
+            if (model.isEmpty()) model = get(row, iReq);
+            if (model.isEmpty()) model = "(unknown)";
+            double[] s = sums.computeIfAbsent(model, k -> new double[3 + cols.length]);
+            for (double[] t : new double[][]{s, all}) {
+                t[0]++;
+                if ("true".equals(get(row, iOk))) t[1]++;
+                t[2] += num(get(row, iDur));
+                for (int c = 0; c < cols.length; c++) t[3 + c] += num(get(row, header.indexOf(cols[c])));
+            }
+        }
+        String[] head = {"model", "requests", "successful", "duration_s (sum)", "prompt_tokens", "cached_tokens",
+                "answer_tokens", "thoughts_tokens", "tool_tokens", "total_tokens"};
+        StringBuilder x = new StringBuilder();
+        x.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
+                .append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">")
+                .append("<cols><col min=\"1\" max=\"1\" width=\"30\" customWidth=\"1\"/><col min=\"2\" max=\"10\" width=\"17\" customWidth=\"1\"/></cols>")
+                .append("<sheetData><row r=\"1\" ht=\"22\" customHeight=\"1\">");
+        for (int c = 0; c < head.length; c++) cell(x, c, 1, head[c], S_INFO_HEAD, false);
+        x.append("</row>");
+        int r = 2;
+        for (Map.Entry<String, double[]> e : sums.entrySet()) {
+            summaryRow(x, r++, e.getKey(), e.getValue(), S_TEXT);
+        }
+        summaryRow(x, r++, "TOTAL", all, S_INFO_HEAD);
+        r++;
+        x.append("<row r=\"").append(r).append("\">");
+        cell(x, 0, r, "Note", S_TEXT, false);
+        cell(x, 1, r, "Sums over all rows of the sheet Answers, grouped by the model that actually answered (model_version). "
+                + "total_tokens = tokens Google counted for the request (input incl. cached part + answer + thinking + search). "
+                + "Cached tokens are part of prompt_tokens. Failed requests without a response have no token counts.", S_WRAP, false);
+        x.append("</row></sheetData><mergeCells count=\"1\"><mergeCell ref=\"B").append(r).append(":J").append(r)
+                .append("\"/></mergeCells></worksheet>");
+        return x.toString();
+    }
+
+    private static void summaryRow(StringBuilder x, int r, String label, double[] v, int labelStyle) {
+        x.append("<row r=\"").append(r).append("\">");
+        cell(x, 0, r, label, labelStyle, false);
+        for (int c = 0; c < v.length; c++) {
+            String s = c == 2 ? String.format(java.util.Locale.ROOT, "%.1f", v[c]) : String.valueOf((long) v[c]);
+            cell(x, c + 1, r, s, S_NUM, true);
+        }
+        x.append("</row>");
+    }
+
+    private static String get(List<String> row, int i) {
+        return i >= 0 && i < row.size() ? row.get(i).trim() : "";
+    }
+
+    private static double num(String v) {
+        try {
+            return v.isEmpty() ? 0 : Double.parseDouble(v.replace(',', '.'));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private static String workbook(String lastCol, int lastRow) {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
                 + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
                 + "<bookViews><workbookView activeTab=\"0\"/></bookViews>"
-                + "<sheets><sheet name=\"Answers\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Columns\" sheetId=\"2\" r:id=\"rId2\"/></sheets>"
+                + "<sheets><sheet name=\"Answers\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Columns\" sheetId=\"2\" r:id=\"rId2\"/><sheet name=\"Tokens\" sheetId=\"3\" r:id=\"rId4\"/></sheets>"
                 + "<definedNames><definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">"
                 + "Answers!$A$1:$" + lastCol + "$" + Math.max(2, lastRow) + "</definedName></definedNames>"
                 + "</workbook>";
@@ -371,6 +454,7 @@ public final class ExcelExport {
             + "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
             + "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
             + "<Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+            + "<Override PartName=\"/xl/worksheets/sheet3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
             + "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>"
             + "</Types>";
 
@@ -384,6 +468,7 @@ public final class ExcelExport {
             + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
             + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/>"
             + "<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>"
+            + "<Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet3.xml\"/>"
             + "</Relationships>";
 
     /*
