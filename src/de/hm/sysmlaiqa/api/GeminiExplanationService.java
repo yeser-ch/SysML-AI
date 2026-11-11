@@ -21,6 +21,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.prefs.Preferences;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -56,6 +59,7 @@ public class GeminiExplanationService implements ExplanationService {
     };
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(180);
+    public static final String CANCELLED = "Cancelled by user.";
     private static final int CACHE_TTL_SEC = 3600;          // Upload gilt 60 min
     private static final long CACHE_SAFETY_MS = 2 * 60_000; // 2 min vor Ablauf neu hochladen
 
@@ -64,7 +68,15 @@ public class GeminiExplanationService implements ExplanationService {
 
     // Chatverlauf OHNE Modelldaten (die stehen inline davor bzw. im Cache)
     private final List<String> conversationHistory = Collections.synchronizedList(new ArrayList<>());
+    // Derselbe Verlauf als Klartext (für "Show request…"): abwechselnd Frage-Nachricht, Antwort
+    private final List<String> historyTexts = Collections.synchronizedList(new ArrayList<>());
     private boolean focusSentInChat = false;
+
+    // Abbrechen (NFR4): bricht die laufende HTTP-Anfrage und alle Wartezeiten sofort ab
+    private volatile boolean cancelled = false;
+    private volatile CompletableFuture<HttpResponse<String>> running;
+    // Eingabelimits der Modelle laut Google (models/{id}.inputTokenLimit), -1 = unbekannt
+    private final Map<String, Integer> inputLimits = new HashMap<>();
 
     // Hochgeladene Modelle: Schlüssel = KI-Modell | Export | System-Prompt | Grounding
     private final Map<String, CacheEntry> caches = new HashMap<>();
@@ -114,7 +126,21 @@ public class GeminiExplanationService implements ExplanationService {
     @Override
     public void resetConversation() {
         conversationHistory.clear();
+        historyTexts.clear();
         focusSentInChat = false;
+    }
+
+    /** Bricht die laufende Anfrage ab (auch Wartezeiten bei Rate-Limits). Die Antwort lautet dann "Cancelled by user". */
+    @Override
+    public void cancel() {
+        cancelled = true;
+        CompletableFuture<HttpResponse<String>> f = running;
+        if (f != null) f.cancel(true);
+    }
+
+    @Override
+    public int previousTurns() {
+        return conversationHistory.size() / 2;
     }
 
     /** "Resend model": alle Uploads löschen (auch bei Google), nächste Frage lädt neu hoch. */
@@ -143,12 +169,14 @@ public class GeminiExplanationService implements ExplanationService {
             return Answer.error("No API key configured. Use \"API key...\" to enter one.", 0);
         }
 
+        cancelled = false;
         if (s.freshChat) resetConversation();
+        int previousTurns = previousTurns();
         boolean firstInChat = conversationHistory.isEmpty();
-        String questionTurn = contentJson("user",
-                PromptLoader.buildQuestionMessage(focusInfo, question, firstInChat || !focusSentInChat));
-        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.requireIds);
-        String modelTurn = contentJson("user", PromptLoader.buildModelMessage(modelJson));
+        String questionText = PromptLoader.buildQuestionMessage(focusInfo, question, firstInChat || !focusSentInChat);
+        String questionTurn = contentJson("user", questionText);
+        String systemPrompt = PromptLoader.buildSystemPrompt(getBaseDirectory(), s.requireIds, s.format);
+        String modelTurn = contentJson("user", PromptLoader.buildModelMessage(modelJson, s.format));
         String exportSha = Hashing.sha256Short(modelJson);
         String promptSha = Hashing.sha256Short(systemPrompt);
 
@@ -162,6 +190,7 @@ public class GeminiExplanationService implements ExplanationService {
         String lastError = "Unknown error.";
         boolean daily = false;
         for (String model : models) {
+            if (cancelled) break;
             if (s.allowFallback && !CIRCUIT.isAvailable(model)) {
                 log("Skipping " + model + " (temporarily blocked after an error)");
                 continue;
@@ -183,6 +212,11 @@ public class GeminiExplanationService implements ExplanationService {
                         daily = true;
                         break;
                     }
+                    if (cr.tooLarge) {          // zu groß für dieses Modell: inline würde genauso scheitern
+                        lastError = cr.message;
+                        continue;
+                    }
+                    if (cancelled) break;
                 }
             }
 
@@ -209,6 +243,8 @@ public class GeminiExplanationService implements ExplanationService {
             if (a.answer != null) {
                 conversationHistory.add(questionTurn);
                 conversationHistory.add(contentJson("model", a.answer.text));
+                historyTexts.add(questionText);
+                historyTexts.add(a.answer.text);
                 if (focusInfo != null) focusSentInChat = true;
                 Answer res = new Answer(a.answer.text, model, true, System.currentTimeMillis() - start,
                         a.answer.promptTokens, a.answer.answerTokens, a.answer.finishReason);
@@ -219,16 +255,22 @@ public class GeminiExplanationService implements ExplanationService {
                 res.transfer = transfer;
                 res.rateLimitWaitSec = stats.waitedSec;
                 res.note = note;
+                res.userMessage = questionText;
+                res.previousTurns = previousTurns;
                 return res;
             }
             lastError = a.error;
             if (a.dailyLimit) { daily = true; break; }
-            if (a.fatal) break;
+            if (a.fatal || cancelled) break;
         }
 
-        Answer err = Answer.error(lastError, System.currentTimeMillis() - start);
+        Answer err = cancelled
+                ? new Answer(CANCELLED, "-", false, System.currentTimeMillis() - start, -1, -1, "CANCELLED")
+                : Answer.error(lastError, System.currentTimeMillis() - start);
         err.rateLimitWaitSec = stats.waitedSec;
         err.dailyLimit = daily;
+        err.userMessage = questionText;
+        err.previousTurns = previousTurns;
         return err;
     }
 
@@ -277,6 +319,7 @@ public class GeminiExplanationService implements ExplanationService {
         String name;        // null = kein Cache, inline senden
         boolean created;
         boolean dailyLimit;
+        boolean tooLarge;
         String message = "";
     }
 
@@ -354,6 +397,11 @@ public class GeminiExplanationService implements ExplanationService {
             log("Model uploaded: " + r.name + " (" + extractInt(resp, "totalTokenCount") + " tokens)");
             return r;
         }
+        if (status == 400 && isTokenLimit(resp)) {
+            r.tooLarge = true;
+            r.message = tokenLimitMessage(model, shorten(extractString(resp, "message"), 300));
+            return r;
+        }
         // Caching nicht möglich (z. B. Free Tier für dieses Modell, Modell zu klein) -> inline bis "Resend model"
         String msg = "Caching not available for " + model + " (HTTP " + status + ": "
                 + shorten(extractString(resp, "message"), 200) + "). The model is sent with each question instead.";
@@ -399,14 +447,18 @@ public class GeminiExplanationService implements ExplanationService {
         int overloadAttempt = 0;
         while (true) {
             try {
-                HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                if (cancelled) {
+                    out.error = CANCELLED;
+                    return out;
+                }
+                HttpResponse<String> resp = sendCancellable(request);
                 if (resp.statusCode() == 503 || resp.statusCode() == 500) {
                     // Google überlastet ("high demand") – meist nach Sekunden vorbei: kurz warten und erneut versuchen
                     overloadAttempt++;
                     if (overloadAttempt <= 3) {
                         int wait = 5 * overloadAttempt; // 5 s, 10 s, 15 s
                         log(model + ": overloaded (HTTP " + resp.statusCode() + "), retrying in " + wait + " s (" + overloadAttempt + "/3)");
-                        Thread.sleep(wait * 1000L);
+                        sleepCancellable(wait * 1000L);
                         stats.waitedSec += wait;
                         continue;
                     }
@@ -432,17 +484,17 @@ public class GeminiExplanationService implements ExplanationService {
                     return out;
                 }
                 log(model + ": per-minute rate limit, waiting " + wait + " s (attempt " + attempt + "/" + s.max429Retries + ")");
-                Thread.sleep((wait + 1) * 1000L);
+                sleepCancellable((wait + 1) * 1000L);
                 stats.waitedSec += wait + 1;
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                out.error = "Request cancelled.";
+            } catch (InterruptedException | java.util.concurrent.CancellationException ie) {
+                out.error = CANCELLED;
                 return out;
             } catch (java.net.http.HttpTimeoutException e) {
-                out.error = "Timeout: " + model + " did not answer within " + REQUEST_TIMEOUT.getSeconds() + " s.";
+                out.error = "Timeout: " + model + " did not answer within " + REQUEST_TIMEOUT.getSeconds() + " s. "
+                        + "Try again, reduce \"Thinking\" or choose a smaller context.";
                 return out;
             } catch (java.io.IOException e) {
-                out.error = "Connection error: " + e.getMessage();
+                out.error = connectionError(e);
                 return out;
             }
         }
@@ -470,8 +522,8 @@ public class GeminiExplanationService implements ExplanationService {
         if (sent.response == null) {
             result.error = sent.error;
             result.dailyLimit = sent.dailyLimit;
-            result.fatal = !sent.rateLimited && !sent.dailyLimit && sent.error.startsWith("Request cancelled");
-            CIRCUIT.recordFailure(model);
+            result.fatal = CANCELLED.equals(sent.error);
+            if (!result.fatal) CIRCUIT.recordFailure(model);
             return result;
         }
 
@@ -481,10 +533,11 @@ public class GeminiExplanationService implements ExplanationService {
             CIRCUIT.recordSuccess(model);
             String text = extractAnswerText(resp);
             String finish = extractString(resp, "finishReason");
-            if (text.isEmpty()) {
+            if (text.isBlank()) {
+                // FR12: leere Antwort ist ein Fehler mit konkretem Grund – keine "erfolgreiche" leere Zeile im Log
                 String blockReason = extractString(resp, "blockReason");
-                text = "(No text in response. finishReason=" + finish
-                        + (blockReason.isEmpty() ? "" : ", blockReason=" + blockReason) + ")";
+                result.error = emptyAnswerMessage(model, finish, blockReason, extractInt(resp, "thoughtsTokenCount"));
+                return result;
             }
             if ("MAX_TOKENS".equals(finish)) {
                 text += "\n\n[Answer cut off: max. output tokens reached. Increase \"Max tokens\".]";
@@ -509,6 +562,11 @@ public class GeminiExplanationService implements ExplanationService {
         }
         if ((status == 400 || status == 403) && (resp.contains("API_KEY_INVALID") || resp.contains("API key not valid"))) {
             result.error = "Invalid API key (HTTP " + status + "). Enter a new one via \"API key...\".";
+            result.fatal = true;
+            return result;
+        }
+        if (status == 400 && isTokenLimit(resp)) {
+            result.error = tokenLimitMessage(model, apiMessage);
             result.fatal = true;
             return result;
         }
@@ -561,6 +619,170 @@ public class GeminiExplanationService implements ExplanationService {
 
     private String contentJson(String role, String text) {
         return "{\"role\":\"" + role + "\",\"parts\":[{\"text\":\"" + escapeJson(text) + "\"}]}";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Abbrechen, Fehlermeldungen (FR12, NFR4)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Wie httpClient.send, aber jederzeit über {@link #cancel()} abbrechbar. */
+    private HttpResponse<String> sendCancellable(HttpRequest request) throws java.io.IOException, InterruptedException {
+        CompletableFuture<HttpResponse<String>> f = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        running = f;
+        try {
+            while (true) {
+                if (cancelled) {
+                    f.cancel(true);
+                    throw new InterruptedException("cancelled");
+                }
+                try {
+                    return f.get(200, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException ignored) {
+                    // weiter warten, Abbruch prüfen
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    Throwable c = ee.getCause();
+                    if (c instanceof java.io.IOException) throw (java.io.IOException) c;
+                    throw new java.io.IOException(c == null ? ee.toString() : c.toString(), c);
+                }
+            }
+        } finally {
+            running = null;
+        }
+    }
+
+    private void sleepCancellable(long ms) throws InterruptedException {
+        long end = System.currentTimeMillis() + ms;
+        while (System.currentTimeMillis() < end) {
+            if (cancelled) throw new InterruptedException("cancelled");
+            Thread.sleep(Math.min(200, Math.max(1, end - System.currentTimeMillis())));
+        }
+    }
+
+    /** Konkrete Meldung, wenn die API nicht erreichbar ist (kein Internet, Proxy/Firewall, DNS). */
+    static String connectionError(Throwable e) {
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        String what = root.getClass().getSimpleName() + (root.getMessage() == null ? "" : ": " + root.getMessage());
+        if (root instanceof java.net.UnknownHostException || root instanceof java.net.ConnectException
+                || root instanceof java.nio.channels.UnresolvedAddressException) {
+            return "Google Gemini API not reachable (" + what + "). Check the internet connection; "
+                    + "a company or university network may block generativelanguage.googleapis.com (proxy/firewall/VPN).";
+        }
+        if (root instanceof javax.net.ssl.SSLException) {
+            return "Secure connection to the Gemini API failed (" + what + "). A proxy or antivirus may be intercepting HTTPS.";
+        }
+        return "Connection to the Gemini API failed (" + what + "). Try again in a moment.";
+    }
+
+    /** FR12: leere Antwort – warum, und was hilft. */
+    static String emptyAnswerMessage(String model, String finish, String blockReason, int thoughts) {
+        StringBuilder sb = new StringBuilder("Empty answer from ").append(model).append(" (finishReason=")
+                .append(finish.isEmpty() ? "none" : finish);
+        if (!blockReason.isEmpty()) sb.append(", blockReason=").append(blockReason);
+        sb.append("). ");
+        if ("MAX_TOKENS".equals(finish)) {
+            sb.append("The output limit was used up").append(thoughts > 0 ? " by internal thinking (" + thoughts + " tokens)" : "")
+                    .append(" before any text was written. Increase \"Max tokens\" or lower \"Thinking\".");
+        } else if (!blockReason.isEmpty() || "SAFETY".equals(finish) || "PROHIBITED_CONTENT".equals(finish)
+                || "BLOCKLIST".equals(finish) || "RECITATION".equals(finish)) {
+            sb.append("Google's content filter blocked the answer. Rephrase the question.");
+        } else {
+            sb.append("The model returned no text. Try again or choose another AI model.");
+        }
+        return sb.toString();
+    }
+
+    static boolean isTokenLimit(String resp) {
+        String l = resp.toLowerCase();
+        return l.contains("token") && (l.contains("exceed") || l.contains("too long") || l.contains("too large")
+                || l.contains("maximum number of tokens") || l.contains("input token count"));
+    }
+
+    /** FR12: Export zu groß für das Eingabelimit des Modells. */
+    String tokenLimitMessage(String model, String apiMessage) {
+        int limit = inputTokenLimit(model);
+        return "Model data too large for " + model + (limit > 0 ? String.format(" (input limit %,d tokens)", limit) : "")
+                + ". Choose a smaller context (selected packages or element surroundings), the other export format, "
+                + "or an AI model with a larger input limit. Google: " + apiMessage;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Tokenzahl und Eingabelimit (FR2)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Exakte Tokenzahl der Modelldaten-Nachricht laut Google (countTokens; zählt nicht gegen das Anfrage-Kontingent).
+     * @return Tokens oder -1, wenn die Zählung nicht möglich war
+     */
+    public int countTokens(String model, String modelContent, String format) {
+        String apiKey = getApiKey();
+        if (apiKey.isEmpty()) return -1;
+        String body = "{\"contents\":[" + contentJson("user", PromptLoader.buildModelMessage(modelContent, format)) + "]}";
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(API_BASE + "/models/" + model + ":countTokens?key=" + apiKey))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .timeout(Duration.ofSeconds(60))
+                    .build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                log("countTokens for " + model + " failed (HTTP " + resp.statusCode() + ")");
+                return -1;
+            }
+            return extractInt(resp.body(), "totalTokens");
+        } catch (Exception e) {
+            log("countTokens for " + model + " failed: " + e.getMessage());
+            return -1;
+        }
+    }
+
+    /** Eingabelimit des Modells in Tokens laut Google (einmal abgefragt, dann gemerkt); -1 = unbekannt. */
+    public int inputTokenLimit(String model) {
+        synchronized (inputLimits) {
+            Integer v = inputLimits.get(model);
+            if (v != null) return v;
+        }
+        int limit = -1;
+        String apiKey = getApiKey();
+        if (!apiKey.isEmpty()) {
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(API_BASE + "/models/" + model + "?key=" + apiKey))
+                        .timeout(Duration.ofSeconds(20))
+                        .GET().build();
+                HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 200) limit = extractInt(resp.body(), "inputTokenLimit");
+            } catch (Exception ignored) { }
+        }
+        synchronized (inputLimits) {
+            inputLimits.put(model, limit);
+        }
+        return limit;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Vorschau der Anfrage (FR3, NFR3)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Override
+    public RequestPreview preview(String question, String modelContent, String focusInfo, AskSettings s) {
+        RequestPreview p = new RequestPreview();
+        PromptLoader.Template tpl = PromptLoader.loadTemplate(getBaseDirectory(), s.format);
+        p.systemPrompt = PromptLoader.fill(tpl.text, s.requireIds, s.format);
+        p.systemPromptSource = tpl.source + (tpl.file != null ? " (" + tpl.file.getAbsolutePath() + ")" : "");
+        p.modelMessage = PromptLoader.buildModelMessage(modelContent, s.format);
+        boolean fresh = s.freshChat || s.repetitions > 1;
+        if (!fresh) p.history.addAll(historyTexts);
+        boolean firstInChat = fresh || conversationHistory.isEmpty();
+        p.questionMessage = PromptLoader.buildQuestionMessage(focusInfo, question, firstInChat || !focusSentInChat);
+        String thinking = effectiveThinking(s.model, s.thinkingLevel);
+        p.generationConfig = "model: " + s.model + "\ntemperature: " + s.temperature + "\nmaxOutputTokens: " + s.maxOutputTokens
+                + "\nthinkingLevel: " + thinking + "\ngrounding (Google Search): " + (s.grounding ? "on" : "off");
+        p.transferNote = s.cacheModel
+                ? "System prompt and model data are uploaded once (Gemini cache) and then referenced; the content is identical."
+                : "System prompt and model data are sent with every request.";
+        return p;
     }
 
     // ═══════════════════════════════════════════════════════════════════════

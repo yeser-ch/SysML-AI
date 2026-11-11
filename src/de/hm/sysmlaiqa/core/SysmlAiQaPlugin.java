@@ -45,6 +45,10 @@ public class SysmlAiQaPlugin extends Plugin {
     public static final String PAUSE_PREF = "sysmlaiqa_batch_pause_s";
     public static final String CACHE_MODEL_PREF = "sysmlaiqa_cache_model";
     public static final String THINKING_PREF = "sysmlaiqa_thinking";
+    public static final String FORMAT_PREF = "sysmlaiqa_export_format";
+    public static final String MENTION_FOCUS_PREF = "sysmlaiqa_mention_focus";
+    public static final String RELATION_DEPTH_PREF = "sysmlaiqa_relation_depth";
+    public static final String SIBLING_DEPTH_PREF = "sysmlaiqa_sibling_depth";
     public static final String SETTINGS_VERSION_PREF = "sysmlaiqa_settings_version";
     public static final String LEGACY_IMPORTED_PREF = "sysmlaiqa_legacy_settings_imported";
 
@@ -228,7 +232,7 @@ public class SysmlAiQaPlugin extends Plugin {
                 File[] files = exportDir.listFiles();
                 if (files != null) {
                     for (File file : files) {
-                        if (file.getName().endsWith(".json")) {
+                        if (file.getName().endsWith(".json") || file.getName().endsWith(".sysml")) {
                             // KORREKTUR: Rückgabewert auswerten, um die IDE-Warnung zu beheben
                             boolean deleted = file.delete();
                             if (!deleted) {

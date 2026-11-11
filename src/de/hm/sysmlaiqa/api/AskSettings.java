@@ -18,7 +18,9 @@ public class AskSettings {
     public boolean cacheModel = true;        // Modell einmal hochladen (Gemini-Cache) statt bei jeder Frage mitschicken
     public int max429WaitSec = 30;           // bei Rate-Limit (pro Minute) höchstens so lange auf Google warten
     public int max429Retries = 2;            // so oft nach einem Rate-Limit erneut versuchen
-    public String scope = "FULL_MODEL";      // nur fürs Log
+    public String scope = "FULL_MODEL";      // nur fürs Log: FULL_MODEL, SELECTION, FOCUS_NEIGHBOURHOOD
+    /** Format der Modelldaten: ModelExport.FORMAT_V1 (JSON) oder FORMAT_V2 (SysML-v2-Text). Bestimmt auch den System-Prompt. */
+    public String format = ModelExport.FORMAT_V1;
 
     public AskSettings copy() {
         AskSettings c = new AskSettings();
@@ -35,6 +37,7 @@ public class AskSettings {
         c.max429WaitSec = max429WaitSec;
         c.max429Retries = max429Retries;
         c.scope = scope;
+        c.format = format;
         return c;
     }
 }

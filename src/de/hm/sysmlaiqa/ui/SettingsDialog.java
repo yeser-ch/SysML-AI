@@ -6,7 +6,7 @@ import java.awt.*;
 import java.util.prefs.Preferences;
 
 /**
- * Nur noch für den API-Key. Alle anderen Einstellungen (Modell, Grounding, Stil, Temperatur …)
+ * Nur noch für den API-Key. Alle anderen Einstellungen (Modell, Grounding, Format, Temperatur …)
  * stehen jetzt direkt im "Ask AI about the model"-Fenster.
  */
 public class SettingsDialog extends JDialog {

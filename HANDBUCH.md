@@ -2,6 +2,8 @@
 
 Dieses Handbuch erklärt das Plugin-Fenster nach der Installation: wo jede Einstellung ist, was sie bewirkt und welche Werte für Messungen sinnvoll sind. Installiert wird nach [`INSTALL.md`](INSTALL.md).
 
+> **Stand der Bilder:** Die Screenshots stammen von Version 3.1. Seit 3.3 gibt es zusätzlich *Format*, *Depth*, *Choose…*, *Mention selected element*, *Show request…*, *System prompt…* und den *Stop*-Knopf; *Answer style* gibt es nicht mehr. Die Tabelle in Abschnitt 3 ist aktuell.
+>
 > **Zu den Bildern:** Die Fenster-Screenshots zeigen das echte Plugin-Fenster mit einem kleinen Demo-Modell (Roboter mit Batterie, Antrieb, Chassis und drei Anforderungen) und Beispielantworten. In CATIA sieht das Fenster je nach Windows-Design etwas anders aus. Aufbau und Beschriftungen sind gleich.
 
 **Inhalt**
@@ -62,28 +64,34 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | --- | --- | --- | --- |
 | 1 | **AI model** | Welches Gemini-Modell antwortet. Auswählen oder eine Modell-ID eintippen. Vorgeschlagen sind `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` und `gemini-3.1-flash-lite` | `gemini-3.8-flash` |
 | 1b | **Refresh** | Lädt die Liste aller Modelle, die für deinen API-Key verfügbar sind. Wichtig für den Vergleich verschiedener Modellgrößen | – |
-| 3 | **Context** | Welcher Teil des Modells an die KI geht. *Whole model*: alles außer den SysML/UML-Bibliotheken. *Selected element + surroundings*: nur das Element, seine Besitzer, Nachbarn und Beziehungen (kleiner und schneller). Nur verfügbar, wenn ein Element ausgewählt ist. Ein Wechsel startet einen neuen Export | je nach Menüpunkt |
+| 3 | **Context** | Welcher Teil des Modells an die KI geht. *Whole model*: alles außer den SysML/UML-Bibliotheken. *Selected packages / elements*: nur die mit **Choose…** gewählten Pakete oder Elemente, jeweils mit ihrem ganzen Inhalt. *Selected element + surroundings*: nur das Element, seine Besitzer, Nachbarn und Beziehungen bis zur eingestellten Tiefe (nur verfügbar, wenn ein Element ausgewählt ist). Ein Wechsel startet einen neuen Export. Details: [`docs/EXPORTFORMATE.md`](docs/EXPORTFORMATE.md#2-umfang-des-exports-fr1) | je nach Menüpunkt |
+| 3a | **Choose…** | Nur bei *Selected packages / elements*: öffnet den Modellbaum. Mehrere Einträge mit Strg+Klick wählen. Im Containment Tree markierte Elemente sind vorausgewählt | – |
+| 3b | **Format** | *SysML v1 (JSON export)*: der Export aus CATIA. *SysML v2 (textual notation)*: dasselbe Modell in SysML-v2-Schreibweise, gleicher Inhalt. Jedes Format hat einen eigenen System-Prompt. Ein Wechsel schreibt das Modell neu, ohne neuen Export aus CATIA | SysML v1 |
+| 3c | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*. *relations*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10). *neighbours*: über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Eine Änderung exportiert nach kurzer Pause neu | 5 / 3 |
 | 4 | **Thinking** | Wie viel die KI vor der Antwort „nachdenkt“: *Model default*, *Minimal*, *Low*, *Medium*, *High*. Weniger Denken ist schneller, kann aber bei indirekten Zusammenhängen schlechter sein. Kann ein Modell die Stufe nicht, wird der Modell-Standard genommen (steht im Log) | Model default |
 | 5 | **Upload model once** | An: Das Modell wird mit der ersten Frage einmal bei Google hochgeladen (60 Minuten gültig), danach geht nur noch die Frage raus. Das spart Zeit und Tokens. Nicht jedes Modell erlaubt das im Free Tier (z. B. Flash-Lite), dann wird das Modell automatisch mit jeder Frage geschickt | an |
 | 6 | **Grounding** | Erlaubt der KI eine Google-Suche. Für Messungen **aus** lassen, denn die Antwort soll nur aus dem Modell kommen | aus |
 | 7 | **New chat per question** | An: Jede Frage wird unabhängig beantwortet, die KI kennt die vorherigen Fragen nicht. Aus: Folgefragen bauen auf dem bisherigen Gespräch auf (z. B. „Und welche Masse hat es?“) | an |
+| 8a | **Mention selected element** | Nur wenn ein Element ausgewählt ist. An: Die erste Frage eines Chats beginnt mit *# Currently selected element* und Name, Typ, ID und Besitzer des Elements (genauer Text im Tooltip). Aus: Über die Auswahl wird nichts gesendet | an |
 | 8 | **Fallback model** | An: Ist das gewählte Modell überlastet, probiert das Plugin automatisch andere Modelle. Für Messungen **aus** lassen, sonst sind Ergebnisse verschiedener Modelle vermischt | aus |
 | 9 | **Temperature** | Zufälligkeit der Antwort, 0 bis 2. *0* = möglichst gleiche Antworten bei gleicher Frage (empfohlen für Messungen), höher = abwechslungsreicher | 0 |
 | 10 | **Cite element IDs (hallucination check)** | Die KI muss zu jedem genannten Element dessen ID angeben. Das Plugin prüft dann, ob es diese IDs im Modell gibt, und markiert erfundene. Ändert den System-Prompt | aus |
 | 11 | **Run test suite…** | Startet einen Testlauf mit Fragen aus einer CSV-Datei (siehe [Abschnitt 8](#8-testlauf-mit-vielen-fragen)). Während des Laufs heißt der Button *Stop test run* | – |
 | 12 | **Max tokens** | Maximale Länge der Antwort, inklusive internem Nachdenken. Wird eine Antwort abgeschnitten, steht ein Hinweis darunter: dann erhöhen | 8.192 |
-| 13 | **Statuszeile** | Zeigt den Export: Anzahl Elemente und Beziehungen, Größe, ungefähre Tokens und eine Prüfsumme (`export …`). Nach dem Hochladen zusätzlich *uploaded for …*. Mit der Maus darüberfahren zeigt den vollen Text | – |
+| 13 | **Statuszeile** | Zeigt den Export: Format, Anzahl Elemente und Beziehungen, Größe, geschätzte Tokens, kurz danach die **exakte** Tokenzahl für das gewählte KI-Modell (*exact … for …*) und eine Prüfsumme (`export …`). Ist das Modell zu groß für das Eingabelimit des KI-Modells, wird die Zeile rot. Mit der Maus darüberfahren zeigt den vollen Text und den Umfang | – |
 | 14 | **Repetitions** | Wie oft jede Frage gestellt wird (1–20), jedes Mal in einem neuen Chat. Mehr als 1 zeigt, wie stabil die Antworten sind | 1 |
 | 15 | **Resend model** | Exportiert das Modell neu aus CATIA und lädt es mit der nächsten Frage neu hoch. **Nach jeder Änderung am Modell in CATIA klicken**, sonst antwortet die KI zum alten Stand | – |
+| 15a | **Show request…** | Zeigt genau, was mit der nächsten Frage gesendet wird: System-Prompt, Modelldaten, bisheriger Chat, Frage-Nachricht und Parameter. **Save all…** speichert alles als Dateien | – |
+| 15b | **System prompt…** | System-Prompt je Format ansehen und ändern. Eigene Fassung wird unter `Dokumente\SysML-AI-QA\prompts` gespeichert, **Reset to default** stellt den Standard wieder her. Der System-Prompt ist eine Versuchsvariable: jede Fassung steht mit Prüfsumme im Log | – |
 | 16 | **API key…** | API-Key ansehen oder ändern | – |
 | 17 | **Open results** | Öffnet den Ergebnisordner `Dokumente\SysML-AI-QA` | – |
 | 18 | **Quick questions** | Fragevorlagen nach den Kategorien A–D (siehe [Abschnitt 7](#7-schnellfragen)) | – |
 | 19 | **Chatverlauf** | *System*: Meldungen des Plugins. *You*: deine Fragen. *AI*: Antworten mit Messwerten | – |
 | 20 | **Your question** | Frage eintippen. **Enter** schickt ab, **Shift+Enter** macht eine neue Zeile | – |
-| 21 | **Send** | Frage abschicken. Während die KI arbeitet, steht dort *Busy…* | – |
+| 21 | **Send / Stop** | Frage abschicken. Während die KI arbeitet, steht dort **Stop**: bricht die Anfrage sofort ab (auch Wartezeiten bei Limits). Abgebrochene Anfragen stehen mit `finish_reason = CANCELLED` im Log | – |
 | 22 | **New chat** | Löscht den Chatverlauf. Das exportierte Modell bleibt geladen | – |
 
-**Wann wird das Modell automatisch neu hochgeladen?** Wenn sich das KI-Modell, der Antwortstil, der ID-Check oder Grounding ändert, oder nach *Resend model*. Grund: Diese Einstellungen gehören zum hochgeladenen Paket.
+**Wann wird das Modell automatisch neu hochgeladen?** Wenn sich das KI-Modell, das Format, der Umfang, der System-Prompt, der ID-Check oder Grounding ändert, oder nach *Resend model*. Grund: Diese Einstellungen gehören zum hochgeladenen Paket.
 
 ---
 
@@ -96,7 +104,9 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 
 ![Frage und Antwort im Chat](docs/images/chat-answer.png)
 
-Fragen und Antworten sind auf Englisch gedacht, weil Modell und Schnellfragen englisch sind. Die KI antwortet in der Sprache der Frage, deutsche Fragen funktionieren also auch.
+Fragen und Antworten sind auf Englisch gedacht, weil Modell und Schnellfragen englisch sind. Die Antwortsprache gibt das Plugin nicht vor: Die KI antwortet meist in der Sprache der Frage. Wer eine bestimmte Sprache will, schreibt das in die Frage.
+
+Was genau gesendet wird, zeigt **Show request…**. Dauert eine Antwort zu lange, bricht **Stop** ab.
 
 ---
 
@@ -129,7 +139,8 @@ Jede Antwort wird automatisch mit allen Einstellungen protokolliert (siehe [Absc
 ![Fenster für ein einzelnes Element](docs/images/window-element.png)
 
 - Oben steht das gewählte Element mit Typ, z. B. *Selected element: Operating Time [Requirement]*.
-- **Context** steht auf *Selected element + surroundings*. Die KI bekommt nur dieses Element und seine Umgebung. Das ist schneller, aber Fragen zu weit entfernten Teilen kann sie dann nicht beantworten. Für solche Fragen auf *Whole model* umstellen.
+- **Context** steht auf *Selected element + surroundings*. Die KI bekommt nur dieses Element und seine Umgebung. Das ist schneller, aber Fragen zu weit entfernten Teilen kann sie dann nicht beantworten. Für solche Fragen auf *Whole model* umstellen oder **Depth** erhöhen.
+- **Mention selected element** (an) nennt der KI das gewählte Element bei der ersten Frage. Ausschalten, wenn die KI das Element selbst finden soll.
 - Die **Schnellfragen** beziehen sich auf das gewählte Element. Für Requirements gibt es eigene Fragen (z. B. zu satisfy und verify).
 
 ---
@@ -192,7 +203,8 @@ Im Testlauf gilt immer: jede Frage in einem neuen Chat, kein Fallback-Modell. Be
 | **`runs\run_<Datum-Uhrzeit>.xlsx`** | ein Testlauf, formatiert für Excel. **Diese Datei bewerten** |
 | `answers_log.csv`, `runs\….csv` | dieselben Daten als Rohdaten (für Auswertungen mit Python, R usw.) |
 | `archive\prompts\` | jeder verwendete System-Prompt im Wortlaut |
-| `archive\exports\` | jeder verwendete Modellexport |
+| `archive\exports\` | jeder verwendete Modellexport, genau wie gesendet (`.json` für SysML v1, `.sysml` für SysML v2) |
+| `prompts\` | eure im Fenster geänderten System-Prompts (nur wenn ihr einen geändert habt) |
 | `backup\` | nur falls bei der Installation eine sehr alte Version verschoben wurde |
 
 Die **.xlsx**-Dateien sind zum Lesen und Bewerten gedacht. Jede Zeile ist eine Antwort:
@@ -227,6 +239,9 @@ Tipps:
 | Cite element IDs | innerhalb eines Experiments fest | ändert den System-Prompt |
 | Repetitions | mehr als 1 (Anzahl im Team festlegen) | macht Schwankungen sichtbar |
 | Context | *Whole model* | alle Fragen bekommen dieselbe Grundlage |
+| Format | innerhalb eines Experiments fest | v1 gegen v2 ist eine eigene Versuchsfrage |
+| System-Prompt | innerhalb eines Experiments fest | jede Änderung ergibt eine neue `system_prompt_sha` |
+| Mention selected element | innerhalb eines Experiments fest | ändert die Frage-Nachricht |
 
 Grundregel: Pro Experiment genau **eine** Größe ändern, z. B. nur das KI-Modell oder nur das Testmodell. Vorher in CATIA geändert? Dann zuerst **Resend model**.
 
@@ -248,6 +263,15 @@ Das Free-Tier-Limit von Google ist erreicht. Beim Minutenlimit wartet das Plugin
 
 **Die Schnellfragen passen nicht zu meinem Element.**
 Prüfen, ob *Context* auf *Selected element + surroundings* steht. Bei *Whole model* zeigt das Plugin die Fragen zum ganzen Modell.
+
+**„Model data too large for …“ oder rote Statuszeile.**
+Das Modell ist größer als das Eingabelimit des KI-Modells. Kleineren *Context* wählen (*Selected packages / elements* oder *surroundings*), das andere Format probieren oder ein KI-Modell mit größerem Limit nehmen.
+
+**„Empty answer from …“.**
+Die KI hat keinen Text geliefert. Steht dort *MAX_TOKENS*, hat das interne Nachdenken die Antwortlänge aufgebraucht: *Max tokens* erhöhen oder *Thinking* senken. Bei *SAFETY* oder *blockReason* hat Googles Inhaltsfilter blockiert: Frage umformulieren.
+
+**„Google Gemini API not reachable“.**
+Keine Internetverbindung, oder das Netz (Firma, Hochschule, VPN) blockiert `generativelanguage.googleapis.com`.
 
 **Wo kann ich sehen, was das Plugin im Hintergrund macht?**
 In CATIA unter **Window → Notification Window**. Alle Meldungen beginnen mit `[SysML AI Q&A]`.

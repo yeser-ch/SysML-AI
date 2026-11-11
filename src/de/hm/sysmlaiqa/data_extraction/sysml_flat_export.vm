@@ -197,7 +197,12 @@ $!txt.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')##
 #end##
 ##
 ## --- START DER GENERIERUNG ---
-#if($element && $element != $project.primaryModel)
+## $roots: ausgewählte Pakete/Elemente (FR1.2), jeweils mit allem, was sie enthalten
+#if($roots)
+#foreach($root in $roots)
+#processElement($root)
+#end
+#elseif($element && $element != $project.primaryModel)
 #processElement($element)
 #else
 #foreach($root in $project.primaryModel.ownedElement)

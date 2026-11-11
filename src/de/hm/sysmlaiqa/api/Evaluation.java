@@ -21,9 +21,10 @@ public final class Evaluation {
                                        String runId, int repetition, File runFile) {
         AskSettings s = settings.copy();
         if (repetition > 1 || settings.repetitions > 1) s.freshChat = true;
+        s.format = export.format;   // System-Prompt und Modelldaten passen immer zum Format des Exports
 
-        String systemPrompt = PromptLoader.buildSystemPrompt(GeminiExplanationService.getBaseDirectory(),
-                s.requireIds);
+        PromptLoader.Template tpl = PromptLoader.loadTemplate(GeminiExplanationService.getBaseDirectory(), s.format);
+        String systemPrompt = PromptLoader.fill(tpl.text, s.requireIds, s.format);
 
         EvaluationRecord r = new EvaluationRecord();
         r.runId = runId;
@@ -33,13 +34,14 @@ public final class Evaluation {
         r.settings = s;
         r.export = export;
         r.systemPromptSha = Hashing.sha256Short(systemPrompt);
+        r.systemPromptSource = tpl.source;
         if (testCase != null) {
             r.testId = testCase.id;
             r.category = testCase.category;
             r.expectedAnswer = testCase.expectedAnswer;
         }
 
-        r.answer = service.ask(question, export.json, focusInfo, s);
+        r.answer = service.ask(question, export.content, focusInfo, s);
         if (r.answer.success) {
             r.idCheck = IdChecker.check(r.answer.text, export.knownIds);
         }
