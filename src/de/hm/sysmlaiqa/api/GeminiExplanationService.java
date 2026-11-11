@@ -251,6 +251,8 @@ public class GeminiExplanationService implements ExplanationService {
                 res.modelVersion = a.answer.modelVersion;
                 res.cachedTokens = a.answer.cachedTokens;
                 res.thoughtsTokens = a.answer.thoughtsTokens;
+                res.toolTokens = a.answer.toolTokens;
+                res.totalTokens = a.answer.totalTokens;
                 res.thinkingUsed = thinking;
                 res.transfer = transfer;
                 res.rateLimitWaitSec = stats.waitedSec;
@@ -547,6 +549,11 @@ public class GeminiExplanationService implements ExplanationService {
             a.modelVersion = extractString(resp, "modelVersion");
             a.cachedTokens = extractInt(resp, "cachedContentTokenCount");
             a.thoughtsTokens = extractInt(resp, "thoughtsTokenCount");
+            a.toolTokens = extractInt(resp, "toolUsePromptTokenCount");
+            a.totalTokens = extractInt(resp, "totalTokenCount");
+            if (a.totalTokens < 0 && a.promptTokens >= 0) {   // falls Google die Summe nicht liefert: selbst addieren
+                a.totalTokens = a.promptTokens + Math.max(0, a.answerTokens) + Math.max(0, a.thoughtsTokens) + Math.max(0, a.toolTokens);
+            }
             log(model + " (" + a.modelVersion + ") answered in " + (System.currentTimeMillis() - t0) + " ms, Tokens in/out: "
                     + a.promptTokens + "/" + a.answerTokens + (a.cachedTokens > 0 ? ", from cache: " + a.cachedTokens : ""));
             result.answer = a;

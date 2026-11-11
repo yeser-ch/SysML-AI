@@ -562,6 +562,11 @@ public class ExplanationDialog extends JDialog {
         s.thinkingLevel = th == null || th.startsWith("Model") ? "default" : th.toLowerCase();
         s.scope = isFocusScope() ? "FOCUS_NEIGHBOURHOOD" : isSelectionScope() ? "SELECTION" : "FULL_MODEL";
         s.format = export != null ? export.format : currentFormat();
+        s.mentionFocus = currentFocusInfo() != null;
+        if (isFocusScope()) {
+            s.relationDepth = ((Number) relationDepthSpinner.getValue()).intValue();
+            s.siblingDepth = ((Number) siblingDepthSpinner.getValue()).intValue();
+        }
         return s;
     }
 
@@ -986,6 +991,7 @@ public class ExplanationDialog extends JDialog {
         if (models.isEmpty()) models.add(base.model);
         int pauseSec = ((Number) pauseSpinner.getValue()).intValue();
         prefs.putInt(SysmlAiQaPlugin.PAUSE_PREF, pauseSec);
+        base.pauseSec = pauseSec;
 
         int total = suite.cases.size() * models.size() * base.repetitions;
         if (total > 1) {
@@ -1128,6 +1134,7 @@ public class ExplanationDialog extends JDialog {
         if (a.promptTokens >= 0) meta.append(String.format(" · %,d → %,d tokens", a.promptTokens, a.answerTokens));
         if (a.cachedTokens > 0) meta.append(String.format(" (%,d from cache)", a.cachedTokens));
         if (a.thoughtsTokens > 0) meta.append(String.format(" · %,d thinking tokens", a.thoughtsTokens));
+        if (a.totalTokens > 0) meta.append(String.format(" · %,d total", a.totalTokens));
         if (a.rateLimitWaitSec > 0) meta.append(" · waited ").append(a.rateLimitWaitSec).append(" s");
         if (!a.modelUsed.equals(r.settings.model)) meta.append(" · <b>fallback model!</b>");
 

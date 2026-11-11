@@ -8,7 +8,7 @@ import java.util.List;
 /** Ein Datensatz = eine Antwort mit vollständigem Versuchsaufbau (eine Zeile im Log). */
 public class EvaluationRecord {
 
-    public static final String PLUGIN_VERSION = "3.3-ws2627";
+    public static final String PLUGIN_VERSION = "3.3.1-ws2627";
 
     public String runId = "chat";
     public String testId = "";
@@ -42,7 +42,10 @@ public class EvaluationRecord {
                 a == null || a.finishReason == null ? "" : a.finishReason,
                 String.valueOf(s.temperature), String.valueOf(s.maxOutputTokens),
                 s.thinkingLevel, a == null ? "" : a.thinkingUsed,
-                String.valueOf(s.grounding), String.valueOf(s.freshChat), String.valueOf(s.requireIds), s.scope,
+                String.valueOf(s.grounding), String.valueOf(s.freshChat), String.valueOf(s.requireIds),
+                String.valueOf(s.allowFallback), String.valueOf(s.cacheModel), String.valueOf(s.mentionFocus),
+                String.valueOf(s.repetitions), String.valueOf(s.pauseSec), s.scope,
+                s.relationDepth < 0 ? "" : String.valueOf(s.relationDepth), s.siblingDepth < 0 ? "" : String.valueOf(s.siblingDepth),
                 focusElement == null ? "" : focusElement, systemPromptSha, systemPromptSource,
                 export == null ? "" : export.format, export == null ? "" : export.scopeDetail,
                 export == null ? "" : export.file.getName(), export == null ? "" : export.sha,
@@ -50,12 +53,12 @@ public class EvaluationRecord {
                 export == null ? "" : String.valueOf(export.elementCount),
                 export == null ? "" : String.valueOf(export.relationCount),
                 export == null ? "" : String.valueOf(export.approxTokens()),
-                export == null || export.exactTokens < 0 ? "" : export.exactTokens + " (" + export.exactTokensModel + ")",
+                export == null || export.exactTokens < 0 ? "" : String.valueOf(export.exactTokens),
                 a == null ? "" : String.valueOf(a.previousTurns), a == null ? "" : a.userMessage,
                 a == null ? "" : a.transfer,
-                a == null ? "" : String.valueOf(a.promptTokens), a == null ? "" : String.valueOf(a.cachedTokens),
-                a == null ? "" : String.valueOf(a.answerTokens),
-                a == null ? "" : String.valueOf(a.thoughtsTokens),
+                a == null ? "" : n(a.promptTokens), a == null ? "" : n(a.cachedTokens),
+                a == null ? "" : n(a.answerTokens),
+                a == null ? "" : n(a.thoughtsTokens), a == null ? "" : n(a.toolTokens), a == null ? "" : n(a.totalTokens),
                 a == null ? "" : String.format("%.2f", a.durationMs / 1000.0),
                 a == null ? "" : String.valueOf(a.rateLimitWaitSec),
                 idCheck == null ? "" : String.valueOf(idCheck.cited.size()),
@@ -64,5 +67,10 @@ public class EvaluationRecord {
                 idCheck == null ? "" : String.join(" ", idCheck.unknown),
                 answerSha(), PLUGIN_VERSION
         );
+    }
+
+    /** Unbekannte Tokenzahlen (-1) bleiben leer, damit Summen in Excel stimmen. */
+    private static String n(int v) {
+        return v < 0 ? "" : String.valueOf(v);
     }
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin id="de.hm.sysmlaiqa.plugin"
         name="SysML AI Q&amp;A"
-        version="3.3"
+        version="3.3.1"
         provider-name="SE Projekt Team"
         class="de.hm.sysmlaiqa.core.SysmlAiQaPlugin">
     <runtime>

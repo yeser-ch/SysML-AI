@@ -159,6 +159,7 @@ Hinter **AI** steht in Grau, wie die Antwort zustande kam:
 | Tokens | `2,412 → 96 tokens` | Umfang der Eingabe (System-Prompt, Modell, Chat und Frage) → Länge der Antwort |
 | Cache | `(2,290 from cache)` | Teil der Eingabe, der aus dem hochgeladenen Modell kam |
 | Thinking | `312 thinking tokens` | Umfang des internen Nachdenkens |
+| Gesamt | `2,820 total` | insgesamt verbrauchte Tokens dieser Anfrage laut Google (Eingabe + Antwort + Denken + Suche) |
 | Wartezeit | `waited 20 s` | nur wenn Google wegen eines Limits warten ließ |
 | Warnung | **fallback model!** | nur wenn ein anderes Modell als das gewählte geantwortet hat |
 
@@ -279,12 +280,14 @@ Im Testlauf gilt immer: jede Frage in einem neuen Chat, kein Fallback-Modell. Be
 
 Die **.xlsx**-Dateien sind zum Lesen und Bewerten gedacht. Jede Zeile ist eine Antwort:
 
-- Vorne stehen die wichtigen Spalten: Testlauf, Testfall, Kategorie, Frage, Referenzantwort, Antwort, Bewertung, Modellversion, Erfolg, Dauer und erfundene IDs.
+- Vorne stehen die wichtigen Spalten: Testlauf, Testfall, Kategorie, Frage, Referenzantwort, Antwort, Bewertung, Modellversion, Erfolg, Dauer, **verbrauchte Tokens** (Eingabe, Antwort, Denken, gesamt) und erfundene IDs.
 - Die Kopfzeile bleibt beim Scrollen stehen, jede Spalte hat einen Filter (Pfeil in der Kopfzeile).
 - **rating** und **rating_notes** (gelb) sind für eure Bewertung. In *rating* gibt es eine Auswahlliste (*correct, partial, wrong, hallucinated, correctly_refused*), eigene Werte sind auch erlaubt.
 - Lange Antworten sind gekürzt sichtbar. Ganzer Text: Zelle anklicken und oben in der Bearbeitungsleiste lesen oder die Zeile größer ziehen. Markdown-Zeichen wie `**` sind entfernt, der Originaltext steht in der CSV.
 - Technische Spalten (Tokens, Prüfsummen, Einstellungen …) sind eingeklappt. Mit dem **+** über der Spalte *ids_unknown* klappt man sie auf.
 - Das zweite Blatt **Columns** erklärt jede Spalte.
+- Das dritte Blatt **Tokens** summiert Anfragen, Dauer und verbrauchte Tokens je antwortendem Modell und insgesamt.
+- In den eingeklappten Spalten steht **jede Einstellung** der Anfrage: Modell, Temperatur, Max tokens, Thinking, Grounding, New chat, Cite IDs, Fallback, Upload once, Mention selected element, Repetitions, Pause, Context, Depth, Format und System-Prompt.
 
 ![Ergebnisdatei in Excel](docs/images/results-02-excel.png)
 

@@ -60,6 +60,10 @@ public interface ExplanationService {
         public int cachedTokens = -1;
         /** Tokens, die das Modell intern zum "Nachdenken" verbraucht hat (-1 = unbekannt). Treiben die Antwortzeit. */
         public int thoughtsTokens = -1;
+        /** Insgesamt verbrauchte Tokens laut Google (totalTokenCount: Eingabe + Antwort + Denken + Suche). */
+        public int totalTokens = -1;
+        /** Tokens der Google-Suche bei Grounding (toolUsePromptTokenCount). */
+        public int toolTokens = -1;
         /** Tatsächlich verwendete Denktiefe ("default", wenn das Modell die Einstellung abgelehnt hat). */
         public String thinkingUsed = "default";
         /** Sekunden, die wegen Rate-Limits gewartet wurde. */

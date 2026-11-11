@@ -2,6 +2,13 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.3.1 – Tokens und alle Einstellungen im Log
+
+- Neue Spalten: `total_tokens` (insgesamt verbrauchte Tokens laut Google), `tool_tokens` (Google-Suche) sowie die bisher fehlenden Einstellungen `allow_fallback`, `upload_once`, `mention_focus`, `repetitions_set`, `pause_s`, `relation_depth`, `neighbour_depth`.
+- Excel: Token-Spalten (Eingabe, Antwort, Denken, gesamt) sind vorne sichtbar; neues Blatt **Tokens** mit Summen je Modell und insgesamt. Unbekannte Werte sind leer statt `-1`.
+- Im Chat steht hinter jeder Antwort zusätzlich die Gesamtzahl der Tokens.
+- Ein vorhandenes `answers_log.csv` mit den alten Spalten wird wieder zu `answers_log_old_<Datum>.csv` umbenannt (plus `.xlsx`).
+
 ## v3.3 – Umsetzung des Lastenhefts V0.1
 
 Zuordnung jeder Anforderung zur Umsetzung: [`docs/LASTENHEFT_ABDECKUNG.md`](docs/LASTENHEFT_ABDECKUNG.md).
