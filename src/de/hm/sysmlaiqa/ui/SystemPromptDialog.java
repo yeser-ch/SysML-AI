@@ -16,7 +16,7 @@ public class SystemPromptDialog extends JDialog {
 
     private final File baseDir;
     private final Runnable onChange;
-    private final JComboBox<String> formatBox = new JComboBox<>(new String[]{ExplanationDialog.FORMAT_V1_LABEL, ExplanationDialog.FORMAT_V2_LABEL});
+    private final JComboBox<String> formatBox = new JComboBox<>(new String[]{ExplanationDialog.FORMAT_V1_LABEL, ExplanationDialog.FORMAT_V2_LABEL, ExplanationDialog.FORMAT_NATIVE_LABEL});
     private final JTextArea area = new JTextArea();
     private final JLabel sourceLabel = new JLabel();
     private String shownFormat;
@@ -73,15 +73,15 @@ public class SystemPromptDialog extends JDialog {
         buttons.add(cancel);
         add(buttons, BorderLayout.SOUTH);
 
-        formatBox.setSelectedItem(ModelExport.FORMAT_V2.equals(format) ? ExplanationDialog.FORMAT_V2_LABEL : ExplanationDialog.FORMAT_V1_LABEL);
+        formatBox.setSelectedItem(ExplanationDialog.formatLabel(format));
         load(format);
         formatBox.addActionListener(e -> {
-            String f = ExplanationDialog.FORMAT_V2_LABEL.equals(formatBox.getSelectedItem()) ? ModelExport.FORMAT_V2 : ModelExport.FORMAT_V1;
+            String f = ExplanationDialog.formatId(formatBox.getSelectedItem());
             if (f.equals(shownFormat)) return;
             if (!area.getText().equals(loadedText)) {
                 int c = JOptionPane.showConfirmDialog(this, "Save your changes to the current prompt first?", getTitle(), JOptionPane.YES_NO_CANCEL_OPTION);
                 if (c == JOptionPane.CANCEL_OPTION || (c == JOptionPane.YES_OPTION && !save())) {
-                    formatBox.setSelectedItem(ModelExport.FORMAT_V2.equals(shownFormat) ? ExplanationDialog.FORMAT_V2_LABEL : ExplanationDialog.FORMAT_V1_LABEL);
+                    formatBox.setSelectedItem(ExplanationDialog.formatLabel(shownFormat));
                     return;
                 }
             }

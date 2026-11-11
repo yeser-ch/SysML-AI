@@ -41,8 +41,8 @@ Neu ab 3.3 bzw. 3.3.1 (Lastenheft FR11):
 | Spalte | Inhalt |
 |---|---|
 | `system_prompt_source` | `default` = Standardfassung, `custom` = im Fenster geändert, `installed` = Datei im Plugin-Ordner |
-| `export_format` | `sysml_v1_json` oder `sysml_v2_text` |
-| `scope` | `FULL_MODEL`, `SELECTION` (gewählte Pakete/Elemente) oder `FOCUS_NEIGHBOURHOOD` |
+| `export_format` | `sysml_v1_json` (SysML v1), `sysml_v2_text` (v1-Modell als SysML-v2-Text) oder `sysml_v2_native` (SysML-v2-Modell aus CATIA) |
+| `scope` | `FULL_MODEL`, `SELECTION` (gewählte Pakete/Elemente), `FOCUS_NEIGHBOURHOOD` oder `SYSML_V2_FILES` (SysML-v2-Dateien aus CATIA) |
 | `export_scope_detail` | gewählte Pakete/Elemente mit ID bzw. Element und Tiefe |
 | `export_tokens_est` / `export_tokens_exact` | Tokens der Modelldaten: geschätzt (Zeichen / 4) / exakt laut Google mit Modellname |
 | `previous_turns` | Frage/Antwort-Paare davor im selben Chat (0 = neuer Chat) |

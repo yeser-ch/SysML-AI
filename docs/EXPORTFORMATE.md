@@ -1,6 +1,6 @@
 # Exportformate und Aufbau einer Anfrage
 
-Dieses Dokument beschreibt, **was genau** das Plugin an die KI schickt (Lastenheft NFR6, FR3, NFR3): den Umfang des Exports, die beiden Formate (SysML v1 JSON und SysML v2 Text) und die Reihenfolge der Nachrichten. Die Struktur des Protokolls steht in [`evaluation/README.md`](../evaluation/README.md#3-ergebnisse).
+Dieses Dokument beschreibt, **was genau** das Plugin an die KI schickt (Lastenheft NFR6, FR3, NFR3): den Umfang des Exports, die drei Formate (SysML v1 JSON, SysML v2 umgewandelt aus v1, SysML-v2-Modell aus CATIA) und die Reihenfolge der Nachrichten. Die Struktur des Protokolls steht in [`evaluation/README.md`](../evaluation/README.md#3-ergebnisse).
 
 Im Plugin zeigt **Show request…** genau diese Teile für die nächste Frage an und speichert sie auf Wunsch als Dateien.
 
@@ -13,7 +13,7 @@ Jede Anfrage an Gemini besteht aus diesen Teilen, in dieser Reihenfolge:
 | Nr. | Teil | Inhalt | Im Fenster sichtbar über |
 | --- | --- | --- | --- |
 | 1 | System-Prompt | Anweisung an die KI, je Format eine eigene Fassung. `{idInstruction}` wird bei *Cite element IDs* ersetzt | **System prompt…**, Show request (Tab 1) |
-| 2 | Modelldaten | `# Model data (JSON export)` bzw. `# Model data (SysML v2 textual notation)`, darunter der Export | Show request (Tab 2) |
+| 2 | Modelldaten | `# Model data (JSON export)`, `# Model data (SysML v2 textual notation)` bzw. `# Model data (SysML v2 textual notation, exported from CATIA)`, darunter der Export | Show request (Tab 2) |
 | 3 | Bisheriger Chat | nur wenn *New chat per question* aus ist: frühere Fragen und Antworten | Show request (Tab 3) |
 | 4 | Frage | `# Question` und die Frage. Bei *Mention selected element* steht bei der ersten Frage eines Chats davor: `# Currently selected element` mit Name, Typ, ID und Besitzer | Show request (Tab Question) |
 | 5 | Parameter | Modell, Temperatur, maximale Antwortlänge, Denktiefe, Grounding | Show request (Tab Parameters) |
@@ -85,7 +85,7 @@ Exportiert werden nur SysML-v1-Elementtypen aus einer festen Liste (Blöcke, Por
 
 ---
 
-## 4. Format SysML v2: textuelle Notation (FR7)
+## 4. Format SysML v2, umgewandelt aus v1 (FR7)
 
 Das Plugin übersetzt **denselben** v1-Export in die textuelle Notation von SysML v2 (Klasse `SysmlV2Writer`). Es ist also kein natives SysML-v2-Modell, sondern das v1-Modell in v2-Schreibweise. Für die Auswertung ist das gewollt: Inhalt gleich, nur die Darstellung ändert sich. So lässt sich der Einfluss der Notation isoliert messen (Vergleich SysML v1/v2 in der Aufgabenstellung).
 
@@ -190,7 +190,33 @@ SysML v2 hat für verify, refine, derive und trace keine eigenen Kurzschreibweis
 
 ---
 
-## 5. Größe und Tokens (FR2)
+## 5. Format SysML v2: Modell aus CATIA
+
+Für **SysML-v2-Projekte** in CATIA (*Format: SysML v2 model (CATIA export)*). Das Plugin schickt genau den Text, den CATIA selbst exportiert:
+
+1. In CATIA: *File → Export To → SysML v2 Textual Notation* (im Plugin über **Export in CATIA…**), Namespaces und Ordner wählen, **Export**.
+2. Im Plugin: **Files…** → Ordner oder `.sysml`-Dateien wählen. **Resend model** liest dieselben Dateien neu.
+
+Warum nicht direkt aus dem Modell lesen? CATIA dokumentiert für SysML v2 keine Programmierschnittstelle zum Auslesen des Modells (Stand 2026x). Der Textexport von CATIA ist die offizielle, vollständige SysML-v2-Notation und wird unverändert übernommen.
+
+**Aufbau des gesendeten Texts:** Die Dateien werden alphabetisch zusammengefügt. Bei mehreren Dateien beginnt jede mit `// ===== File: <Name> =====`. Zeilenenden werden vereinheitlicht, sonst bleibt der Text unverändert. Die Zusammenfassung liegt unter `exports\export_sysml2_<Zeit>.sysml` und im Archiv unter `archive\exports\<export_sha>.sysml`.
+
+**Kennzahlen:** Das Plugin liest den Text mit einem einfachen Leser (`SysmlV2Reader`, kein vollständiger SysML-v2-Parser):
+
+| Angabe | Bedeutung |
+| --- | --- |
+| *declarations* | benannte Definitionen und Usages (`part def`, `part`, `attribute`, `port`, `requirement`, `action`, `state`, …) |
+| *relations* | satisfy, verify, allocate, connect, bind, flow, succession/then, transition, dependency, Spezialisierung (`:>`) |
+| ID-Check | Die KI nennt qualifizierte Namen (`[id:RobotSystem::Battery]`); bekannt sind alle qualifizierten Namen und ihre Endstücke (`Battery`) |
+| Schnellfragen | aus den gefundenen Elementen und Beziehungen |
+
+*Context* und *Depth* gelten nur für SysML v1. Den Umfang eines SysML-v2-Modells legt man im Export-Dialog von CATIA über die Namespaces fest.
+
+Logspalten: `export_format = sysml_v2_native`, `scope = SYSML_V2_FILES`, `export_scope_detail` = Dateinamen mit Änderungszeit.
+
+---
+
+## 6. Größe und Tokens (FR2)
 
 Die Statuszeile zeigt nach jedem Export: Elemente, Beziehungen, Größe in KB, geschätzte Tokens (Zeichen / 4) und, sobald Google geantwortet hat, die **exakte** Tokenzahl der Modelldaten für das gewählte KI-Modell (Gemini `countTokens`, zählt nicht gegen das Anfrage-Kontingent). Ist das Eingabelimit des Modells kleiner, erscheint vor dem Senden eine rote Warnung (FR12).
 
@@ -198,12 +224,12 @@ Beide Werte stehen im Log: `export_tokens_est`, `export_tokens_exact`. Die tats�
 
 ---
 
-## 6. Wo die Dateien liegen
+## 7. Wo die Dateien liegen
 
 | Datei | Inhalt |
 | --- | --- |
 | `Dokumente\SysML-AI-QA\exports\export_*.json` / `.sysml` | aktuelle Exporte (werden beim Schließen von CATIA gelöscht) |
 | `Dokumente\SysML-AI-QA\archive\exports\<export_sha>.json` / `.sysml` | jeder verwendete Export, genau der übertragene Inhalt; Dateiname = Logspalte `export_sha` |
 | `Dokumente\SysML-AI-QA\archive\prompts\<system_prompt_sha>.md` | jeder verwendete System-Prompt im Wortlaut |
-| `Dokumente\SysML-AI-QA\prompts\System_Prompt.md`, `System_Prompt_v2.md` | eigene, im Fenster bearbeitete Fassungen des System-Prompts |
+| `Dokumente\SysML-AI-QA\prompts\System_Prompt.md`, `System_Prompt_v2.md`, `System_Prompt_v2_native.md` | eigene, im Fenster bearbeitete Fassungen des System-Prompts |
 | `<Plugin-Ordner>\prompts\System_Prompt.md`, `System_Prompt_v2.md` | installierte Standardfassungen |

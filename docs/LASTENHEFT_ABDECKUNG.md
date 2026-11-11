@@ -1,6 +1,6 @@
 # Abdeckung des Lastenhefts (V0.1 vom 03.11.2026)
 
-Zuordnung jeder Anforderung aus dem *Lastenheft für Plugin Schrödingers Block (SysML Verständnis)* (C. Zuccaro, S. Weeger) zur Umsetzung im Plugin ab **Version 3.3-ws2627**, mit Hinweis zur Prüfung. Grundlage für Traceability und Verifikation.
+Zuordnung jeder Anforderung aus dem *Lastenheft für Plugin Schrödingers Block (SysML Verständnis)* (C. Zuccaro, S. Weeger) zur Umsetzung im Plugin ab **Version 3.4-ws2627**, mit Hinweis zur Prüfung. Grundlage für Traceability und Verifikation.
 
 Status: ✅ erfüllt · 🟡 teilweise / mit Einschränkung · ⬜ offen
 
@@ -17,7 +17,7 @@ Status: ✅ erfüllt · 🟡 teilweise / mit Einschränkung · ⬜ offen
 | FR4 | Wahl zwischen mehreren LLMs, keine automatische Auswahl | 🟡 | Freie Wahl aller Gemini-Modelle des API-Keys (**Refresh**), Modell-ID frei eintippbar. *Fallback model* standardmäßig aus und im Testlauf immer aus; Abweichungen stehen im Log (`model_used`, `model_version`). **Nur Google Gemini**, andere Anbieter (z. B. lokale Modelle) sind nicht angebunden | Log: `model_requested` = `model_used` bei ausgeschaltetem Fallback |
 | FR5 | Temperatur und Thinking einstellbar und pro Anfrage dokumentiert | ✅ | *Temperature*, *Thinking*, *Max tokens*; Log `temperature`, `thinking_level`, `thinking_used`, `thoughts_tokens` | Werte ändern, Logzeile prüfen |
 | FR6 | Export SysML v1 wie bisher | ✅ | *Format: SysML v1 (JSON export)* | – |
-| FR7 | Export der textuellen Notation von SysML v2 | 🟡 | *Format: SysML v2 (textual notation)*: dasselbe v1-Modell in v2-Schreibweise (`SysmlV2Writer`), eigener System-Prompt. Kein natives v2-Modell; nicht gegen einen v2-Parser validiert (siehe [`EXPORTFORMATE.md`](EXPORTFORMATE.md#4-format-sysml-v2-textuelle-notation-fr7)) | Show request, Tab 2; Log `export_format = sysml_v2_text` |
+| FR7 | Export der textuellen Notation von SysML v2 | ✅ | **SysML-v2-Projekte:** *Format: SysML v2 model (CATIA export)* schickt die `.sysml`-Dateien, die CATIA selbst exportiert (*File → Export To → SysML v2 Textual Notation*, im Plugin über **Export in CATIA…** und **Files…**). Eigener System-Prompt, ID-Check über qualifizierte Namen, Schnellfragen aus dem Text. Zusätzlich für v1-Projekte *SysML v2 (converted from v1)* (gleiches Modell, andere Notation). Siehe [`EXPORTFORMATE.md`](EXPORTFORMATE.md#5-format-sysml-v2-modell-aus-catia) | Show request, Tab 2; Log `export_format = sysml_v2_native`, `scope = SYSML_V2_FILES`, Dateien mit Zeitstempel in `export_scope_detail` |
 | FR8 | Prompt in der GUI, nicht im Code | ✅ | Eingabefeld *Your question* | – |
 | FR8.1 | Prompt-Vorlagen (z. B. pro Fehlerkategorie) | ✅ | *Quick questions* nach Kategorie A Retrieval, B Structure, C Semantics, D Uncertainty, aus echten Modellelementen erzeugt; Testfälle aus CSV mit Kategorie | Schnellfrage anklicken → Vorlage im Eingabefeld |
 | FR9 | System-Prompt in der GUI sichtbar und änderbar, Nutzung immer dokumentieren | ✅ | **System prompt…** (je Format, *Reset to default*); gespeichert unter `Dokumente\SysML-AI-QA\prompts`. Jede Fassung im Wortlaut im Archiv, Log `system_prompt_sha`, `system_prompt_source` | Prompt ändern, Frage stellen → neue `system_prompt_sha`, `system_prompt_source = custom`, Datei in `archive/prompts` |
@@ -39,5 +39,5 @@ Status: ✅ erfüllt · 🟡 teilweise / mit Einschränkung · ⬜ offen
 ## Offene Punkte
 
 - **FR4:** Andere Anbieter als Gemini (z. B. lokale Modelle über eine OpenAI-kompatible Schnittstelle wie Ollama) würden echte Modellgrößen-Vergleiche erleichtern. Nicht umgesetzt; als Erweiterung möglich (`ExplanationService` ist dafür als Schnittstelle angelegt).
-- **FR7:** v2-Text mit einem SysML-v2-Parser prüfen und ggf. ein natives v2-Modell als Gegenprobe nutzen.
+- **FR7:** CATIA bietet für SysML v2 keine dokumentierte Programmierschnittstelle; das Plugin nutzt deshalb den Textexport von CATIA (ein Klick mehr als bei v1). *Context*/*Depth* gelten nur für v1; bei v2 wählt man den Umfang über die Namespaces im CATIA-Export. Ob *Ask AI about this element* in SysML-v2-Projekten erscheint, ist noch nicht in CATIA geprüft.
 - **Test in CATIA:** Die Änderungen wurden außerhalb von CATIA gegen nachgebildete CATIA-Schnittstellen kompiliert und mit einem simulierten Gemini-Server getestet. Ein Abnahmetest in CATIA (Prüfspalte oben) steht aus.

@@ -31,8 +31,8 @@ public class RequestDialog extends JDialog {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("1 System prompt", textTab(p.systemPrompt, "Source: " + p.systemPromptSource));
         tabs.addTab("2 Model data", textTab(p.modelMessage, String.format(
-                "%s · %d elements · %,.0f KB · ~%,d tokens%s · export %s · %s",
-                export.isV2() ? "SysML v2 textual notation" : "SysML v1 JSON export",
+                "%s · %d elements/declarations · %,.0f KB · ~%,d tokens%s · export %s · %s",
+                export.formatLabel(),
                 export.elementCount, export.sizeKb(), export.approxTokens(),
                 export.exactTokens >= 0 ? String.format(" (exact %,d for %s)", export.exactTokens, export.exactTokensModel) : "",
                 export.sha, export.scopeDetail)));

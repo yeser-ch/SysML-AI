@@ -53,10 +53,21 @@ public class PromptLoader {
                     + "Answer the user's questions about this model. Base your answers on the model data.\n"
                     + "{idInstruction}\n";
 
+    /** Standard für SysML-v2-Modelle aus CATIA – inhaltlich identisch zu resources/System_Prompt_v2_native.md. */
+    static final String DEFAULT_V2_NATIVE =
+            "You are an assistant for SysML v2 models created in CATIA Magic.\n"
+                    + "With the first user message you receive the model in SysML v2 textual notation, as exported by CATIA Magic. "
+                    + "If the model consists of several files, each file starts with a line \"// ===== File: <name> =====\".\n"
+                    + "Answer the user's questions about this model. Base your answers on the model data.\n"
+                    + "{idInstruction}\n";
+
     /** Wird angehängt (oder ersetzt {idInstruction}), wenn "Cite IDs" aktiv ist. */
     static final String ID_INSTRUCTION =
             "Whenever you mention a model element, add its id from the JSON directly after the name "
                     + "in the form [id:<id>], for example: Battery [id:_19_0_abc_123].";
+    static final String ID_INSTRUCTION_V2_NATIVE =
+            "Whenever you mention a model element, add its qualified name directly after the name "
+                    + "in the form [id:<qualified name>], for example: Battery [id:RobotSystem::Battery].";
     static final String ID_INSTRUCTION_V2 =
             "Whenever you mention a model element, add its id (the short name in angle brackets) directly after the name "
                     + "in the form [id:<id>], for example: Battery [id:_19_0_abc_123].";
@@ -89,6 +100,7 @@ public class PromptLoader {
     }
 
     public static String fileName(String format) {
+        if (ModelExport.FORMAT_V2_NATIVE.equals(format)) return "System_Prompt_v2_native.md";
         return ModelExport.FORMAT_V2.equals(format) ? "System_Prompt_v2.md" : "System_Prompt.md";
     }
 
@@ -102,6 +114,7 @@ public class PromptLoader {
     }
 
     public static String builtinDefault(String format) {
+        if (ModelExport.FORMAT_V2_NATIVE.equals(format)) return DEFAULT_V2_NATIVE;
         return ModelExport.FORMAT_V2.equals(format) ? DEFAULT_V2 : DEFAULT_V1;
     }
 
@@ -149,7 +162,8 @@ public class PromptLoader {
         String result = template.replace("\r\n", "\n")
                 .replaceAll("(?m)^[ \\t]*\\{answerStyle\\}[ \\t]*\\n?", "")
                 .replace("{answerStyle}", "");
-        String ids = requireIds ? (ModelExport.FORMAT_V2.equals(format) ? ID_INSTRUCTION_V2 : ID_INSTRUCTION) : "";
+        String ids = !requireIds ? "" : ModelExport.FORMAT_V2_NATIVE.equals(format) ? ID_INSTRUCTION_V2_NATIVE
+                : ModelExport.FORMAT_V2.equals(format) ? ID_INSTRUCTION_V2 : ID_INSTRUCTION;
         if (result.contains("{idInstruction}")) {
             result = result.replace("{idInstruction}", ids);
         } else if (requireIds) {
@@ -163,7 +177,8 @@ public class PromptLoader {
      * entweder direkt in der Anfrage (inline) oder im Gemini-Cache (einmal hochgeladen).
      */
     public static String buildModelMessage(String modelContent, String format) {
-        String head = ModelExport.FORMAT_V2.equals(format) ? "# Model data (SysML v2 textual notation)\n" : "# Model data (JSON export)\n";
+        String head = ModelExport.FORMAT_V2_NATIVE.equals(format) ? "# Model data (SysML v2 textual notation, exported from CATIA)\n"
+                : ModelExport.FORMAT_V2.equals(format) ? "# Model data (SysML v2 textual notation)\n" : "# Model data (JSON export)\n";
         return head + (modelContent != null ? modelContent : "No model data available.");
     }
 

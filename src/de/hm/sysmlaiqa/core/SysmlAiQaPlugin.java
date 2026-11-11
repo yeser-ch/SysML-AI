@@ -46,6 +46,7 @@ public class SysmlAiQaPlugin extends Plugin {
     public static final String CACHE_MODEL_PREF = "sysmlaiqa_cache_model";
     public static final String THINKING_PREF = "sysmlaiqa_thinking";
     public static final String FORMAT_PREF = "sysmlaiqa_export_format";
+    public static final String V2_FILES_PREF = "sysmlaiqa_v2_files";
     public static final String MENTION_FOCUS_PREF = "sysmlaiqa_mention_focus";
     public static final String RELATION_DEPTH_PREF = "sysmlaiqa_relation_depth";
     public static final String SIBLING_DEPTH_PREF = "sysmlaiqa_sibling_depth";

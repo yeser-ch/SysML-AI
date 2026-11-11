@@ -52,7 +52,8 @@ public class ExplanationDialog extends JDialog {
     private static final String SCOPE_SELECTION = "Selected packages / elements";
     private static final String SCOPE_FOCUS = "Selected element + surroundings";
     static final String FORMAT_V1_LABEL = "SysML v1 (JSON export)";
-    static final String FORMAT_V2_LABEL = "SysML v2 (textual notation)";
+    static final String FORMAT_V2_LABEL = "SysML v2 (converted from v1)";
+    static final String FORMAT_NATIVE_LABEL = "SysML v2 model (CATIA export)";
 
     private final Element focusElement;
     private final boolean elementMode;   // true = "Ask AI about this element" (nur Umgebung des Elements)
@@ -82,6 +83,8 @@ public class ExplanationDialog extends JDialog {
     private JSpinner siblingDepthSpinner;
     private JButton chooseBtn;
     private JPanel depthPanel;
+    private JPanel v2Panel;                    // nur bei "SysML v2 model (CATIA export)": Files… / Export in CATIA…
+    private Object lastFormat = FORMAT_V1_LABEL;
     private List<Element> selectedRoots = new ArrayList<>();
     private Object lastScope = SCOPE_FULL;     // Umfang des letzten erfolgreichen Exports
 
@@ -235,10 +238,12 @@ public class ExplanationDialog extends JDialog {
         addRow(p, c, 1, "Context:", scopeRow, "Temperature:", temperatureSpinner);
 
         // Zeile 2: Format + Kontexttiefe + Max Tokens
-        formatBox = new JComboBox<>(new String[]{FORMAT_V1_LABEL, FORMAT_V2_LABEL});
-        formatBox.setToolTipText("<html>How the model data is written for the AI.<br>"
-                + "SysML v1: the JSON export from CATIA. SysML v2: the same model converted to SysML v2 textual notation<br>"
-                + "(same content, different notation – see docs/EXPORTFORMATE.md). Each format has its own system prompt.</html>");
+        formatBox = new JComboBox<>(new String[]{FORMAT_V1_LABEL, FORMAT_V2_LABEL, FORMAT_NATIVE_LABEL});
+        formatBox.setToolTipText("<html>Which model is sent and how.<br>"
+                + "<b>SysML v1 (JSON export)</b>: a SysML v1 model, exported by the plugin.<br>"
+                + "<b>SysML v2 (converted from v1)</b>: the same SysML v1 model written in SysML v2 textual notation.<br>"
+                + "<b>SysML v2 model (CATIA export)</b>: a SysML v2 project – the .sysml files CATIA exports<br>"
+                + "(File → Export To → SysML v2 Textual Notation). Each format has its own system prompt.</html>");
         relationDepthSpinner = new JSpinner(new SpinnerNumberModel(DataExtractionService.DEFAULT_RELATION_DEPTH, 0, 10, 1));
         relationDepthSpinner.setToolTipText("How many relation steps from the selected element are followed (e.g. satisfy → block → its parts).");
         siblingDepthSpinner = new JSpinner(new SpinnerNumberModel(DataExtractionService.DEFAULT_SIBLING_DEPTH, 0, 5, 1));
@@ -248,9 +253,23 @@ public class ExplanationDialog extends JDialog {
         depthPanel.add(relationDepthSpinner);
         depthPanel.add(new JLabel("neighbours"));
         depthPanel.add(siblingDepthSpinner);
+        JButton v2FilesBtn = new JButton("Files…");
+        v2FilesBtn.setToolTipText("Choose the .sysml files (or the folder) that CATIA exported from your SysML v2 project.");
+        v2FilesBtn.addActionListener(e -> {
+            if (!busy) loadSysmlV2(true);
+        });
+        JButton v2ExportBtn = new JButton("Export in CATIA…");
+        v2ExportBtn.setToolTipText("Opens CATIA's own export: File → Export To → SysML v2 Textual Notation.");
+        v2ExportBtn.addActionListener(e -> openCatiaV2Export());
+        v2Panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        v2Panel.add(v2FilesBtn);
+        v2Panel.add(v2ExportBtn);
+        JPanel extra = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        extra.add(depthPanel);
+        extra.add(v2Panel);
         JPanel formatRow = new JPanel(new BorderLayout(8, 0));
         formatRow.add(formatBox, BorderLayout.WEST);
-        formatRow.add(depthPanel, BorderLayout.CENTER);
+        formatRow.add(extra, BorderLayout.CENTER);
 
         // Zeile 3: Optionen
         groundingBox = new JCheckBox("Grounding");
@@ -316,7 +335,8 @@ public class ExplanationDialog extends JDialog {
         // Feste Breite: ein langer Status soll die rechte Spalte nicht zusammendrücken (voller Text im Tooltip)
         exportStatusLabel.setPreferredSize(new Dimension(300, exportStatusLabel.getPreferredSize().height));
         JButton reexportBtn = new JButton("Resend model");
-        reexportBtn.setToolTipText("Exports the model again from CATIA (use after changes) and uploads it with the next question.");
+        reexportBtn.setToolTipText("<html>Exports the model again from CATIA (use after changes) and uploads it with the next question.<br>"
+                + "SysML v2 model: reads the .sysml files again – export them in CATIA first.</html>");
         reexportBtn.addActionListener(e -> {
             if (!busy) runExport();
         });
@@ -499,8 +519,8 @@ public class ExplanationDialog extends JDialog {
         fallbackBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.FALLBACK_PREF, false));
         requireIdsBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.REQUIRE_IDS_PREF, false));
         cacheModelBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.CACHE_MODEL_PREF, true));
-        formatBox.setSelectedItem(ModelExport.FORMAT_V2.equals(prefs.get(SysmlAiQaPlugin.FORMAT_PREF, ModelExport.FORMAT_V1))
-                ? FORMAT_V2_LABEL : FORMAT_V1_LABEL);
+        formatBox.setSelectedItem(formatLabel(prefs.get(SysmlAiQaPlugin.FORMAT_PREF, ModelExport.FORMAT_V1)));
+        lastFormat = formatBox.getSelectedItem();
         mentionFocusBox.setSelected(focusElement != null && prefs.getBoolean(SysmlAiQaPlugin.MENTION_FOCUS_PREF, true));
         relationDepthSpinner.setValue(clamp(prefs.getInt(SysmlAiQaPlugin.RELATION_DEPTH_PREF, DataExtractionService.DEFAULT_RELATION_DEPTH), 0, 10));
         siblingDepthSpinner.setValue(clamp(prefs.getInt(SysmlAiQaPlugin.SIBLING_DEPTH_PREF, DataExtractionService.DEFAULT_SIBLING_DEPTH), 0, 5));
@@ -560,7 +580,8 @@ public class ExplanationDialog extends JDialog {
         s.cacheModel = cacheModelBox.isSelected();
         String th = (String) thinkingBox.getSelectedItem();
         s.thinkingLevel = th == null || th.startsWith("Model") ? "default" : th.toLowerCase();
-        s.scope = isFocusScope() ? "FOCUS_NEIGHBOURHOOD" : isSelectionScope() ? "SELECTION" : "FULL_MODEL";
+        s.scope = export != null && export.isNative() ? "SYSML_V2_FILES"
+                : isFocusScope() ? "FOCUS_NEIGHBOURHOOD" : isSelectionScope() ? "SELECTION" : "FULL_MODEL";
         s.format = export != null ? export.format : currentFormat();
         s.mentionFocus = currentFocusInfo() != null;
         if (isFocusScope()) {
@@ -579,7 +600,146 @@ public class ExplanationDialog extends JDialog {
     }
 
     private String currentFormat() {
-        return FORMAT_V2_LABEL.equals(formatBox.getSelectedItem()) ? ModelExport.FORMAT_V2 : ModelExport.FORMAT_V1;
+        return formatId(formatBox.getSelectedItem());
+    }
+
+    static String formatId(Object label) {
+        if (FORMAT_NATIVE_LABEL.equals(label)) return ModelExport.FORMAT_V2_NATIVE;
+        return FORMAT_V2_LABEL.equals(label) ? ModelExport.FORMAT_V2 : ModelExport.FORMAT_V1;
+    }
+
+    static String formatLabel(String id) {
+        if (ModelExport.FORMAT_V2_NATIVE.equals(id)) return FORMAT_NATIVE_LABEL;
+        return ModelExport.FORMAT_V2.equals(id) ? FORMAT_V2_LABEL : FORMAT_V1_LABEL;
+    }
+
+    private boolean isNativeFormat() {
+        return FORMAT_NATIVE_LABEL.equals(formatBox.getSelectedItem());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SysML-v2-Modelle aus CATIA (FR7)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Liest die von CATIA exportierten .sysml-Dateien (File → Export To → SysML v2 Textual Notation).
+     * CATIA bietet dafür keine dokumentierte Programmierschnittstelle; der eigene Export von CATIA ist die
+     * verlässlichste Quelle für die offizielle SysML-v2-Textnotation.
+     * @param choose true: Dateiauswahl öffnen; false: zuletzt gewählte Dateien neu lesen (Resend model)
+     */
+    private void loadSysmlV2(boolean choose) {
+        List<File> files = new ArrayList<>();
+        for (String p : prefs.get(SysmlAiQaPlugin.V2_FILES_PREF, "").split("\\|")) {
+            if (!p.isBlank()) files.add(new File(p));
+        }
+        if (choose || files.isEmpty() || files.stream().noneMatch(File::exists)) {
+            JFileChooser ch = new JFileChooser(files.isEmpty() ? System.getProperty("user.home") : files.get(0).getParent());
+            ch.setDialogTitle("Choose the SysML v2 files exported by CATIA (or their folder)");
+            ch.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+            ch.setMultiSelectionEnabled(true);
+            ch.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("SysML v2 textual notation (*.sysml)", "sysml"));
+            if (ch.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+                if (export == null || !export.isNative()) {   // nichts gewählt: vorheriges Format wiederherstellen
+                    loading = true;
+                    formatBox.setSelectedItem(lastFormat == FORMAT_NATIVE_LABEL ? FORMAT_V1_LABEL : lastFormat);
+                    loading = false;
+                    saveSettings();
+                    updateControls();
+                    if (export == null && !isNativeFormat()) runExport();
+                }
+                return;
+            }
+            files = new ArrayList<>(java.util.Arrays.asList(ch.getSelectedFiles()));
+        }
+        final List<File> sysml = collectSysml(files);
+        if (sysml.isEmpty()) {
+            addMessage("System", "⚠ No .sysml files found. Export your SysML v2 project in CATIA first "
+                    + "(<b>Export in CATIA…</b> or File → Export To → SysML v2 Textual Notation), then choose the files or their folder.");
+            return;
+        }
+        StringBuilder remember = new StringBuilder();
+        for (File f : files) remember.append(remember.length() > 0 ? "|" : "").append(f.getAbsolutePath());
+        prefs.put(SysmlAiQaPlugin.V2_FILES_PREF, remember.toString());
+
+        busy = true;
+        updateControls();
+        exportStatusLabel.setText("Reading SysML v2 files …");
+        addMessage("System", "Reading " + sysml.size() + " SysML v2 file(s) exported by CATIA …");
+        new SwingWorker<ModelExport, Void>() {
+            @Override
+            protected ModelExport doInBackground() throws Exception {
+                return ModelExport.fromSysmlFiles(sysml, DataExtractionService.getExportDirectory());
+            }
+
+            @Override
+            protected void done() {
+                busy = false;
+                try {
+                    ModelExport ex = get();
+                    baseExport = null;
+                    lastFormat = FORMAT_NATIVE_LABEL;
+                    modelIndex = ex.index;
+                    refreshQuickQuestions();
+                    applyExport(ex, true);
+                    long oldest = sysml.stream().mapToLong(File::lastModified).min().orElse(System.currentTimeMillis());
+                    if (System.currentTimeMillis() - oldest > 60 * 60 * 1000L) {
+                        addMessage("System", "Note: the files are older than one hour. After changes in CATIA, export again and click <b>Resend model</b>.");
+                    }
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    exportStatusLabel.setText("Reading the SysML v2 files failed.");
+                    addMessage("System", "⚠ Could not read the SysML v2 files: " + escapeHtml(String.valueOf(cause.getMessage())));
+                }
+                updateControls();
+            }
+        }.execute();
+    }
+
+    /** Dateien und Ordner (rekursiv) zu einer Liste von .sysml-Dateien. */
+    private static List<File> collectSysml(List<File> in) {
+        List<File> out = new ArrayList<>();
+        for (File f : in) {
+            if (f.isDirectory()) {
+                File[] kids = f.listFiles();
+                if (kids != null) out.addAll(collectSysml(java.util.Arrays.asList(kids)));
+            } else if (f.isFile() && f.getName().toLowerCase().endsWith(".sysml")) {
+                out.add(f);
+            }
+        }
+        return out;
+    }
+
+    /** Öffnet den SysML-v2-Textexport von CATIA (Menü File → Export To → SysML v2 Textual Notation). */
+    private void openCatiaV2Export() {
+        JMenuItem item = null;
+        try {
+            JFrame main = Application.getInstance().getMainFrame();
+            if (main != null && main.getJMenuBar() != null) item = findMenuItem(main.getJMenuBar(), "SysML v2 Textual Notation", "Export");
+        } catch (Throwable ignored) { }
+        if (item != null && item.isEnabled()) {
+            addMessage("System", "CATIA's export opens. Choose the namespaces and a folder, click <b>Export</b>, "
+                    + "then click <b>Files…</b> here and select that folder.");
+            item.doClick();
+        } else {
+            addMessage("System", "Please export in CATIA: <b>File → Export To → SysML v2 Textual Notation</b> "
+                    + "(only available in SysML v2 projects), choose a folder, then click <b>Files…</b> here and select that folder.");
+        }
+    }
+
+    /** Sucht im Menü einen Eintrag mit dem Text, dessen Elternmenü "within" enthält. */
+    private static JMenuItem findMenuItem(MenuElement root, String text, String within) {
+        for (MenuElement me : root.getSubElements()) {
+            Component c = me.getComponent();
+            if (c instanceof JMenuItem && !(c instanceof JMenu)) {
+                JMenuItem mi = (JMenuItem) c;
+                Component parent = mi.getParent() instanceof JPopupMenu ? ((JPopupMenu) mi.getParent()).getInvoker() : null;
+                String pText = parent instanceof JMenu ? ((JMenu) parent).getText() : "";
+                if (mi.getText() != null && mi.getText().contains(text) && (pText == null || pText.contains(within) || within == null)) return mi;
+            }
+            JMenuItem found = findMenuItem(me, text, within);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     /**
@@ -679,6 +839,10 @@ public class ExplanationDialog extends JDialog {
     // ═══════════════════════════════════════════════════════════════════════
 
     private void runExport() {
+        if (isNativeFormat()) {          // SysML-v2-Modell: Dateien aus dem CATIA-Export neu lesen
+            loadSysmlV2(false);
+            return;
+        }
         final DataExtractionService.Scope scope = isFocusScope() ? DataExtractionService.Scope.FOCUS_NEIGHBOURHOOD
                 : isSelectionScope() && !selectedRoots.isEmpty() ? DataExtractionService.Scope.SELECTION
                 : DataExtractionService.Scope.FULL_MODEL;
@@ -718,12 +882,18 @@ public class ExplanationDialog extends JDialog {
                     ModelExport ex = get();
                     if (ex == null) {
                         exportStatusLabel.setText("Export failed – see CATIA log.");
-                        addMessage("System", "Error: model export failed (see CATIA log window).");
+                        addMessage("System", "Error: model export failed (see CATIA log window). If this is a <b>SysML v2 project</b>, "
+                                + "choose <b>Format: " + FORMAT_NATIVE_LABEL + "</b>.");
                     } else {
                         lastScope = scopeItem;
+                        lastFormat = formatBox.getSelectedItem();
                         modelIndex = ModelIndex.parse(ex.json);
                         refreshQuickQuestions();
                         applyExport(ex, true);
+                        if (ex.elementCount == 0) {
+                            addMessage("System", "⚠ The export contains no SysML v1 elements. If this is a <b>SysML v2 project</b>, "
+                                    + "choose <b>Format: " + FORMAT_NATIVE_LABEL + "</b> – the plugin then sends the SysML v2 text that CATIA exports.");
+                        }
                     }
                 } catch (Exception e) {
                     exportStatusLabel.setText("Export failed.");
@@ -737,8 +907,15 @@ public class ExplanationDialog extends JDialog {
 
     /** Format gewechselt: dasselbe Modell neu schreiben (ohne neuen Export aus CATIA). */
     private void switchFormat() {
+        if (isNativeFormat()) {          // SysML-v2-Modell aus CATIA: Dateien wählen bzw. neu lesen
+            loadSysmlV2(false);
+            return;
+        }
         final ModelExport base = baseExport;
-        if (base == null) return;
+        if (base == null) {              // vorher SysML-v2-Dateien: jetzt das Modell aus CATIA exportieren
+            runExport();
+            return;
+        }
         final String format = currentFormat();
         busy = true;
         updateControls();
@@ -752,6 +929,7 @@ public class ExplanationDialog extends JDialog {
             protected void done() {
                 busy = false;
                 try {
+                    lastFormat = formatBox.getSelectedItem();
                     applyExport(get(), false);
                 } catch (Exception e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
@@ -770,6 +948,7 @@ public class ExplanationDialog extends JDialog {
         updateExportStatus();
         addMessage("System", escapeHtml(exportStatusText()) + "<br>"
                 + (newExport ? "" : "Format changed – same model, now as " + (ex.isV2() ? "SysML v2 textual notation" : "SysML v1 JSON") + ".<br>")
+                + (ex.isNative() ? escapeHtml(ex.scopeDetail) + "<br>" : "")
                 + (cacheModelBox.isSelected()
                 ? "The model will be uploaded once with your first question; after that only questions are sent."
                 : "The model is sent with each question.")
@@ -780,8 +959,8 @@ public class ExplanationDialog extends JDialog {
     private String exportStatusText() {
         ModelExport ex = export;
         if (ex == null) return "";
-        StringBuilder sb = new StringBuilder(String.format("Model ready (%s): %d elements · %d relations · %.0f KB · ~%,d tokens",
-                ex.isV2() ? "SysML v2" : "SysML v1", ex.elementCount, ex.relationCount, ex.sizeKb(), ex.approxTokens()));
+        StringBuilder sb = new StringBuilder(String.format("Model ready (%s): %d %s · %d relations · %.0f KB · ~%,d tokens",
+                ex.formatLabel(), ex.elementCount, ex.isNative() ? "declarations" : "elements", ex.relationCount, ex.sizeKb(), ex.approxTokens()));
         if (ex.exactTokens >= 0) sb.append(String.format(" (exact %,d for %s)", ex.exactTokens, ex.exactTokensModel));
         sb.append(" · export ").append(ex.sha);
         return sb.toString();
@@ -970,7 +1149,7 @@ public class ExplanationDialog extends JDialog {
         c.gridx = 1;
         form.add(pauseSpinner, c);
         c.gridx = 0; c.gridy = 3; c.gridwidth = 2;
-        form.add(new JLabel("<html>Uses the current settings (format: " + (export.isV2() ? "SysML v2" : "SysML v1")
+        form.add(new JLabel("<html>Uses the current settings (format: " + export.formatLabel()
                 + ", context, temperature, thinking, max tokens, grounding, ID check).<br>"
                 + "Repetitions per question: <b>" + base.repetitions + "</b> · every question in a new chat.<br>"
                 + (base.cacheModel
@@ -1171,14 +1350,20 @@ public class ExplanationDialog extends JDialog {
             sendBtn.setToolTipText(null);
         }
         if (formatBox != null) formatBox.setEnabled(!busy);
+        boolean nativeV2 = formatBox != null && isNativeFormat();
+        if (scopeBox != null) scopeBox.setEnabled(!busy && !nativeV2);
+        if (v2Panel != null) {
+            v2Panel.setVisible(nativeV2);
+            for (Component comp : v2Panel.getComponents()) comp.setEnabled(!busy);
+        }
         if (chooseBtn != null) {
             chooseBtn.setEnabled(!busy);
-            chooseBtn.setVisible(isSelectionScope());
+            chooseBtn.setVisible(isSelectionScope() && !nativeV2);
         }
         if (depthPanel != null) {
             boolean focus = isFocusScope();
             for (Component comp : depthPanel.getComponents()) comp.setEnabled(focus && !busy);
-            depthPanel.setVisible(focus);
+            depthPanel.setVisible(focus && !nativeV2);
         }
         if (suiteRunning) {
             suiteBtn.setText(cancelRequested ? "Stopping…" : "Stop test run");
@@ -1187,7 +1372,7 @@ public class ExplanationDialog extends JDialog {
             suiteBtn.setText("Run test suite…");
             suiteBtn.setEnabled(!busy && export != null);
         }
-        scopeBox.setEnabled(!busy);
+        scopeBox.setEnabled(!busy && !nativeV2);
     }
 
     private void insertQuickQuestion(String template) {
