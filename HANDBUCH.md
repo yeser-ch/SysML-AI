@@ -18,7 +18,8 @@ Dieses Handbuch erklärt das Plugin-Fenster nach der Installation: wo jede Einst
 10. [Testlauf mit vielen Fragen](#10-testlauf-mit-vielen-fragen)
 11. [Ergebnisse finden und bewerten](#11-ergebnisse-finden-und-bewerten)
 12. [Empfohlene Einstellungen für Messungen](#12-empfohlene-einstellungen-für-messungen)
-13. [Häufige Fragen](#13-häufige-fragen)
+13. [KI-Modelle, Kosten und Größenlimit](#13-ki-modelle-kosten-und-größenlimit)
+14. [Häufige Fragen](#14-häufige-fragen)
 
 ---
 
@@ -194,7 +195,7 @@ Hinter **AI** steht in Grau, wie die Antwort zustande kam:
 
 Bei eingeschaltetem **Cite element IDs** folgt unter der Antwort der ID-Check, z. B. *6 IDs cited, all found in model* (grün) oder *2 of 5 IDs NOT in model: …* (rot = erfundene Elemente).
 
-Kommt keine Antwort, steht statt der Antwort eine Meldung mit Grund und Abhilfe, z. B. *Model data too large for …* oder *Empty answer from …* (siehe [Häufige Fragen](#13-häufige-fragen)).
+Kommt keine Antwort, steht statt der Antwort eine Meldung mit Grund und Abhilfe, z. B. *Model data too large for …* oder *Empty answer from …* (siehe [Häufige Fragen](#14-häufige-fragen)).
 
 Jede Antwort wird automatisch mit allen Einstellungen protokolliert (siehe [Abschnitt 11](#11-ergebnisse-finden-und-bewerten)).
 
@@ -353,7 +354,31 @@ Grundregel: Pro Experiment genau **eine** Größe ändern, z. B. nur das KI-Mode
 
 ---
 
-## 13. Häufige Fragen
+## 13. KI-Modelle, Kosten und Größenlimit
+
+**Kosten:** Das Plugin nutzt einen eigenen Gemini-API-Key. Solange für das Google-Projekt des Keys **keine Abrechnung (Billing)** aktiviert ist, läuft er im Free Tier und kostet nichts, egal wie viele Fragen gestellt werden. Ist ein Limit erreicht, lehnt Google Anfragen ab (HTTP 429); es wird nichts berechnet. Prüfen in [Google AI Studio](https://aistudio.google.com) unter API Keys bzw. Billing. Hinweis: Im Free Tier darf Google die gesendeten Daten zur Verbesserung seiner Produkte nutzen; für vertrauliche Firmenmodelle ist das ungeeignet.
+
+**Gemini-Pro-Abo (Google AI Pro):** gilt nur für die Gemini-App und die Weboberfläche von AI Studio, **nicht für API-Keys** und damit nicht für das Plugin. Laut Google wird die API-Nutzung getrennt abgerechnet ([Google AI plans](https://ai.google.dev/gemini-api/docs/google-ai-plans)).
+
+**Welche Modelle?** Im Free Tier für Text verfügbar (Stand November 2026, [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)):
+
+| Modell | Größe | *Upload model once* im Free Tier | Empfehlung |
+| --- | --- | --- | --- |
+| `gemini-3.8-flash` | groß (Flash), neueste Generation | ja | **Hauptmodell** für alle Messungen |
+| `gemini-3.6-flash` | groß (Flash), Vorgänger | ja | optional: Einfluss der Modellgeneration |
+| `gemini-3.5-flash-lite` | klein (Flash-Lite) | nein | **Vergleich der Modellgröße** gegen `gemini-3.8-flash` |
+| `gemini-3.1-flash-lite` | klein (Flash-Lite), älter | nein | optional |
+
+- Die Pro-Modelle sind nicht im Free Tier über die API nutzbar. Das ist eine Einschränkung für den Vergleich der Modellgröße und gehört in die Methodik.
+- Bei Flash-Lite geht das ganze Modell mit **jeder** Frage mit (kein Upload möglich); große Exporte verbrauchen dann schnell die Limits.
+- Ausgewertet wird nach `model_version` (tatsächlich antwortendes Modell), nicht nach dem gewählten Namen. *Fallback model* aus lassen.
+- Welche Modelle der eigene Key nutzen darf, zeigt **Refresh**; die aktuellen Limits stehen in AI Studio unter *Rate limits*. Google ändert beides öfter.
+
+**Größenlimit:** Alle diese Modelle lesen höchstens etwa **1.048.576 Tokens** auf einmal. Das gilt für Free Tier, bezahlte API und Gemini-App gleich; ein Abo ändert daran nichts. Ist das Modell größer (die Statuszeile wird rot), hilft nur ein kleinerer Umfang: *Selected packages / elements*, *Selected element + surroundings* mit passender *Depth*, oder bei SysML v2 weniger Namespaces im CATIA-Export. Für die Evaluation eignet sich ein kleines, gezielt aufgebautes Testmodell besser; ein großes Modell kann man in Teilen schicken, um den Einfluss der Modellgröße zu messen.
+
+---
+
+## 14. Häufige Fragen
 
 **Die Antwort bezieht sich auf einen alten Stand des Modells.**
 Nach Änderungen in CATIA **Resend model** klicken. Das Fenster arbeitet mit dem Export vom Öffnen.
@@ -382,8 +407,14 @@ Keine Internetverbindung, oder das Netz (Firma, Hochschule, VPN) blockiert `gene
 **„The export contains no SysML v1 elements“.**
 Das Projekt ist vermutlich ein SysML-v2-Projekt. *Format* auf *SysML v2 model (CATIA export)* stellen (siehe [Abschnitt 4](#4-umfang-und-format-wählen)).
 
+**Warum kann ich ein SysML-v2-Modell nicht einfach öffnen und „Ask AI“ klicken?**
+Der Export des Plugins liest das Modell über die SysML-v1-Schnittstelle von CATIA und erkennt SysML-v2-Elemente nicht. Für SysML v2 dokumentiert CATIA keine Programmierschnittstelle, nur den Export über das Menü. Deshalb der Weg über *Export in CATIA…* und *Files…*. Ausführlich: [`docs/EXPORTFORMATE.md`](docs/EXPORTFORMATE.md#5-format-sysml-v2-modell-aus-catia).
+
 **Bei SysML v2 kommt „Export in CATIA…“ nur mit einem Hinweis.**
 Das Plugin hat den Menüpunkt von CATIA nicht gefunden (z. B. weil das Projekt kein SysML-v2-Projekt ist oder das SysML-v2-Plugin fehlt). Dann in CATIA selbst *File → Export To → SysML v2 Textual Notation* wählen.
+
+**Ich habe ein Gemini-Pro-Abo – nutzt das Plugin das?**
+Nein. Das Abo gilt nicht für API-Keys. Siehe [Abschnitt 13](#13-ki-modelle-kosten-und-größenlimit).
 
 **Wo kann ich sehen, was das Plugin im Hintergrund macht?**
 In CATIA unter **Window → Notification Window**. Alle Meldungen beginnen mit `[SysML AI Q&A]`.

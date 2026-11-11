@@ -51,6 +51,26 @@ Beziehungen zu Elementen außerhalb des Umfangs bleiben als ID erhalten. Die KI 
 
 Erzeugt von den Velocity-Templates `sysml_flat_export.vm` (ganzes Modell, Auswahl) und `sysml_partial_export.vm` (Umgebung eines Elements) im Plugin-Ordner `data_extraction`.
 
+### So läuft der Export ab
+
+1. **Start:** Die Klasse `DataExtractionService` startet die in CATIA eingebaute Velocity-Template-Engine (dieselbe wie im Report Wizard) mit dem geöffneten Projekt und einer der beiden Vorlagen. Die Vorlage liest das Modell über die SysML-v1/UML-Schnittstelle von CATIA und schreibt Text.
+2. **Ganzes Modell bzw. Auswahl** (`sysml_flat_export.vm`):
+   - Startpunkt: alle obersten Elemente des Primärmodells (*Whole model*) bzw. die gewählten Pakete/Elemente (*Selected packages / elements*; verschachtelte Auswahl wird vorher bereinigt).
+   - Rekursiver Durchlauf durch alles, was ein Element enthält (`ownedElement`).
+   - Filter 1 – Bibliotheken: Elemente, deren qualifizierter Name mit `SysML`, `UML`, `StandardProfile`, `PrimitiveTypes`, `Cameo`, `MD Customization`, `Simulation Profile`, `Metric Suite` oder `Requirement Profile` beginnt, werden übersprungen.
+   - Filter 2 – nur bekannte SysML-v1-Typen (Liste siehe unten); Diagramme, Tabellen und Kommentare fehlen absichtlich.
+   - Pro Element ein JSON-Objekt mit den Feldern aus der Tabelle unten. Ausgehende Abhängigkeiten (`clientDependency`: Satisfy, Verify, Refine, DeriveReqt, Allocate, Trace …) stehen mit Typ, Stereotyp und Ziel-ID in `outgoing_relations`.
+3. **Element mit Umgebung** (`sysml_partial_export.vm`), ausgehend vom gewählten Element:
+   - nach oben: die Besitzer-Hierarchie,
+   - nach unten: die eigenen Kind-Elemente,
+   - über Beziehungen in beide Richtungen (aus- und eingehende Abhängigkeiten, Assoziationen, Generalisierungen/Spezialisierungen, Attribute, Ports) bis zur Tiefe *Depth: relations* (Standard 5),
+   - zur Seite: Nachbarelemente über die Besitzer bis *Depth: neighbours* (Standard 3).
+   - Jedes Element erhält zusätzlich `partial_source` und `partial_depth` (über welchen Weg, in welcher Tiefe gefunden).
+4. **Ausgabe:** `Dokumente\SysML-AI-QA\exports\export_<full|selection|focus>_<Zeit>.json` (wird beim Schließen von CATIA gelöscht).
+5. **Weiterverarbeitung im Plugin** (`ModelExport`): Elemente und Beziehungen zählen, alle IDs für den ID-Check sammeln, Prüfsumme bilden (`export_sha`), je nach Format in SysML-v2-Text umwandeln (Abschnitt 4), exakte Tokens bei Google zählen. Beim ersten Senden wird der übertragene Inhalt im Archiv gespeichert.
+
+**Wann exportiert wird:** beim Öffnen des Fensters, bei Änderung von *Context* oder *Depth* und bei **Resend model**. Änderungen in CATIA erkennt das Plugin nicht von selbst.
+
 ```json
 {
   "global_context": { "project_name": "Robot Demo", "export_info": "SysML Flat Graph Export for AI (v7.4 …)" },
@@ -197,7 +217,12 @@ Für **SysML-v2-Projekte** in CATIA (*Format: SysML v2 model (CATIA export)*). D
 1. In CATIA: *File → Export To → SysML v2 Textual Notation* (im Plugin über **Export in CATIA…**), Namespaces und Ordner wählen, **Export**.
 2. Im Plugin: **Files…** → Ordner oder `.sysml`-Dateien wählen. **Resend model** liest dieselben Dateien neu.
 
-Warum nicht direkt aus dem Modell lesen? CATIA dokumentiert für SysML v2 keine Programmierschnittstelle zum Auslesen des Modells (Stand 2026x). Der Textexport von CATIA ist die offizielle, vollständige SysML-v2-Notation und wird unverändert übernommen.
+**Warum kann man ein SysML-v2-Projekt nicht direkt mit „Ask AI“ schicken?**
+
+- Der Plugin-Export (Abschnitt 3) liest das Modell über die SysML-v1/UML-Schnittstelle von CATIA: Blöcke, Part Properties, Stereotypen wie «Block» oder «Requirement», Abhängigkeiten. SysML-v2-Modelle sind in CATIA anders aufgebaut (`part def`, Usages, Features, Spezialisierung statt Stereotypen). Diese Elemente erkennt die v1-Vorlage nicht; der Export bleibt leer, und das Plugin weist auf dieses Format hin.
+- CATIA dokumentiert für SysML v2 keine Programmierschnittstelle, weder zum Auslesen des Modells noch zum Aufruf des Textexports (Stand 2026x). Dokumentiert ist nur der Export über das Menü.
+- Der Textexport von CATIA ist die offizielle, vollständige SysML-v2-Notation und wird unverändert übernommen. Der Preis ist ein Schritt mehr (*Export in CATIA…*, *Files…*).
+- Möglicher Ausbau: eine interne, undokumentierte Exportfunktion des SysML-v2-Plugins direkt aufrufen. Das könnte mit jedem CATIA-Update brechen und ist deshalb nicht umgesetzt.
 
 **Aufbau des gesendeten Texts:** Die Dateien werden alphabetisch zusammengefügt. Bei mehreren Dateien beginnt jede mit `// ===== File: <Name> =====`. Zeilenenden werden vereinheitlicht, sonst bleibt der Text unverändert. Die Zusammenfassung liegt unter `exports\export_sysml2_<Zeit>.sysml` und im Archiv unter `archive\exports\<export_sha>.sysml`.
 
