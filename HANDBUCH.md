@@ -1,6 +1,6 @@
 # SysML AI Q&A – Benutzerhandbuch
 
-Dieses Handbuch erklärt das Plugin-Fenster nach der Installation: wo jede Einstellung ist, was sie bewirkt und welche Werte für Messungen sinnvoll sind. Stand: **Version 3.3**. Installiert und aktualisiert wird nach [`INSTALL.md`](INSTALL.md).
+Dieses Handbuch erklärt das Plugin-Fenster nach der Installation: wo jede Einstellung ist, was sie bewirkt und welche Werte für Messungen sinnvoll sind. Stand: **Version 3.4**. Installiert und aktualisiert wird nach [`INSTALL.md`](INSTALL.md).
 
 > **Zu den Bildern:** Das erste Bild ist ein echter Screenshot aus CATIA. Die übrigen zeigen das echte Plugin-Fenster mit einem kleinen Demo-Modell (Roboter mit Batterie, Antrieb, Chassis, drei Anforderungen und einem Testfall) und Beispielantworten. In CATIA sieht das Fenster je nach Windows-Design etwas anders aus. Aufbau und Beschriftungen sind gleich.
 
@@ -74,7 +74,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 4 | **Context** | Welcher Teil des Modells an die KI geht: *Whole model*, *Selected packages / elements* oder *Selected element + surroundings*. Ein Wechsel startet einen neuen Export. Details in [Abschnitt 4](#4-umfang-und-format-wählen) | je nach Menüpunkt |
 | 5 | **Choose…** | Nur bei *Selected packages / elements*: Pakete oder Elemente im Modellbaum auswählen | – |
 | 6 | **Temperature** | Zufälligkeit der Antwort, 0 bis 2. *0* = möglichst gleiche Antworten bei gleicher Frage (empfohlen für Messungen), höher = abwechslungsreicher | 0 |
-| 7 | **Format** | *SysML v1 (JSON export)*: der Export aus CATIA. *SysML v2 (textual notation)*: dasselbe Modell in SysML-v2-Schreibweise. Jedes Format hat einen eigenen System-Prompt | SysML v1 |
+| 7 | **Format** | Welches Modell in welcher Form gesendet wird: *SysML v1 (JSON export)* für SysML-v1-Modelle, *SysML v2 (converted from v1)* für dasselbe v1-Modell in SysML-v2-Schreibweise, *SysML v2 model (CATIA export)* für **SysML-v2-Projekte** (siehe [Abschnitt 4](#4-umfang-und-format-wählen)). Jedes Format hat einen eigenen System-Prompt | SysML v1 |
 | 8 | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10) und über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Nach einer Änderung exportiert das Plugin kurz darauf neu | 5 / 3 |
 | 9 | **Max tokens** | Maximale Länge der Antwort, inklusive internem Nachdenken. Wird eine Antwort abgeschnitten, steht ein Hinweis darunter: dann erhöhen | 8.192 |
 | 10 | **Upload model once** | An: System-Prompt und Modell werden mit der ersten Frage einmal bei Google hochgeladen (60 Minuten gültig), danach geht nur noch die Frage raus. Das spart Übertragung und Zeit; der Inhalt der Anfrage bleibt gleich. Nicht jedes Modell erlaubt das im Free Tier (z. B. Flash-Lite), dann wird das Modell automatisch mit jeder Frage geschickt | an |
@@ -123,7 +123,36 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 
 Beziehungen zu Elementen außerhalb der Auswahl bleiben als ID erhalten. Die KI sieht dann, dass es eine Beziehung gibt, aber nicht, wohin sie führt.
 
-**Format:** *SysML v1 (JSON export)* schickt den Export aus CATIA. *SysML v2 (textual notation)* schickt dasselbe Modell in SysML-v2-Schreibweise, z. B. `part def <_bat> Battery { attribute capacity : Wh = 480; }`. Der Inhalt ist gleich, nur die Darstellung ändert sich. So lässt sich vergleichen, ob die KI eine Notation besser versteht. Ein Wechsel schreibt das Modell sofort neu, ohne neuen Export aus CATIA.
+**Format** – SysML v1 oder SysML v2:
+
+In CATIA kann man SysML-v1- und SysML-v2-Modelle anlegen. Das Plugin kann beide schicken:
+
+| Format | Für | Was gesendet wird |
+| --- | --- | --- |
+| **SysML v1 (JSON export)** | SysML-v1-Projekte | der Export des Plugins (JSON), Umfang über *Context* |
+| **SysML v2 (converted from v1)** | SysML-v1-Projekte | dasselbe v1-Modell in SysML-v2-Schreibweise, z. B. `part def <_bat> Battery { … }`. Gleicher Inhalt, andere Notation |
+| **SysML v2 model (CATIA export)** | **SysML-v2-Projekte** | genau der SysML-v2-Text, den CATIA selbst exportiert (`.sysml`-Dateien) |
+
+**Ein SysML-v2-Modell schicken:**
+
+1. In CATIA das SysML-v2-Projekt öffnen und das Plugin über **Ask AI → Ask AI about the model…** öffnen.
+2. **Format** auf **SysML v2 model (CATIA export)** stellen.
+3. **Export in CATIA…** (B) klicken. Es öffnet sich der Export von CATIA (*File → Export To → SysML v2 Textual Notation*). Dort die Namespaces wählen, einen Ordner angeben und **Export** klicken.
+4. Im Plugin **Files…** (A) klicken und den Ordner oder die `.sysml`-Dateien wählen. Mehrere Dateien werden zu einem Text zusammengefasst, jede beginnt mit `// ===== File: … =====`.
+5. Die Statuszeile zeigt **Model ready (SysML v2 from CATIA)** mit Deklarationen, Beziehungen und Tokens. Jetzt Fragen stellen wie gewohnt.
+
+![Format SysML v2 model (CATIA export) mit Files… (A) und Export in CATIA… (B)](docs/images/format-sysml2.png)
+
+Gut zu wissen:
+
+- Das Plugin merkt sich die gewählten Dateien. **Nach Änderungen am Modell** in CATIA erneut exportieren (gleicher Ordner) und **Resend model** klicken – das Plugin liest die Dateien dann neu. Sind die Dateien älter als eine Stunde, weist das Plugin darauf hin.
+- **Context** und **Depth** gelten nur für SysML-v1-Modelle und sind bei SysML v2 ausgegraut. Den Umfang wählt man bei SysML v2 im Export-Dialog von CATIA über die **Namespaces**.
+- **Cite element IDs** funktioniert auch bei SysML v2: Die KI nennt dann den qualifizierten Namen, z. B. `[id:RobotSystem::Battery]`, und das Plugin prüft, ob es ihn im Modell gibt.
+- Die Schnellfragen werden aus den Namen im SysML-v2-Text erzeugt.
+- Öffnet man das Plugin in einem SysML-v2-Projekt mit Format *SysML v1*, findet der Export keine SysML-v1-Elemente. Das Plugin weist dann auf das Format *SysML v2 model (CATIA export)* hin.
+- Warum über den Export von CATIA? CATIA hat für SysML v2 keine dokumentierte Programmierschnittstelle zum Auslesen. Der eigene Export von CATIA liefert die offizielle SysML-v2-Notation unverändert.
+
+![Das Fenster mit einem SysML-v2-Modell aus CATIA](docs/images/window-sysml2.png)
 
 Alle Regeln zu Umfang und Formaten: [`docs/EXPORTFORMATE.md`](docs/EXPORTFORMATE.md).
 
@@ -314,7 +343,7 @@ Tipps:
 | Cite element IDs | innerhalb eines Experiments fest | ändert den System-Prompt |
 | Repetitions | mehr als 1 (Anzahl im Team festlegen) | macht Schwankungen sichtbar |
 | Context | *Whole model* | alle Fragen bekommen dieselbe Grundlage |
-| Format | innerhalb eines Experiments fest | v1 gegen v2 ist eine eigene Versuchsfrage |
+| Format | innerhalb eines Experiments fest | v1 gegen v2 ist eine eigene Versuchsfrage. Für einen fairen Vergleich dasselbe System einmal als v1- und einmal als v2-Modell |
 | System-Prompt | innerhalb eines Experiments fest | jede Änderung ergibt eine neue `system_prompt_sha` |
 | Mention selected element | innerhalb eines Experiments fest | ändert die Frage-Nachricht |
 
@@ -349,6 +378,12 @@ Die KI hat keinen Text geliefert. Steht dort *MAX_TOKENS*, hat das interne Nachd
 
 **„Google Gemini API not reachable“.**
 Keine Internetverbindung, oder das Netz (Firma, Hochschule, VPN) blockiert `generativelanguage.googleapis.com`.
+
+**„The export contains no SysML v1 elements“.**
+Das Projekt ist vermutlich ein SysML-v2-Projekt. *Format* auf *SysML v2 model (CATIA export)* stellen (siehe [Abschnitt 4](#4-umfang-und-format-wählen)).
+
+**Bei SysML v2 kommt „Export in CATIA…“ nur mit einem Hinweis.**
+Das Plugin hat den Menüpunkt von CATIA nicht gefunden (z. B. weil das Projekt kein SysML-v2-Projekt ist oder das SysML-v2-Plugin fehlt). Dann in CATIA selbst *File → Export To → SysML v2 Textual Notation* wählen.
 
 **Wo kann ich sehen, was das Plugin im Hintergrund macht?**
 In CATIA unter **Window → Notification Window**. Alle Meldungen beginnen mit `[SysML AI Q&A]`.

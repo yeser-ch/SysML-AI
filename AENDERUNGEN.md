@@ -2,6 +2,14 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.4 – SysML-v2-Modelle aus CATIA
+
+- Neues Format **SysML v2 model (CATIA export)** für SysML-v2-Projekte: Das Plugin schickt die `.sysml`-Dateien, die CATIA selbst exportiert (*File → Export To → SysML v2 Textual Notation*). Knöpfe **Export in CATIA…** (öffnet den Export von CATIA) und **Files…** (Dateien oder Ordner wählen); **Resend model** liest die Dateien neu.
+- Eigener System-Prompt (`System_Prompt_v2_native.md`), ID-Check über qualifizierte Namen, Schnellfragen aus dem SysML-v2-Text, Kennzahlen (Deklarationen, Beziehungen) in der Statuszeile.
+- Das bisherige v2-Format heißt jetzt **SysML v2 (converted from v1)**.
+- Findet der Export in einem Projekt keine SysML-v1-Elemente, weist das Plugin auf das neue Format hin.
+- Log: `export_format = sysml_v2_native`, `scope = SYSML_V2_FILES`.
+
 ## v3.3.1 – Tokens und alle Einstellungen im Log
 
 - Neue Spalten: `total_tokens` (insgesamt verbrauchte Tokens laut Google), `tool_tokens` (Google-Suche) sowie die bisher fehlenden Einstellungen `allow_fallback`, `upload_once`, `mention_focus`, `repetitions_set`, `pause_s`, `relation_depth`, `neighbour_depth`.

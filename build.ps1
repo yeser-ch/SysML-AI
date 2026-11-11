@@ -254,6 +254,7 @@ try {
     }
     Copy-Item (Join-Path $Repo 'resources/System_Prompt.md') (Join-Path $plug 'prompts/System_Prompt.md') -Force
     Copy-Item (Join-Path $Repo 'resources/System_Prompt_v2.md') (Join-Path $plug 'prompts/System_Prompt_v2.md') -Force
+    Copy-Item (Join-Path $Repo 'resources/System_Prompt_v2_native.md') (Join-Path $plug 'prompts/System_Prompt_v2_native.md') -Force
     [System.IO.File]::WriteAllText((Join-Path $plug 'VERSION.txt'), $version)
     foreach ($f in @('install.bat', 'install.ps1', 'INSTALL.md', 'HANDBUCH.md')) {
         Copy-Item (Join-Path $Repo $f) (Join-Path $pkgDir $f) -Force

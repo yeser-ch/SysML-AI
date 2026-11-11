@@ -6,7 +6,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 
 | | |
 | --- | --- |
-| **Plattform** | CATIA Magic / Magic Systems of Systems Architect 2026x, SysML v1 (Export auch als SysML-v2-Text) |
+| **Plattform** | CATIA Magic / Magic Systems of Systems Architect 2026x, SysML-v1- und SysML-v2-Projekte |
 | **KI** | Google Gemini API (eigener, kostenloser API-Key) |
 | **Aktueller Stand** | Branch `feature/free-prompt-full-model` |
 
@@ -22,7 +22,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 ## Was das Plugin kann
 
 - Freie Fragen zum ganzen Modell, zu ausgewählten Paketen/Elementen oder zu einem Element mit einstellbarer Umgebung stellen, mit Folgefragen im Chat
-- Modelldaten als SysML-v1-JSON oder als SysML-v2-Textnotation senden, Größe in Elementen und exakten Tokens vorab sehen
+- SysML-v1- und SysML-v2-Modelle senden (v1 als JSON oder in SysML-v2-Notation, v2-Projekte als Textexport von CATIA), Größe und exakte Tokens vorab sehen
 - Genau ansehen und speichern, was gesendet wird (*Show request…*), System-Prompt im Fenster ändern, laufende Anfragen abbrechen
 - Schnellfragen als Vorlagen nach den vier Kategorien A Retrieval, B Structure, C Semantics, D Uncertainty
 - Alle Versuchsparameter in einem Fenster: KI-Modell, Temperatur, Thinking, Kontext, Grounding, Fallback, Wiederholungen
@@ -41,7 +41,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 | `src/de/hm/sysmlaiqa/ui/` | Fenster: Fragen, Einstellungen, Schnellfragen, Chat, API-Key |
 | `src/de/hm/sysmlaiqa/data_extraction/` | Modellexport als JSON über Velocity-Templates (ganzes Modell oder Umgebung eines Elements) |
 | `src/de/hm/sysmlaiqa/api/` | Gemini-Anbindung (Cache, Retry, Rate-Limits), System-Prompt, Testsuite, Protokoll, ID-Check |
-| `resources/System_Prompt.md`, `System_Prompt_v2.md` | Standard-System-Prompts für SysML v1 und v2 (im Plugin unter *System prompt…* änderbar) |
+| `resources/System_Prompt*.md` | Standard-System-Prompts für SysML v1, v2 (umgewandelt) und v2 aus CATIA (im Plugin unter *System prompt…* änderbar) |
 | `docs/` | Exportformate, Lastenheft-Abdeckung, Bilder der Anleitungen |
 | `evaluation/` | Vorlage für Testfälle und Erklärung der Log-Spalten |
 | `Catia_Model/` | CATIA-Modelle (Anforderungen und Systemmodell des Plugins) |
@@ -61,6 +61,7 @@ Paket: `de.hm.sysmlaiqa`, Plugin-ID: `de.hm.sysmlaiqa.plugin`, JAR: `sysml-ai-qa
 | `GeminiExplanationService` | Anfragen an Gemini, Modell-Cache, Wiederholungen, Rate-Limits |
 | `PromptLoader` | System-Prompt je Format laden (eigene Fassung, installiert, Standard) und Platzhalter füllen |
 | `SysmlV2Writer`, `Json` | SysML-v1-Export (JSON) in SysML-v2-Textnotation übersetzen |
+| `SysmlV2Reader` | SysML-v2-Text aus CATIA lesen: Kennzahlen, qualifizierte Namen, Index für Schnellfragen |
 | `ElementPickerDialog`, `RequestDialog`, `SystemPromptDialog` | Auswahl von Paketen/Elementen, Anzeige der Anfrage, System-Prompt bearbeiten |
 | `TestSuite`, `Evaluation` | Testfälle aus CSV abarbeiten, Wiederholungen |
 | `EvaluationLog`, `EvaluationRecord` | Protokoll jeder Antwort (CSV) und Archiv von Prompt und Export |

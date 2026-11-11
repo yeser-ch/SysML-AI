@@ -28,6 +28,8 @@ public class ModelExport {
 
     public static final String FORMAT_V1 = "sysml_v1_json";
     public static final String FORMAT_V2 = "sysml_v2_text";
+    /** SysML-v2-Modell aus CATIA: Textnotation, die CATIA selbst exportiert (File → Export To → SysML v2 Textual Notation). */
+    public static final String FORMAT_V2_NATIVE = "sysml_v2_native";
 
     private static final Pattern ELEMENT = Pattern.compile("\\{\"id\":\"([^\"]*)\",\"name\":\"((?:[^\"\\\\]|\\\\.)*)\"");
     private static final Pattern ANY_ID = Pattern.compile("\"[a-z_]*id\"\\s*:\\s*\"([^\"]+)\"");
@@ -48,9 +50,59 @@ public class ModelExport {
 
     /** Umfang für Anzeige und Log, z. B. "whole model" oder "2 packages: Structure, Requirements". */
     public String scopeDetail = "";
+    /** Nur bei SysML v2 aus CATIA: aus dem Text gelesener Index (für Schnellfragen); sonst null. */
+    public ModelIndex index;
     /** Exakte Tokenzahl laut Google (countTokens) für {@link #exactTokensModel}; -1 = noch nicht gezählt. */
     public volatile int exactTokens = -1;
     public volatile String exactTokensModel = "";
+
+    /** SysML v2 aus CATIA: Kennzahlen kommen aus dem Text (siehe SysmlV2Reader), es gibt keinen JSON-Export. */
+    private ModelExport(File file, String content, SysmlV2Reader.Result read) {
+        this.jsonFile = file;
+        this.json = "";
+        this.file = file;
+        this.content = content;
+        this.format = FORMAT_V2_NATIVE;
+        this.sha = Hashing.sha256Short(content);
+        this.elementCount = read.declarations;
+        this.relationCount = read.relations;
+        this.knownIds.addAll(read.names);   // ID-Check: die KI nennt qualifizierte Namen [id:Paket::Element]
+        this.index = read.index;
+    }
+
+    /**
+     * SysML v2 aus CATIA: liest die exportierten .sysml-Dateien (eine oder mehrere) und fasst sie zu einem Text zusammen.
+     * Die Zusammenfassung wird im Export-Ordner gespeichert (Archiv, Show request).
+     */
+    public static ModelExport fromSysmlFiles(java.util.List<File> files, File outDir) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        java.util.List<File> sorted = new java.util.ArrayList<>(files);
+        sorted.sort(java.util.Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
+        for (File f : sorted) {
+            if (sorted.size() > 1) sb.append("// ===== File: ").append(f.getName()).append(" =====\n");
+            String t = Files.readString(f.toPath(), StandardCharsets.UTF_8);
+            if (t.startsWith("\uFEFF")) t = t.substring(1);
+            sb.append(t.replace("\r\n", "\n"));
+            if (!t.endsWith("\n")) sb.append('\n');
+            if (sorted.size() > 1) sb.append('\n');
+        }
+        String content = sb.toString();
+        outDir.mkdirs();
+        File out = new File(outDir, "export_sysml2_" + java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".sysml");
+        Files.writeString(out.toPath(), content, StandardCharsets.UTF_8);
+        ModelExport ex = new ModelExport(out, content, SysmlV2Reader.read(content));
+        StringBuilder detail = new StringBuilder("SysML v2 files from CATIA: ");
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        for (int i = 0; i < sorted.size(); i++) {
+            File f = sorted.get(i);
+            detail.append(i > 0 ? ", " : "").append(f.getName()).append(" (")
+                    .append(java.time.Instant.ofEpochMilli(f.lastModified()).atZone(java.time.ZoneId.systemDefault()).format(fmt))
+                    .append(')');
+        }
+        ex.scopeDetail = detail.toString();
+        return ex;
+    }
 
     private ModelExport(File jsonFile, String json, File file, String content, String format) {
         this.jsonFile = jsonFile;
@@ -83,7 +135,7 @@ public class ModelExport {
 
     /** Liefert dasselbe Modell im gewünschten Format (SysML v2: Textdatei neben dem JSON-Export). */
     public ModelExport inFormat(String targetFormat) throws IOException {
-        if (targetFormat.equals(format)) return this;
+        if (targetFormat.equals(format) || isNative()) return this;   // SysML v2 aus CATIA lässt sich nicht umwandeln
         ModelExport r;
         if (FORMAT_V2.equals(targetFormat)) {
             String text = SysmlV2Writer.convert(json, "SysML v2 textual notation, generated from a SysML v1 model (CATIA Magic)\n"
@@ -98,8 +150,19 @@ public class ModelExport {
         return r;
     }
 
+    /** Modelldaten in SysML-v2-Textnotation (umgewandelt oder aus CATIA). */
     public boolean isV2() {
-        return FORMAT_V2.equals(format);
+        return FORMAT_V2.equals(format) || FORMAT_V2_NATIVE.equals(format);
+    }
+
+    /** SysML-v2-Modell aus CATIA (Textexport von CATIA). */
+    public boolean isNative() {
+        return FORMAT_V2_NATIVE.equals(format);
+    }
+
+    /** Kurzbezeichnung für Anzeige und Hinweise. */
+    public String formatLabel() {
+        return isNative() ? "SysML v2 from CATIA" : FORMAT_V2.equals(format) ? "SysML v2 converted" : "SysML v1";
     }
 
     /** Dateiendung für Archiv und "Save". */
