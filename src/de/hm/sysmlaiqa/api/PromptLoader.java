@@ -112,7 +112,11 @@ public class PromptLoader {
         if (text != null) return new Template(text, SOURCE_CUSTOM, custom);
         File installed = new File(baseDir, PROMPT_DIR + File.separator + fileName(format));
         text = read(installed);
-        if (text != null && !LEGACY_DEFAULTS.contains(normalize(text))) return new Template(text, SOURCE_INSTALLED, installed);
+        // Unveränderte Standardfassung (aktuell oder aus einer älteren Version) zählt als "default"
+        if (text != null && !LEGACY_DEFAULTS.contains(normalize(text))
+                && !normalize(text).equals(normalize(builtinDefault(format)))) {
+            return new Template(text, SOURCE_INSTALLED, installed);
+        }
         return new Template(builtinDefault(format), SOURCE_DEFAULT, null);
     }
 

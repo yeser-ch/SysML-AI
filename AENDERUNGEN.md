@@ -15,6 +15,8 @@ Zuordnung jeder Anforderung zur Umsetzung: [`docs/LASTENHEFT_ABDECKUNG.md`](docs
 - **Fehlermeldungen (FR12):** konkrete Meldungen bei nicht erreichbarer API, zu großem Export und leerer Antwort (leere Antworten zählen nicht mehr als Erfolg).
 - **Sprache (NFR5):** „Answer in the language of the question“ ist aus dem Standard-Prompt entfernt. Neue `system_prompt_sha` – Ergebnisse vor und nach 3.3 nicht direkt vergleichen.
 - **Log (FR11):** neue Spalten `system_prompt_source`, `export_format`, `export_scope_detail`, `export_tokens_est`, `export_tokens_exact`, `previous_turns`, `user_message`. Ein altes `answers_log.csv` wird umbenannt (`_old_…`), es geht nichts verloren.
+- Handbuch mit neuen Bildern auf Stand 3.3 gebracht (alle Bedienelemente nummeriert, neue Abschnitte „Umfang und Format wählen“ und „Sehen und ändern, was gesendet wird“).
+- Eine unveränderte installierte Standardfassung des System-Prompts zählt als `default` (nicht als `installed`).
 - Nicht in CATIA getestet, sondern gegen nachgebildete CATIA-Schnittstellen kompiliert und mit simuliertem Gemini-Server geprüft.
 
 ## v3.2.1 – Fenster nicht mehr immer im Vordergrund
