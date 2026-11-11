@@ -8,7 +8,7 @@ import java.util.List;
 /** Ein Datensatz = eine Antwort mit vollständigem Versuchsaufbau (eine Zeile im Log). */
 public class EvaluationRecord {
 
-    public static final String PLUGIN_VERSION = "3.2.1-ws2627";
+    public static final String PLUGIN_VERSION = "3.3-ws2627";
 
     public String runId = "chat";
     public String testId = "";
@@ -19,6 +19,7 @@ public class EvaluationRecord {
     public String expectedAnswer = "";
     public String focusElement = "";
     public String systemPromptSha = "";
+    public String systemPromptSource = "";
     public AskSettings settings;
     public ModelExport export;
     public ExplanationService.Answer answer;
@@ -42,11 +43,15 @@ public class EvaluationRecord {
                 String.valueOf(s.temperature), String.valueOf(s.maxOutputTokens),
                 s.thinkingLevel, a == null ? "" : a.thinkingUsed,
                 String.valueOf(s.grounding), String.valueOf(s.freshChat), String.valueOf(s.requireIds), s.scope,
-                focusElement == null ? "" : focusElement, systemPromptSha,
+                focusElement == null ? "" : focusElement, systemPromptSha, systemPromptSource,
+                export == null ? "" : export.format, export == null ? "" : export.scopeDetail,
                 export == null ? "" : export.file.getName(), export == null ? "" : export.sha,
                 export == null ? "" : String.format("%.1f", export.sizeKb()),
                 export == null ? "" : String.valueOf(export.elementCount),
                 export == null ? "" : String.valueOf(export.relationCount),
+                export == null ? "" : String.valueOf(export.approxTokens()),
+                export == null || export.exactTokens < 0 ? "" : export.exactTokens + " (" + export.exactTokensModel + ")",
+                a == null ? "" : String.valueOf(a.previousTurns), a == null ? "" : a.userMessage,
                 a == null ? "" : a.transfer,
                 a == null ? "" : String.valueOf(a.promptTokens), a == null ? "" : String.valueOf(a.cachedTokens),
                 a == null ? "" : String.valueOf(a.answerTokens),

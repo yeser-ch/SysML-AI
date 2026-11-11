@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -18,7 +17,7 @@ import java.util.List;
  *   answers_log.xlsx         – dieselben Daten formatiert für Excel (wird nach jeder Antwort neu erzeugt)
  *   runs/run_<id>.csv/.xlsx  – eine Datei pro Testlauf (gleiche Spalten, zum Bewerten)
  *   archive/prompts/<sha>.md – jeder verwendete System-Prompt im Wortlaut
- *   archive/exports/<sha>.json – jeder verwendete Modell-Export
+ *   archive/exports/<sha>.json|.sysml – jeder verwendete Modell-Export (genau der übertragene Inhalt)
  *
  * CSV: Trennzeichen ";", UTF-8 mit BOM -> öffnet direkt in Excel.
  * Die Spalten "rating" und "rating_notes" sind leer und für eure manuelle Bewertung gedacht.
@@ -31,8 +30,10 @@ public final class EvaluationLog {
             "question", "expected_answer", "answer", "rating", "rating_notes",
             "model_requested", "model_used", "model_version", "success", "finish_reason",
             "temperature", "max_tokens", "thinking_level", "thinking_used", "grounding", "fresh_chat", "require_ids", "scope",
-            "focus_element", "system_prompt_sha", "export_file", "export_sha", "export_kb",
-            "export_elements", "export_relations", "model_transfer", "prompt_tokens", "cached_tokens",
+            "focus_element", "system_prompt_sha", "system_prompt_source", "export_format", "export_scope_detail",
+            "export_file", "export_sha", "export_kb",
+            "export_elements", "export_relations", "export_tokens_est", "export_tokens_exact",
+            "previous_turns", "user_message", "model_transfer", "prompt_tokens", "cached_tokens",
             "answer_tokens", "thoughts_tokens", "duration_s", "rate_limit_wait_s",
             "ids_cited", "ids_found", "ids_unknown", "unknown_ids", "answer_sha", "plugin_version"
     };
@@ -89,11 +90,11 @@ public final class EvaluationLog {
                 p.getParentFile().mkdirs();
                 Files.writeString(p.toPath(), systemPrompt, StandardCharsets.UTF_8);
             }
-            if (export != null && export.file != null && export.file.exists()) {
-                File e = new File(getBaseDir(), "archive" + File.separator + "exports" + File.separator + export.sha + ".json");
+            if (export != null) {
+                File e = new File(getBaseDir(), "archive" + File.separator + "exports" + File.separator + export.sha + export.extension());
                 if (!e.exists()) {
                     e.getParentFile().mkdirs();
-                    Files.copy(export.file.toPath(), e.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    Files.writeString(e.toPath(), export.content, StandardCharsets.UTF_8);
                 }
             }
         } catch (IOException ex) {

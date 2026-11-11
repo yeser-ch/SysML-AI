@@ -2,13 +2,16 @@
  * "Ask AI about the model"-Fenster: Einstellungen, Schnellfragen, Chat und freie Frage-Eingabe auf EINER Oberfläche.
  *
  * Ablauf:
- * 1. Beim Öffnen wird das Modell exportiert (Standard: ganzes Modell).
+ * 1. Beim Öffnen wird das Modell exportiert (ganzes Modell, ausgewählte Pakete/Elemente oder Element mit Umgebung)
+ *    und im gewählten Format bereitgestellt (SysML v1 JSON oder SysML v2 Text). Größe in Elementen und Tokens wird angezeigt.
  * 2. Der Nutzer tippt eine Frage oder wählt eine Schnellfrage und drückt "Send".
  *    Standard: Das Modell wird mit der ersten Frage EINMAL hochgeladen (Gemini-Cache); danach geht nur die Frage raus.
  *    "Resend model" exportiert neu aus CATIA und lädt bei der nächsten Frage neu hoch.
  *    Optional wird jede Frage mehrfach gestellt (Repetitions) und auf erfundene Element-IDs geprüft.
  * 3. "Run test suite…" arbeitet eine CSV mit Testfällen automatisch ab (auch für mehrere Modelle).
  * 4. Jede Antwort wird mit dem kompletten Versuchsaufbau protokolliert (siehe EvaluationLog).
+ * 5. "Show request…" zeigt genau, was gesendet wird; "System prompt…" macht den System-Prompt sichtbar und änderbar.
+ *    Eine laufende Anfrage lässt sich mit "Stop" abbrechen.
  */
 
 package de.hm.sysmlaiqa.ui;
@@ -46,7 +49,10 @@ import java.util.prefs.Preferences;
 public class ExplanationDialog extends JDialog {
 
     private static final String SCOPE_FULL = "Whole model";
+    private static final String SCOPE_SELECTION = "Selected packages / elements";
     private static final String SCOPE_FOCUS = "Selected element + surroundings";
+    static final String FORMAT_V1_LABEL = "SysML v1 (JSON export)";
+    static final String FORMAT_V2_LABEL = "SysML v2 (textual notation)";
 
     private final Element focusElement;
     private final boolean elementMode;   // true = "Ask AI about this element" (nur Umgebung des Elements)
@@ -70,6 +76,14 @@ public class ExplanationDialog extends JDialog {
     private JCheckBox cacheModelBox;
     private JLabel exportStatusLabel;
     private JButton suiteBtn;
+    private JComboBox<String> formatBox;
+    private JCheckBox mentionFocusBox;
+    private JSpinner relationDepthSpinner;
+    private JSpinner siblingDepthSpinner;
+    private JButton chooseBtn;
+    private JPanel depthPanel;
+    private List<Element> selectedRoots = new ArrayList<>();
+    private Object lastScope = SCOPE_FULL;     // Umfang des letzten erfolgreichen Exports
 
     // Chat
     private JPanel chatPanel;
@@ -78,7 +92,10 @@ public class ExplanationDialog extends JDialog {
     private JButton sendBtn;
 
     // Zustand
-    private volatile ModelExport export;
+    private volatile ModelExport export;       // im gewählten Format (das geht an die KI)
+    private volatile ModelExport baseExport;   // SysML-v1-Export aus CATIA (Quelle)
+    private boolean requestRunning = false;    // Einzelfrage läuft -> "Send" wird zu "Stop"
+    private int tokenCountGeneration = 0;
     private boolean busy = false;
     private boolean suiteRunning = false;
     private volatile boolean cancelRequested = false;
@@ -194,10 +211,18 @@ public class ExplanationDialog extends JDialog {
         modelRow.add(modelBox, BorderLayout.CENTER);
         modelRow.add(refreshBtn, BorderLayout.EAST);
 
-        // Zeile 1: Kontext + Temperatur
-        scopeBox = new JComboBox<>(focusElement == null ? new String[]{SCOPE_FULL} : new String[]{SCOPE_FULL, SCOPE_FOCUS});
+        // Zeile 1: Kontext (+ Auswahl) + Temperatur
+        scopeBox = new JComboBox<>(focusElement == null ? new String[]{SCOPE_FULL, SCOPE_SELECTION}
+                : new String[]{SCOPE_FULL, SCOPE_SELECTION, SCOPE_FOCUS});
         scopeBox.setToolTipText("<html>Which part of the model is sent to the AI.<br>'Whole model': everything except SysML/UML libraries.<br>"
-                + "'Selected element + surroundings': only the element, its owners, neighbours and relations (smaller, faster).</html>");
+                + "'Selected packages / elements': only what you choose (each with everything it contains).<br>"
+                + "'Selected element + surroundings': the element, its owners, neighbours and related elements up to the chosen depth.</html>");
+        chooseBtn = new JButton("Choose…");
+        chooseBtn.setToolTipText("Choose the packages or elements that are sent to the AI.");
+        chooseBtn.addActionListener(e -> chooseSelection(true));
+        JPanel scopeRow = new JPanel(new BorderLayout(4, 0));
+        scopeRow.add(scopeBox, BorderLayout.CENTER);
+        scopeRow.add(chooseBtn, BorderLayout.EAST);
         temperatureSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0.0, 2.0, 0.1));
         temperatureSpinner.setToolTipText("0 = most deterministic (recommended for evaluation). Higher = more varied answers.");
         temperatureSpinner.addChangeListener(e -> saveSettings());
@@ -207,9 +232,27 @@ public class ExplanationDialog extends JDialog {
                 + "(it is logged). Not every model supports every level – then the model default is used.</html>");
         thinkingBox.addActionListener(e -> saveSettings());
         addRow(p, c, 0, "AI model:", modelRow, "Thinking:", thinkingBox);
-        addRow(p, c, 1, "Context:", scopeBox, "Temperature:", temperatureSpinner);
+        addRow(p, c, 1, "Context:", scopeRow, "Temperature:", temperatureSpinner);
 
-        // Zeile 2: Optionen + Max Tokens
+        // Zeile 2: Format + Kontexttiefe + Max Tokens
+        formatBox = new JComboBox<>(new String[]{FORMAT_V1_LABEL, FORMAT_V2_LABEL});
+        formatBox.setToolTipText("<html>How the model data is written for the AI.<br>"
+                + "SysML v1: the JSON export from CATIA. SysML v2: the same model converted to SysML v2 textual notation<br>"
+                + "(same content, different notation – see docs/EXPORTFORMATE.md). Each format has its own system prompt.</html>");
+        relationDepthSpinner = new JSpinner(new SpinnerNumberModel(DataExtractionService.DEFAULT_RELATION_DEPTH, 0, 10, 1));
+        relationDepthSpinner.setToolTipText("How many relation steps from the selected element are followed (e.g. satisfy → block → its parts).");
+        siblingDepthSpinner = new JSpinner(new SpinnerNumberModel(DataExtractionService.DEFAULT_SIBLING_DEPTH, 0, 5, 1));
+        siblingDepthSpinner.setToolTipText("Over how many owner levels neighbouring elements are collected (0 = no neighbours).");
+        depthPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        depthPanel.add(new JLabel("Depth: relations"));
+        depthPanel.add(relationDepthSpinner);
+        depthPanel.add(new JLabel("neighbours"));
+        depthPanel.add(siblingDepthSpinner);
+        JPanel formatRow = new JPanel(new BorderLayout(8, 0));
+        formatRow.add(formatBox, BorderLayout.WEST);
+        formatRow.add(depthPanel, BorderLayout.CENTER);
+
+        // Zeile 3: Optionen
         groundingBox = new JCheckBox("Grounding");
         groundingBox.setToolTipText("Google Search grounding. Off for evaluation: answers should come from the model only. "
                 + "Not every model supports it on the free tier.");
@@ -222,17 +265,24 @@ public class ExplanationDialog extends JDialog {
                 + "After that only your question is sent. Click 'Resend model' after changing the model in CATIA.<br>"
                 + "Changing AI model, ID check or grounding uploads once more automatically.<br>"
                 + "Not available for every model on the free tier – then the model is sent with each question.</html>");
-        for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox, cacheModelBox}) cb.addActionListener(e -> saveSettings());
-        // Zwei Zeilen, damit bei schmalem Fenster keine Option abgeschnitten wird
-        JPanel checks = new JPanel(new GridLayout(2, 2, 8, 0));
+        mentionFocusBox = new JCheckBox("Mention selected element");
+        mentionFocusBox.setToolTipText(focusElement == null ? "No element selected."
+                : "<html>On: the first question of a chat starts with<br><tt># Currently selected element<br>"
+                + escapeHtml(buildFocusText()) + "</tt><br>Off: nothing about the selection is sent. See 'Show request…'.</html>");
+        mentionFocusBox.setEnabled(focusElement != null);
+        for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox, cacheModelBox, mentionFocusBox}) cb.addActionListener(e -> saveSettings());
+        // Mehrere Zeilen, damit bei schmalem Fenster keine Option abgeschnitten wird
+        JPanel checks = new JPanel(new GridLayout(3, 2, 8, 0));
         checks.add(cacheModelBox);
         checks.add(groundingBox);
         checks.add(freshChatBox);
         checks.add(fallbackBox);
+        checks.add(mentionFocusBox);
         maxTokensSpinner = new JSpinner(new SpinnerNumberModel(8192, 256, 65536, 256));
         maxTokensSpinner.setToolTipText("Maximum length of the answer (incl. internal reasoning of thinking models).");
         maxTokensSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 2, "Options:", checks, "Max tokens:", maxTokensSpinner);
+        addRow(p, c, 2, "Format:", formatRow, "Max tokens:", maxTokensSpinner);
+        addRow(p, c, 3, "Options:", checks, null, null);
 
         // Zeile 3: Evaluation – ID-Check, Testlauf, Wiederholungen
         requireIdsBox = new JCheckBox("Cite element IDs (hallucination check)");
@@ -244,6 +294,7 @@ public class ExplanationDialog extends JDialog {
         suiteBtn.addActionListener(e -> {
             if (suiteRunning) {
                 cancelRequested = true;
+                apiService.cancel();   // laufende Anfrage sofort abbrechen
                 suiteBtn.setText("Stopping…");
                 suiteBtn.setEnabled(false);
             } else {
@@ -257,9 +308,9 @@ public class ExplanationDialog extends JDialog {
         repetitionsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 20, 1));
         repetitionsSpinner.setToolTipText("How often each question is asked (each time in a new chat). >1 shows how consistent the answers are.");
         repetitionsSpinner.addChangeListener(e -> saveSettings());
-        addRow(p, c, 3, "Evaluation:", evalRow, "Repetitions:", repetitionsSpinner);
+        addRow(p, c, 4, "Evaluation:", evalRow, "Repetitions:", repetitionsSpinner);
 
-        // Zeile 4: Status + Buttons
+        // Zeile 5: Status + Buttons
         exportStatusLabel = new JLabel("Exporting model …");
         exportStatusLabel.setForeground(Color.DARK_GRAY);
         // Feste Breite: ein langer Status soll die rechte Spalte nicht zusammendrücken (voller Text im Tooltip)
@@ -269,6 +320,14 @@ public class ExplanationDialog extends JDialog {
         reexportBtn.addActionListener(e -> {
             if (!busy) runExport();
         });
+        JButton requestBtn = new JButton("Show request…");
+        requestBtn.setToolTipText("Shows exactly what the next question sends to the AI (system prompt, model data, chat, question) and lets you save it.");
+        requestBtn.addActionListener(e -> showRequest());
+        JButton promptBtn = new JButton("System prompt…");
+        promptBtn.setToolTipText("View and edit the system prompt that is sent with every request.");
+        promptBtn.addActionListener(e -> new SystemPromptDialog(this, GeminiExplanationService.getBaseDirectory(),
+                currentFormat(), () -> addMessage("System", "System prompt saved. It is used from the next question on "
+                + "(the model is uploaded again automatically).")).setVisible(true));
         JButton apiKeyBtn = new JButton("API key…");
         apiKeyBtn.addActionListener(e -> new SettingsDialog().setVisible(true));
         JButton logBtn = new JButton("Open results");
@@ -277,20 +336,46 @@ public class ExplanationDialog extends JDialog {
         logBtn.addActionListener(e -> openResultsFolder());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         buttons.add(reexportBtn);
+        buttons.add(requestBtn);
+        buttons.add(promptBtn);
         buttons.add(apiKeyBtn);
         buttons.add(logBtn);
 
-        c.gridy = 4; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
+        c.gridy = 5; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
         p.add(exportStatusLabel, c);
         c.gridwidth = 1;
-        c.gridy = 5; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
+        c.gridy = 6; c.gridx = 0; c.gridwidth = 4; c.weightx = 1;
         p.add(buttons, c);
         c.gridwidth = 1;
 
         scopeBox.addActionListener(e -> {
             if (loading || busy) return;
+            if (isSelectionScope() && selectedRoots.isEmpty() && !chooseSelection(false)) {
+                return; // Auswahl abgebrochen: chooseSelection hat den alten Umfang wiederhergestellt
+            }
             saveSettings();
+            updateControls();
             runExport();
+        });
+        formatBox.addActionListener(e -> {
+            if (loading || busy) return;
+            saveSettings();
+            switchFormat();
+        });
+        // Tiefe geändert: kurz warten (mehrere Klicks), dann neu exportieren
+        Timer depthTimer = new Timer(900, e -> {
+            if (!busy && isFocusScope()) runExport();
+        });
+        depthTimer.setRepeats(false);
+        javax.swing.event.ChangeListener depthListener = e -> {
+            if (loading) return;
+            saveSettings();
+            if (isFocusScope()) depthTimer.restart();
+        };
+        relationDepthSpinner.addChangeListener(depthListener);
+        siblingDepthSpinner.addChangeListener(depthListener);
+        modelBox.addActionListener(e -> {
+            if (!loading && export != null) countTokensAsync();
         });
         return p;
     }
@@ -299,6 +384,7 @@ public class ExplanationDialog extends JDialog {
         c.gridy = row;
         c.gridx = 0; c.weightx = 0; p.add(new JLabel(l1), c);
         c.gridx = 1; c.weightx = 1; p.add(comp1, c);
+        if (l2 == null) return;
         c.gridx = 2; c.weightx = 0; p.add(new JLabel(l2), c);
         c.gridx = 3; c.weightx = 0.3; p.add(comp2, c);
     }
@@ -323,7 +409,7 @@ public class ExplanationDialog extends JDialog {
             JPanel grid = new JPanel(new GridLayout(0, 2, 4, 4));
             String focusId = focusElement == null ? null : focusElement.getID();
             // Element-Fragen, wenn nur die Umgebung eines Elements exportiert ist; sonst Fragen zum ganzen Modell
-            boolean elementQuestions = focusElement != null && !isFullScope();
+            boolean elementQuestions = focusElement != null && isFocusScope();
             ((javax.swing.border.TitledBorder) quickPanel.getBorder()).setTitle(elementQuestions
                     ? "Quick questions about " + getFocusName() + " (click to insert, then edit and send)"
                     : "Quick questions about the whole model (click to insert, then edit and send)");
@@ -413,16 +499,31 @@ public class ExplanationDialog extends JDialog {
         fallbackBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.FALLBACK_PREF, false));
         requireIdsBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.REQUIRE_IDS_PREF, false));
         cacheModelBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.CACHE_MODEL_PREF, true));
+        formatBox.setSelectedItem(ModelExport.FORMAT_V2.equals(prefs.get(SysmlAiQaPlugin.FORMAT_PREF, ModelExport.FORMAT_V1))
+                ? FORMAT_V2_LABEL : FORMAT_V1_LABEL);
+        mentionFocusBox.setSelected(focusElement != null && prefs.getBoolean(SysmlAiQaPlugin.MENTION_FOCUS_PREF, true));
+        relationDepthSpinner.setValue(clamp(prefs.getInt(SysmlAiQaPlugin.RELATION_DEPTH_PREF, DataExtractionService.DEFAULT_RELATION_DEPTH), 0, 10));
+        siblingDepthSpinner.setValue(clamp(prefs.getInt(SysmlAiQaPlugin.SIBLING_DEPTH_PREF, DataExtractionService.DEFAULT_SIBLING_DEPTH), 0, 5));
         loading = false;
+        updateControls();
+    }
+
+    private static int clamp(int v, int lo, int hi) {
+        return Math.max(lo, Math.min(hi, v));
     }
 
     private void saveSettings() {
         if (loading || modelBox == null || scopeBox == null || temperatureSpinner == null
                 || maxTokensSpinner == null || repetitionsSpinner == null || groundingBox == null
                 || freshChatBox == null || fallbackBox == null || requireIdsBox == null || cacheModelBox == null
-                || thinkingBox == null) {
+                || thinkingBox == null || formatBox == null || mentionFocusBox == null
+                || relationDepthSpinner == null || siblingDepthSpinner == null) {
             return;
         }
+        prefs.put(SysmlAiQaPlugin.FORMAT_PREF, currentFormat());
+        if (focusElement != null) prefs.putBoolean(SysmlAiQaPlugin.MENTION_FOCUS_PREF, mentionFocusBox.isSelected());
+        prefs.putInt(SysmlAiQaPlugin.RELATION_DEPTH_PREF, ((Number) relationDepthSpinner.getValue()).intValue());
+        prefs.putInt(SysmlAiQaPlugin.SIBLING_DEPTH_PREF, ((Number) siblingDepthSpinner.getValue()).intValue());
         prefs.put(SysmlAiQaPlugin.MODEL_PREF, currentModel());
         prefs.put(SysmlAiQaPlugin.THINKING_PREF, (String) thinkingBox.getSelectedItem());
         prefs.putDouble(SysmlAiQaPlugin.TEMPERATURE_PREF, ((Number) temperatureSpinner.getValue()).doubleValue());
@@ -459,12 +560,83 @@ public class ExplanationDialog extends JDialog {
         s.cacheModel = cacheModelBox.isSelected();
         String th = (String) thinkingBox.getSelectedItem();
         s.thinkingLevel = th == null || th.startsWith("Model") ? "default" : th.toLowerCase();
-        s.scope = isFullScope() ? "FULL_MODEL" : "FOCUS_NEIGHBOURHOOD";
+        s.scope = isFocusScope() ? "FOCUS_NEIGHBOURHOOD" : isSelectionScope() ? "SELECTION" : "FULL_MODEL";
+        s.format = export != null ? export.format : currentFormat();
         return s;
     }
 
-    private boolean isFullScope() {
-        return !SCOPE_FOCUS.equals(scopeBox.getSelectedItem());
+    private boolean isFocusScope() {
+        return SCOPE_FOCUS.equals(scopeBox.getSelectedItem());
+    }
+
+    private boolean isSelectionScope() {
+        return SCOPE_SELECTION.equals(scopeBox.getSelectedItem());
+    }
+
+    private String currentFormat() {
+        return FORMAT_V2_LABEL.equals(formatBox.getSelectedItem()) ? ModelExport.FORMAT_V2 : ModelExport.FORMAT_V1;
+    }
+
+    /**
+     * Pakete/Elemente für "Selected packages / elements" wählen.
+     * @param exportNow true: danach sofort neu exportieren (Aufruf über den Button)
+     * @return true, wenn etwas gewählt wurde
+     */
+    private boolean chooseSelection(boolean exportNow) {
+        if (busy) return false;
+        Project project = Application.getInstance().getProject();
+        List<Element> pre = new ArrayList<>(selectedRoots);
+        if (pre.isEmpty()) pre.addAll(treeSelection());
+        if (pre.isEmpty() && focusElement != null) pre.add(focusElement);
+        List<Element> chosen = ElementPickerDialog.choose(this, project, pre);
+        if (chosen == null || chosen.isEmpty()) {
+            if (selectedRoots.isEmpty() && isSelectionScope()) {
+                loading = true;
+                scopeBox.setSelectedItem(lastScope);   // Abbruch: vorherigen Umfang wiederherstellen
+                loading = false;
+                updateControls();
+            }
+            return false;
+        }
+        selectedRoots = DataExtractionService.topLevelRoots(chosen);
+        if (!isSelectionScope()) {
+            loading = true;
+            scopeBox.setSelectedItem(SCOPE_SELECTION);
+            loading = false;
+        }
+        if (exportNow) {
+            updateControls();
+            runExport();
+        }
+        return true;
+    }
+
+    /** Im Containment Tree markierte Elemente (Mehrfachauswahl) als Vorauswahl. */
+    private static List<Element> treeSelection() {
+        List<Element> l = new ArrayList<>();
+        try {
+            Object project = Application.getInstance().getProject();
+            Object browser = project.getClass().getMethod("getBrowser").invoke(project);
+            Object tree = browser.getClass().getMethod("getContainmentTree").invoke(browser);
+            Object nodes = tree.getClass().getMethod("getSelectedNodes").invoke(tree);
+            if (nodes instanceof Object[]) {
+                for (Object n : (Object[]) nodes) {
+                    Object u = n instanceof javax.swing.tree.DefaultMutableTreeNode ? ((javax.swing.tree.DefaultMutableTreeNode) n).getUserObject() : null;
+                    if (u instanceof Element) l.add((Element) u);
+                }
+            }
+        } catch (Throwable ignored) { }
+        return l;
+    }
+
+    private String selectionLabel() {
+        StringBuilder sb = new StringBuilder();
+        for (Element e : selectedRoots) {
+            if (sb.length() > 0) sb.append(", ");
+            String n = e instanceof NamedElement ? ((NamedElement) e).getName() : null;
+            sb.append(n == null || n.isEmpty() ? e.getHumanType() : n).append(" [").append(e.getID()).append(']');
+        }
+        return selectedRoots.size() + " selected: " + sb;
     }
 
     private void refreshModels(JButton btn) {
@@ -502,20 +674,36 @@ public class ExplanationDialog extends JDialog {
     // ═══════════════════════════════════════════════════════════════════════
 
     private void runExport() {
-        final boolean full = isFullScope();
+        final DataExtractionService.Scope scope = isFocusScope() ? DataExtractionService.Scope.FOCUS_NEIGHBOURHOOD
+                : isSelectionScope() && !selectedRoots.isEmpty() ? DataExtractionService.Scope.SELECTION
+                : DataExtractionService.Scope.FULL_MODEL;
+        final List<Element> roots = new ArrayList<>(selectedRoots);
+        final int relDepth = ((Number) relationDepthSpinner.getValue()).intValue();
+        final int sibDepth = ((Number) siblingDepthSpinner.getValue()).intValue();
+        final String format = currentFormat();
+        final Object scopeItem = scopeBox.getSelectedItem();
+        final String what = scope == DataExtractionService.Scope.FULL_MODEL ? "the whole model"
+                : scope == DataExtractionService.Scope.SELECTION ? selectionLabel()
+                : "the surroundings of the selected element (relations " + relDepth + ", neighbours " + sibDepth + ")";
         busy = true;
         updateControls();
-        exportStatusLabel.setText("Exporting " + (full ? "whole model" : "element surroundings") + " …");
-        addMessage("System", "Exporting " + (full ? "the whole model" : "the surroundings of the selected element") + " …");
+        exportStatusLabel.setText("Exporting " + what + " …");
+        addMessage("System", "Exporting " + escapeHtml(what) + " …");
 
         new SwingWorker<ModelExport, Void>() {
             @Override
             protected ModelExport doInBackground() throws Exception {
                 Project project = Application.getInstance().getProject();
                 if (project == null) return null;
-                File f = DataExtractionService.exportModel(project, focusElement,
-                        full ? DataExtractionService.Scope.FULL_MODEL : DataExtractionService.Scope.FOCUS_NEIGHBOURHOOD);
-                return f == null ? null : ModelExport.fromFile(f);
+                File f = DataExtractionService.exportModel(project, focusElement, scope, roots, relDepth, sibDepth);
+                if (f == null) return null;
+                ModelExport base = ModelExport.fromFile(f);
+                base.scopeDetail = scope == DataExtractionService.Scope.FULL_MODEL ? "whole model"
+                        : scope == DataExtractionService.Scope.SELECTION ? selectionLabel()
+                        : "surroundings of " + getFocusName() + " [" + focusElement.getID() + "] · relation depth "
+                        + relDepth + " · neighbour depth " + sibDepth;
+                baseExport = base;
+                return base.inFormat(format);
             }
 
             @Override
@@ -527,20 +715,10 @@ public class ExplanationDialog extends JDialog {
                         exportStatusLabel.setText("Export failed – see CATIA log.");
                         addMessage("System", "Error: model export failed (see CATIA log window).");
                     } else {
-                        export = ex;
+                        lastScope = scopeItem;
                         modelIndex = ModelIndex.parse(ex.json);
                         refreshQuickQuestions();
-                        apiService.resetConversation();     // neue Modelldaten -> neuer Chat
-                        apiService.discardUploadedModel();  // alter Upload ungültig -> nächste Frage lädt neu hoch
-                        String info = String.format("Model ready: %d elements · %d relations · %.0f KB · ~%,d tokens · export %s",
-                                ex.elementCount, ex.relationCount, ex.sizeKb(), ex.approxTokens(), ex.sha);
-                        exportStatusLabel.setText(info);
-                        exportStatusLabel.setToolTipText(info);
-                        addMessage("System", escapeHtml(info) + "<br>"
-                                + (cacheModelBox.isSelected()
-                                ? "The model will be uploaded once with your first question; after that only questions are sent."
-                                : "The model is sent with each question.")
-                                + "<br>Type a question below or pick a quick question.");
+                        applyExport(ex, true);
                     }
                 } catch (Exception e) {
                     exportStatusLabel.setText("Export failed.");
@@ -552,11 +730,130 @@ public class ExplanationDialog extends JDialog {
         }.execute();
     }
 
+    /** Format gewechselt: dasselbe Modell neu schreiben (ohne neuen Export aus CATIA). */
+    private void switchFormat() {
+        final ModelExport base = baseExport;
+        if (base == null) return;
+        final String format = currentFormat();
+        busy = true;
+        updateControls();
+        new SwingWorker<ModelExport, Void>() {
+            @Override
+            protected ModelExport doInBackground() throws Exception {
+                return base.inFormat(format);
+            }
+
+            @Override
+            protected void done() {
+                busy = false;
+                try {
+                    applyExport(get(), false);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    addMessage("System", "⚠ Could not convert the model: " + escapeHtml(String.valueOf(cause.getMessage())));
+                }
+                updateControls();
+            }
+        }.execute();
+    }
+
+    /** Neuer Export bzw. neues Format ist bereit: Chat zurücksetzen, Größe anzeigen, Tokens zählen. */
+    private void applyExport(ModelExport ex, boolean newExport) {
+        export = ex;
+        apiService.resetConversation();     // neue Modelldaten -> neuer Chat
+        apiService.discardUploadedModel();  // alter Upload ungültig -> nächste Frage lädt neu hoch
+        updateExportStatus();
+        addMessage("System", escapeHtml(exportStatusText()) + "<br>"
+                + (newExport ? "" : "Format changed – same model, now as " + (ex.isV2() ? "SysML v2 textual notation" : "SysML v1 JSON") + ".<br>")
+                + (cacheModelBox.isSelected()
+                ? "The model will be uploaded once with your first question; after that only questions are sent."
+                : "The model is sent with each question.")
+                + "<br>Type a question below or pick a quick question. <i>Show request…</i> shows exactly what is sent.");
+        countTokensAsync();
+    }
+
+    private String exportStatusText() {
+        ModelExport ex = export;
+        if (ex == null) return "";
+        StringBuilder sb = new StringBuilder(String.format("Model ready (%s): %d elements · %d relations · %.0f KB · ~%,d tokens",
+                ex.isV2() ? "SysML v2" : "SysML v1", ex.elementCount, ex.relationCount, ex.sizeKb(), ex.approxTokens()));
+        if (ex.exactTokens >= 0) sb.append(String.format(" (exact %,d for %s)", ex.exactTokens, ex.exactTokensModel));
+        sb.append(" · export ").append(ex.sha);
+        return sb.toString();
+    }
+
+    private void updateExportStatus() {
+        String info = exportStatusText();
+        exportStatusLabel.setText(info);
+        exportStatusLabel.setToolTipText("<html>" + escapeHtml(info) + "<br>Scope: " + escapeHtml(export == null ? "" : export.scopeDetail) + "</html>");
+        exportStatusLabel.setForeground(Color.DARK_GRAY);
+    }
+
+    /**
+     * FR2: exakte Tokenzahl der Modelldaten für das gewählte KI-Modell bei Google abfragen und mit dessen
+     * Eingabelimit vergleichen (FR12: Warnung schon vor dem Senden).
+     */
+    private void countTokensAsync() {
+        final ModelExport ex = export;
+        if (ex == null) return;
+        final String model = currentModel();
+        final int gen = ++tokenCountGeneration;
+        new SwingWorker<int[], Void>() {
+            @Override
+            protected int[] doInBackground() {
+                return new int[]{apiService.countTokens(model, ex.content, ex.format), apiService.inputTokenLimit(model)};
+            }
+
+            @Override
+            protected void done() {
+                if (gen != tokenCountGeneration || ex != export) return; // inzwischen anderes Modell/Export
+                try {
+                    int[] r = get();
+                    if (r[0] >= 0) {
+                        ex.exactTokens = r[0];
+                        ex.exactTokensModel = model;
+                    }
+                    updateExportStatus();
+                    long tokens = r[0] >= 0 ? r[0] : ex.approxTokens();
+                    if (r[1] > 0 && tokens > r[1]) {
+                        exportStatusLabel.setForeground(new Color(0xB0, 0x00, 0x20));
+                        exportStatusLabel.setText("⚠ " + exportStatusLabel.getText() + String.format(" – exceeds the input limit of %s (%,d)", model, r[1]));
+                        addMessage("System", String.format("<span style='color:#B00020'>⚠ The model data (%,d tokens) is larger than the input limit of %s (%,d tokens). "
+                                + "Choose a smaller context (selected packages or element surroundings) or another AI model.</span>",
+                                tokens, escapeHtml(model), r[1]));
+                    }
+                } catch (Exception ignored) {
+                    // Zählung ist nur eine Zusatzinformation
+                }
+            }
+        }.execute();
+    }
+
+    /** "Show request…": Klartext dessen, was mit der nächsten Frage gesendet würde. */
+    private void showRequest() {
+        if (export == null) {
+            addMessage("System", "The model has not been exported yet.");
+            return;
+        }
+        String q = inputArea.getText().trim();
+        AskSettings s = currentSettings();
+        ExplanationService.RequestPreview pr = apiService.preview(q.isEmpty() ? "(your question)" : q, export.content,
+                currentFocusInfo(), s);
+        new RequestDialog(this, pr, export).setVisible(true);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // Einzelne Frage (mit Wiederholungen)
     // ═══════════════════════════════════════════════════════════════════════
 
     private void sendQuestion() {
+        if (requestRunning) {               // "Stop" (NFR4)
+            cancelRequested = true;
+            apiService.cancel();
+            sendBtn.setText("Stopping…");
+            sendBtn.setEnabled(false);
+            return;
+        }
         String question = inputArea.getText().trim();
         if (question.isEmpty() || busy) return;
         if (export == null) {
@@ -571,14 +868,15 @@ public class ExplanationDialog extends JDialog {
         }
 
         final AskSettings settings = currentSettings();
-        final String focusInfo = buildFocusInfo();
+        final String focusInfo = currentFocusInfo();
         final ModelExport ex = export;
         final int reps = settings.repetitions;
 
         addMessage("You", escapeHtml(question) + (reps > 1 ? " <i>(× " + reps + ")</i>" : ""));
         inputArea.setText("");
-        addMessage("System", "Waiting for " + escapeHtml(settings.model) + " …");
+        addMessage("System", "Waiting for " + escapeHtml(settings.model) + " … (click <b>Stop</b> to cancel)");
         busy = true;
+        requestRunning = true;
         cancelRequested = false;
         updateControls();
 
@@ -603,6 +901,7 @@ public class ExplanationDialog extends JDialog {
             @Override
             protected void done() {
                 busy = false;
+                requestRunning = false;
                 try {
                     get();
                 } catch (Exception e) {
@@ -610,6 +909,7 @@ public class ExplanationDialog extends JDialog {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
                     addMessage("System", "⚠ Error: " + escapeHtml(String.valueOf(cause.getMessage())));
                 }
+                cancelRequested = false;
                 updateControls();
                 inputArea.requestFocusInWindow();
             }
@@ -665,7 +965,8 @@ public class ExplanationDialog extends JDialog {
         c.gridx = 1;
         form.add(pauseSpinner, c);
         c.gridx = 0; c.gridy = 3; c.gridwidth = 2;
-        form.add(new JLabel("<html>Uses the current settings (style, temperature, max tokens, grounding, ID check).<br>"
+        form.add(new JLabel("<html>Uses the current settings (format: " + (export.isV2() ? "SysML v2" : "SysML v1")
+                + ", context, temperature, thinking, max tokens, grounding, ID check).<br>"
                 + "Repetitions per question: <b>" + base.repetitions + "</b> · every question in a new chat.<br>"
                 + (base.cacheModel
                 ? "Model is uploaded once per AI model (~" + String.format("%,d", export.approxTokens()) + " tokens), then only questions are sent."
@@ -812,7 +1113,7 @@ public class ExplanationDialog extends JDialog {
         if (!a.note.isEmpty() && !"cache_new".equals(a.transfer)) addMessage("System", "ℹ " + escapeHtml(a.note));
         if (r.logWarning != null) addMessage("System", "⚠ " + escapeHtml(r.logWarning));
         if (!a.success) {
-            addMessage("System", "⚠ " + escapeHtml(a.text));
+            addMessage("System", (GeminiExplanationService.CANCELLED.equals(a.text) ? "■ " : "⚠ ") + escapeHtml(a.text));
             return;
         }
         if ("cache_new".equals(a.transfer)) {
@@ -853,8 +1154,25 @@ public class ExplanationDialog extends JDialog {
     }
 
     private void updateControls() {
-        sendBtn.setEnabled(!busy && export != null);
-        sendBtn.setText(busy ? "Busy…" : "Send");
+        if (requestRunning) {
+            sendBtn.setText(cancelRequested ? "Stopping…" : "Stop");
+            sendBtn.setEnabled(!cancelRequested);
+            sendBtn.setToolTipText("Cancel the running request.");
+        } else {
+            sendBtn.setEnabled(!busy && export != null);
+            sendBtn.setText(busy ? "Busy…" : "Send");
+            sendBtn.setToolTipText(null);
+        }
+        if (formatBox != null) formatBox.setEnabled(!busy);
+        if (chooseBtn != null) {
+            chooseBtn.setEnabled(!busy);
+            chooseBtn.setVisible(isSelectionScope());
+        }
+        if (depthPanel != null) {
+            boolean focus = isFocusScope();
+            for (Component comp : depthPanel.getComponents()) comp.setEnabled(focus && !busy);
+            depthPanel.setVisible(focus);
+        }
         if (suiteRunning) {
             suiteBtn.setText(cancelRequested ? "Stopping…" : "Stop test run");
             suiteBtn.setEnabled(!cancelRequested);
@@ -913,11 +1231,17 @@ public class ExplanationDialog extends JDialog {
         return focusElement == null ? "" : "Unnamed " + focusElement.getHumanType();
     }
 
-    private String buildFocusInfo() {
+    /** Text über das ausgewählte Element, wie er der KI genannt wird. */
+    private String buildFocusText() {
         if (focusElement == null) return null;
         String owner = focusElement.getOwner() != null ? focusElement.getOwner().getHumanName() : "root";
         return getFocusName() + " [type: " + focusElement.getHumanType() + ", id: " + focusElement.getID()
                 + ", owner: " + owner + "]";
+    }
+
+    /** Nur wenn "Mention selected element" an ist, wird das Element überhaupt erwähnt (NFR3: nichts Verstecktes). */
+    private String currentFocusInfo() {
+        return mentionFocusBox != null && mentionFocusBox.isSelected() ? buildFocusText() : null;
     }
 
     private void addMessage(String sender, String htmlMessage) {

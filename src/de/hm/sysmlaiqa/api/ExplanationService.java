@@ -10,7 +10,7 @@ public interface ExplanationService {
      * Stellt eine Frage zum Modell.
      *
      * @param question  frei formulierte Frage des Nutzers
-     * @param modelJson exportierte Modelldaten
+     * @param modelJson exportierte Modelldaten (Inhalt im Format settings.format: JSON oder SysML-v2-Text)
      * @param focusInfo optionale Beschreibung des ausgewählten Elements, sonst null
      * @param settings  Einstellungen aus dem UI
      */
@@ -21,6 +21,26 @@ public interface ExplanationService {
 
     /** Verwirft hochgeladene Modelle (Cache). Die nächste Frage lädt das Modell neu hoch. */
     default void discardUploadedModel() { }
+
+    /** Bricht die laufende Anfrage ab (NFR4). */
+    default void cancel() { }
+
+    /** Anzahl bisheriger Frage/Antwort-Paare im aktuellen Chat. */
+    default int previousTurns() { return 0; }
+
+    /** Klartext dessen, was mit der nächsten Frage gesendet würde (FR3, NFR3). */
+    RequestPreview preview(String question, String modelContent, String focusInfo, AskSettings settings);
+
+    /** Alles, was mit der nächsten Frage an die KI ginge – im Klartext. */
+    class RequestPreview {
+        public String systemPrompt;
+        public String systemPromptSource;
+        public String modelMessage;
+        public java.util.List<String> history = new java.util.ArrayList<>();   // abwechselnd Frage, Antwort
+        public String questionMessage;
+        public String generationConfig;
+        public String transferNote;
+    }
 
     /** Ergebnis einer Anfrage inkl. Metadaten für die Auswertung. */
     class Answer {
@@ -48,6 +68,10 @@ public interface ExplanationService {
         public boolean dailyLimit = false;
         /** Hinweis für die Anzeige, z. B. "Caching not available for this model". */
         public String note = "";
+        /** Exakter Text der Frage-Nachricht (inkl. ausgewähltem Element, falls mitgeschickt). */
+        public String userMessage = "";
+        /** Frage/Antwort-Paare, die vor dieser Frage im Chat standen (0 = neuer Chat). */
+        public int previousTurns = 0;
 
         public Answer(String text, String modelUsed, boolean success, long durationMs,
                       int promptTokens, int answerTokens, String finishReason) {

@@ -2,6 +2,21 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.3 – Umsetzung des Lastenhefts V0.1
+
+Zuordnung jeder Anforderung zur Umsetzung: [`docs/LASTENHEFT_ABDECKUNG.md`](docs/LASTENHEFT_ABDECKUNG.md).
+
+- **Umfang (FR1):** neu *Selected packages / elements* mit **Choose…** (Modellbaum, Mehrfachauswahl). Bei *Selected element + surroundings* ist die Tiefe einstellbar (**Depth: relations / neighbours**).
+- **SysML v2 (FR7):** **Format** *SysML v2 (textual notation)* schreibt dasselbe Modell in SysML-v2-Notation (eigener System-Prompt, IDs als Kurznamen). Beschreibung beider Formate: [`docs/EXPORTFORMATE.md`](docs/EXPORTFORMATE.md).
+- **Größe (FR2):** exakte Tokenzahl der Modelldaten für das gewählte KI-Modell; Warnung, wenn das Eingabelimit überschritten wird.
+- **Transparenz (FR3, NFR3):** **Show request…** zeigt und speichert genau, was gesendet wird. Das ausgewählte Element wird nur noch mit *Mention selected element* gesendet.
+- **System-Prompt (FR9):** **System prompt…** zum Ansehen und Ändern je Format; eigene Fassungen liegen in `Dokumente\SysML-AI-QA\prompts`.
+- **Abbrechen (NFR4):** *Send* wird während einer Anfrage zu **Stop**; *Stop test run* bricht auch die laufende Anfrage ab.
+- **Fehlermeldungen (FR12):** konkrete Meldungen bei nicht erreichbarer API, zu großem Export und leerer Antwort (leere Antworten zählen nicht mehr als Erfolg).
+- **Sprache (NFR5):** „Answer in the language of the question“ ist aus dem Standard-Prompt entfernt. Neue `system_prompt_sha` – Ergebnisse vor und nach 3.3 nicht direkt vergleichen.
+- **Log (FR11):** neue Spalten `system_prompt_source`, `export_format`, `export_scope_detail`, `export_tokens_est`, `export_tokens_exact`, `previous_turns`, `user_message`. Ein altes `answers_log.csv` wird umbenannt (`_old_…`), es geht nichts verloren.
+- Nicht in CATIA getestet, sondern gegen nachgebildete CATIA-Schnittstellen kompiliert und mit simuliertem Gemini-Server geprüft.
+
 ## v3.2.1 – Fenster nicht mehr immer im Vordergrund
 
 - Chat-Fenster und API-Key-Fenster waren „always on top“ und lagen über allen Programmen, auch bei minimiertem CATIA. Jetzt gehören sie zum CATIA-Hauptfenster: Sie bleiben über CATIA (man kann weiter im Modell klicken), werden mit CATIA minimiert und liegen nicht mehr über anderen Programmen.

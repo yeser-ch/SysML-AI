@@ -47,7 +47,7 @@ function Fwd($p) { return ($p -replace '\\', '/') }
 # Paket prüfen
 # ─────────────────────────────────────────────────────────────────────────────
 $need = @($JarName, 'plugin.xml', 'data_extraction/sysml_flat_export.vm',
-          'data_extraction/sysml_partial_export.vm', 'prompts/System_Prompt.md')
+          'data_extraction/sysml_partial_export.vm', 'prompts/System_Prompt.md', 'prompts/System_Prompt_v2.md')
 $missing = @($need | Where-Object { -not (Test-Path (Join-Path $SourceDir $_)) })
 if ($missing.Count -gt 0) {
     Fail ("Im Ordner '$SourceDir' fehlen Dateien: $($missing -join ', ').`n" +
@@ -241,6 +241,8 @@ try {
     } else {
         Copy-Item $newPrompt $installedPrompt -Force
     }
+    # System-Prompt für SysML v2 (immer aktuell; eigene Änderungen macht man im Plugin-Fenster unter "System prompt…")
+    Copy-Item (Join-Path $SourceDir 'prompts/System_Prompt_v2.md') (Join-Path $promptsDir 'System_Prompt_v2.md') -Force
 } catch {
     $msg = $_.Exception.Message
     if ($msg -match 'verweigert|denied|UnauthorizedAccess') {

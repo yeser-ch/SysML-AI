@@ -34,8 +34,36 @@ public class DataExtractionService {
     public enum Scope {
         /** Gesamtes Primärmodell (ohne SysML/UML-Bibliotheken) – Standard. */
         FULL_MODEL,
-        /** Nur das ausgewählte Element plus Umgebung (alte "Model View"-Tiefen). */
+        /** Ausgewählte Pakete oder Elemente, jeweils mit allem, was sie enthalten (FR1.2). */
+        SELECTION,
+        /** Nur das ausgewählte Element plus Umgebung mit einstellbarer Tiefe (FR1.3). */
         FOCUS_NEIGHBOURHOOD
+    }
+
+    /** Standardtiefen der Element-Umgebung (wie bisher fest eingestellt). */
+    public static final int DEFAULT_RELATION_DEPTH = 5;
+    public static final int DEFAULT_SIBLING_DEPTH = 3;
+
+    /** Ältere Aufrufe: ganzes Modell bzw. Umgebung mit Standardtiefe. */
+    public static File exportModel(Project currentProject, Element focusElement, Scope scope) {
+        return exportModel(currentProject, focusElement, scope, null, DEFAULT_RELATION_DEPTH, DEFAULT_SIBLING_DEPTH);
+    }
+
+    /**
+     * Entfernt Elemente, deren Besitzer (direkt oder indirekt) ebenfalls ausgewählt ist –
+     * sonst stünden sie doppelt im Export.
+     */
+    public static java.util.List<Element> topLevelRoots(java.util.Collection<Element> selection) {
+        java.util.Set<Element> set = new java.util.LinkedHashSet<>(selection);
+        java.util.List<Element> out = new java.util.ArrayList<>();
+        for (Element e : set) {
+            boolean nested = false;
+            for (Element o = e.getOwner(); o != null; o = o.getOwner()) {
+                if (set.contains(o)) { nested = true; break; }
+            }
+            if (!nested) out.add(e);
+        }
+        return out;
     }
 
     /**
@@ -43,10 +71,14 @@ public class DataExtractionService {
      *
      * @param currentProject Das aktuell geöffnete Projekt.
      * @param focusElement   Ausgewähltes Element (nur für FOCUS_NEIGHBOURHOOD nötig, sonst ignoriert).
-     * @param scope          FULL_MODEL oder FOCUS_NEIGHBOURHOOD.
+     * @param scope          FULL_MODEL, SELECTION oder FOCUS_NEIGHBOURHOOD.
+     * @param roots          bei SELECTION: die ausgewählten Pakete/Elemente
+     * @param relationDepth  bei FOCUS_NEIGHBOURHOOD: wie viele Beziehungsschritte vom Element aus verfolgt werden
+     * @param siblingDepth   bei FOCUS_NEIGHBOURHOOD: über wie viele Besitzer-Ebenen Nachbarelemente gesammelt werden
      * @return die erzeugte Datei oder null bei einem Fehler.
      */
-    public static File exportModel(Project currentProject, Element focusElement, Scope scope) {
+    public static File exportModel(Project currentProject, Element focusElement, Scope scope,
+                                   java.util.List<Element> roots, int relationDepth, int siblingDepth) {
         GUILog log = Application.getInstance().getGUILog();
 
         if (currentProject == null) {
@@ -57,10 +89,14 @@ public class DataExtractionService {
             log.log("[DataExtractionService] No element selected - exporting the whole model instead.");
             scope = Scope.FULL_MODEL;
         }
+        if (scope == Scope.SELECTION && (roots == null || roots.isEmpty())) {
+            log.log("[DataExtractionService] Nothing selected - exporting the whole model instead.");
+            scope = Scope.FULL_MODEL;
+        }
 
         try {
             File baseDir = getBaseDirectory(currentProject);
-            boolean full = scope == Scope.FULL_MODEL;
+            boolean full = scope != Scope.FOCUS_NEIGHBOURHOOD;   // SELECTION nutzt das Flat-Template mit Startelementen
             String selectedTemplate = full ? TEMPLATE_NAME_FULL : TEMPLATE_NAME_PARTIAL;
             log.log("[DataExtractionService] Starting JSON export (" + scope + ", Template " + selectedTemplate + ")");
 
@@ -79,7 +115,8 @@ public class DataExtractionService {
             }
 
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            File outputFile = new File(targetDir, "export_" + (full ? "full_" : "focus_") + timestamp + ".json");
+            String kind = scope == Scope.FULL_MODEL ? "full_" : scope == Scope.SELECTION ? "selection_" : "focus_";
+            File outputFile = new File(targetDir, "export_" + kind + timestamp + ".json");
 
             ITemplateEngine engine = new TextEngine();
             try {
@@ -87,13 +124,17 @@ public class DataExtractionService {
                 engine.addContext("stringUtil", new StringCleaner());
                 engine.addContext("debugUtil", new DebugLogger(log));
 
-                if (full) {
+                if (scope == Scope.FULL_MODEL) {
                     // Kein "element" im Kontext -> das Flat-Template läuft über das gesamte Primärmodell.
                     log.log("[DataExtractionService] Scope: whole model");
+                } else if (scope == Scope.SELECTION) {
+                    java.util.List<Element> top = topLevelRoots(roots);
+                    engine.addContext("roots", top);
+                    log.log("[DataExtractionService] Scope: " + top.size() + " selected package(s)/element(s)");
                 } else {
                     engine.addContext("centerElement", focusElement);
-                    engine.addContext("maxDependencyDepth", 5);
-                    engine.addContext("maxSiblingDepth", 3);
+                    engine.addContext("maxDependencyDepth", Math.max(0, relationDepth));
+                    engine.addContext("maxSiblingDepth", Math.max(0, siblingDepth));
                     engine.addContext("maxSiblingOwnedDepth", 0);
                     log.log("[DataExtractionService] Scope: surroundings of " + focusElement.getHumanName());
                 }
