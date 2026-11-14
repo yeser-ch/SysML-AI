@@ -69,7 +69,7 @@ Erzeugt von den Velocity-Templates `sysml_flat_export.vm` (ganzes Modell, Auswah
 4. **Ausgabe:** `Dokumente\SysML-AI-QA\exports\export_<full|selection|focus>_<Zeit>.json` (wird beim Schließen von CATIA gelöscht).
 5. **Weiterverarbeitung im Plugin** (`ModelExport`): Elemente und Beziehungen zählen, alle IDs für den ID-Check sammeln, Prüfsumme bilden (`export_sha`), je nach Format in SysML-v2-Text umwandeln (Abschnitt 4), exakte Tokens bei Google zählen. Beim ersten Senden wird der übertragene Inhalt im Archiv gespeichert.
 
-**Wann exportiert wird:** beim Öffnen des Fensters, bei Änderung von *Context* oder *Depth* und bei **Resend model**. Änderungen in CATIA erkennt das Plugin nicht von selbst.
+**Wann exportiert wird:** nur beim Klick auf **Export model** bzw. **Resend model**. Nach einer Änderung von *Context* oder *Depth* sperrt das Plugin das Senden, bis neu exportiert wurde. Änderungen in CATIA erkennt das Plugin nicht von selbst.
 
 ```json
 {

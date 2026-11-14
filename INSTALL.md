@@ -135,13 +135,11 @@ Fehlt die Zeile, ist das Plugin nicht geladen (siehe [Wenn etwas nicht klappt](#
 
 Ein Projekt öffnen. Dann gibt es zwei Wege:
 
-**Rechtsklick** auf ein Element im Containment Tree oder in einem Diagramm → **Ask AI (SysML AI Q&A)** →
-- **Ask AI about the model…**: Fragen zum ganzen Modell
-- **Ask AI about this element…**: Fragen zu genau diesem Element und seiner Umgebung
+**Rechtsklick** auf ein Element im Containment Tree oder in einem Diagramm → **Ask AI (SysML AI Q&A)** → **Ask AI…**. Im Fenster wählst du unter *Context*, ob das ganze Modell, ausgewählte Pakete oder nur dieses Element mit Umgebung an die KI geht, und klickst **Export model**.
 
 ![Rechtsklick-Menü im Containment Tree](docs/images/start-03-context-menu.png)
 
-**Menüleiste:** ganz rechts **Ask AI** → *Ask AI about the model…*, *Ask AI about the selected element…* oder *SysML AI Q&A – API key…*. Das funktioniert auch, wenn ein Element in einer Tabelle markiert ist.
+**Menüleiste:** ganz rechts **Ask AI** → *Ask AI…* oder *SysML AI Q&A – API key…*. Das funktioniert auch, wenn ein Element in einer Tabelle markiert ist.
 
 ![Menüleiste mit „Ask AI“](docs/images/start-04-menu-bar.png)
 

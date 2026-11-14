@@ -25,20 +25,22 @@ Dieses Handbuch erklärt das Plugin-Fenster nach der Installation: wo jede Einst
 
 ## 1. Fenster öffnen
 
-| Wo | Menüpunkt | Was die KI bekommt (änderbar unter *Context*) |
+Es gibt **einen** Menüeintrag, **Ask AI…**:
+
+| Wo | Menüpunkt | Ausgewähltes Element |
 | --- | --- | --- |
-| Rechtsklick im Containment Tree oder in einem Diagramm | **Ask AI (SysML AI Q&A) → Ask AI about the model…** | das ganze Modell |
-| Rechtsklick auf ein Element | **Ask AI (SysML AI Q&A) → Ask AI about this element…** | dieses Element mit seiner Umgebung |
-| Menüleiste | **Ask AI → Ask AI about the model…** | das ganze Modell |
-| Menüleiste, Element vorher markiert (auch in einer Tabelle) | **Ask AI → Ask AI about the selected element…** | das markierte Element mit Umgebung |
+| Rechtsklick im Containment Tree oder in einem Diagramm | **Ask AI (SysML AI Q&A) → Ask AI…** | das angeklickte Element |
+| Menüleiste | **Ask AI → Ask AI…** | das gerade markierte Element (auch eine Tabellenzeile), sonst keins |
 
 In einer **Requirement-Tabelle** erscheint beim Rechtsklick kein Eintrag. Dann die Zeile markieren und den Weg über die Menüleiste nehmen.
 
-Beim Öffnen exportiert das Plugin das Modell aus CATIA. Das dauert je nach Modellgröße einige Sekunden. Danach steht im Einstellungsbereich **Model ready (SysML v1): …** mit der Anzahl der Elemente und Beziehungen, der Größe und den Tokens. Kurz darauf ergänzt das Plugin die **exakte** Tokenzahl für das gewählte KI-Modell (*exact … for …*).
+Das Fenster öffnet sich **ohne Export**. Zuerst **Context** (ganzes Modell, ausgewählte Pakete oder ausgewähltes Element mit Umgebung) und **Format** wählen, dann **Export model** klicken. Erst jetzt exportiert das Plugin aus CATIA; das dauert je nach Modellgröße einige Sekunden. Danach steht im Einstellungsbereich **Model ready (SysML v1): …** mit der Anzahl der Elemente und Beziehungen, der Größe und den Tokens. Kurz darauf ergänzt das Plugin die **exakte** Tokenzahl für das gewählte KI-Modell (*exact … for …*). Der Context vom letzten Mal ist voreingestellt.
 
 ![Das Plugin-Fenster in CATIA nach dem Export (Fenster für ein Element)](docs/images/start-05-plugin-window.png)
 
-Das Fenster für das **ganze Modell** sieht genauso aus, nur steht oben *Ask the AI about your SysML model* und *Context* auf *Whole model*. Ist beim Öffnen ein Element markiert, steht es trotzdem oben (*Selected element: …*), und **Mention selected element** lässt sich einschalten. Während des Exports sind *Context*, *Format* und *Run test suite…* ausgegraut, unten steht *Busy…*. Sobald **Model ready** erscheint, ist alles bedienbar.
+Oben steht das ausgewählte Element (*Selected element: …*) oder, wenn keins ausgewählt ist, ein Hinweis. Ohne ausgewähltes Element ist im Context-Feld *Selected element + surroundings* **grau**; beim Darüberfahren steht der Grund. Mit **Use selection** übernimmt das Plugin das gerade in CATIA markierte Element, ohne dass das Fenster neu geöffnet werden muss. Während des Exports sind *Context*, *Format* und *Run test suite…* ausgegraut, unten steht *Busy…*. Sobald **Model ready** erscheint, ist alles bedienbar.
+
+**Context nach dem Export geändert?** Dann steht in der Statuszeile *Context changed – click 'Export model'*, und *Send* sowie *Run test suite…* sind gesperrt, bis neu exportiert wurde. So passt das Protokoll immer zum gesendeten Modell. Ein Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (converted from v1)* braucht keinen neuen Export.
 
 ![Das Fenster für das ganze Modell in CATIA, während der Export läuft](docs/images/start-06-plugin-window-model.png)
 
@@ -72,11 +74,11 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 1 | **AI model** | Welches Gemini-Modell antwortet. Auswählen oder eine Modell-ID eintippen. Vorgeschlagen sind `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` und `gemini-3.1-flash-lite`. Ein Wechsel zählt die Tokens für das neue Modell nach | `gemini-3.8-flash` |
 | 2 | **Refresh** | Lädt die Liste aller Modelle, die für deinen API-Key verfügbar sind. Wichtig für den Vergleich verschiedener Modellgrößen | – |
 | 3 | **Thinking** | Wie viel die KI vor der Antwort „nachdenkt“: *Model default*, *Minimal*, *Low*, *Medium*, *High*. Weniger Denken ist schneller, kann aber bei indirekten Zusammenhängen schlechter sein. Kann ein Modell die Stufe nicht, wird der Modell-Standard genommen (steht im Log) | Model default |
-| 4 | **Context** | Welcher Teil des Modells an die KI geht: *Whole model*, *Selected packages / elements* oder *Selected element + surroundings*. Ein Wechsel startet einen neuen Export. Details in [Abschnitt 4](#4-umfang-und-format-wählen) | je nach Menüpunkt |
-| 5 | **Choose…** | Nur bei *Selected packages / elements*: Pakete oder Elemente im Modellbaum auswählen | – |
+| 4 | **Context** | Welcher Teil des Modells an die KI geht: *Whole model*, *Selected packages / elements* oder *Selected element + surroundings* (grau, solange kein Element ausgewählt ist). Nach einem Wechsel **Export model** klicken. Details in [Abschnitt 4](#4-umfang-und-format-wählen) | wie zuletzt |
+| 5 | **Choose…** / **Use selection** | *Choose…* (nur bei *Selected packages / elements*): Pakete oder Elemente im Modellbaum auswählen. *Use selection*: das in CATIA markierte Element übernehmen und Context auf *Selected element + surroundings* stellen | – |
 | 6 | **Temperature** | Zufälligkeit der Antwort, 0 bis 2. *0* = möglichst gleiche Antworten bei gleicher Frage (empfohlen für Messungen), höher = abwechslungsreicher | 0 |
 | 7 | **Format** | Welches Modell in welcher Form gesendet wird: *SysML v1 (JSON export)* für SysML-v1-Modelle, *SysML v2 (converted from v1)* für dasselbe v1-Modell in SysML-v2-Schreibweise, *SysML v2 model (CATIA export)* für **SysML-v2-Projekte** (siehe [Abschnitt 4](#4-umfang-und-format-wählen)). Jedes Format hat einen eigenen System-Prompt | SysML v1 |
-| 8 | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10) und über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Nach einer Änderung exportiert das Plugin kurz darauf neu | 5 / 3 |
+| 8 | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10) und über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Nach einer Änderung **Export model** klicken | 5 / 3 |
 | 9 | **Max tokens** | Maximale Länge der Antwort, inklusive internem Nachdenken. Wird eine Antwort abgeschnitten, steht ein Hinweis darunter: dann erhöhen | 8.192 |
 | 10 | **Upload model once** | An: System-Prompt und Modell werden mit der ersten Frage einmal bei Google hochgeladen (60 Minuten gültig), danach geht nur noch die Frage raus. Das spart Übertragung und Zeit; der Inhalt der Anfrage bleibt gleich. Nicht jedes Modell erlaubt das im Free Tier (z. B. Flash-Lite), dann wird das Modell automatisch mit jeder Frage geschickt | an |
 | 11 | **Grounding** | Erlaubt der KI eine Google-Suche. Für Messungen **aus** lassen, denn die Antwort soll nur aus dem Modell kommen | aus |
@@ -87,7 +89,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 16 | **Run test suite…** | Startet einen Testlauf mit Fragen aus einer CSV-Datei (siehe [Abschnitt 10](#10-testlauf-mit-vielen-fragen)). Während des Laufs heißt der Button *Stop test run* | – |
 | 17 | **Repetitions** | Wie oft jede Frage gestellt wird (1–20), jedes Mal in einem neuen Chat. Mehr als 1 zeigt, wie stabil die Antworten sind | 1 |
 | 18 | **Statuszeile** | Format, Anzahl Elemente und Beziehungen, Größe, geschätzte Tokens, die **exakte** Tokenzahl für das gewählte KI-Modell und eine Prüfsumme (`export …`). Nach dem Hochladen zusätzlich *uploaded for …*. Ist das Modell größer als das Eingabelimit des KI-Modells, wird die Zeile rot. Mit der Maus darüberfahren zeigt den vollen Text und den Umfang | – |
-| 19 | **Resend model** | Exportiert das Modell neu aus CATIA und lädt es mit der nächsten Frage neu hoch. **Nach jeder Änderung am Modell in CATIA klicken**, sonst antwortet die KI zum alten Stand | – |
+| 19 | **Export model** / **Resend model** | Exportiert den gewählten Context aus CATIA. Vor dem ersten Export und nach einer Änderung des Contexts heißt der Button *Export model*, sonst *Resend model*. Lädt das Modell mit der nächsten Frage neu hoch. **Nach jeder Änderung am Modell in CATIA klicken**, sonst antwortet die KI zum alten Stand | – |
 | 20 | **Show request…** | Zeigt genau, was mit der nächsten Frage gesendet wird, und speichert es auf Wunsch (siehe [Abschnitt 7](#7-sehen-und-ändern-was-gesendet-wird)) | – |
 | 21 | **System prompt…** | System-Prompt je Format ansehen und ändern (siehe [Abschnitt 7](#7-sehen-und-ändern-was-gesendet-wird)) | – |
 | 22 | **API key…** | API-Key ansehen oder ändern | – |
@@ -98,7 +100,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 27 | **Send / Stop** | Frage abschicken. Während die KI arbeitet, steht dort **Stop**: bricht die Anfrage sofort ab | – |
 | 28 | **New chat** | Löscht den Chatverlauf. Das exportierte Modell bleibt geladen | – |
 
-**Wann wird das Modell automatisch neu hochgeladen?** Wenn sich das KI-Modell, Context, Format, Depth, der System-Prompt, der ID-Check oder Grounding ändert, oder nach *Resend model*. Grund: Diese Dinge gehören zum hochgeladenen Paket.
+**Wann wird das Modell neu hochgeladen?** Nach jedem Export (*Export model* / *Resend model*) und automatisch, wenn sich das KI-Modell, das Format, der System-Prompt, der ID-Check oder Grounding ändert. Grund: Diese Dinge gehören zum hochgeladenen Paket.
 
 ---
 
@@ -136,7 +138,7 @@ In CATIA kann man SysML-v1- und SysML-v2-Modelle anlegen. Das Plugin kann beide 
 
 **Ein SysML-v2-Modell schicken:**
 
-1. In CATIA das SysML-v2-Projekt öffnen und das Plugin über **Ask AI → Ask AI about the model…** öffnen.
+1. In CATIA das SysML-v2-Projekt öffnen und das Plugin über **Ask AI → Ask AI…** öffnen.
 2. **Format** auf **SysML v2 model (CATIA export)** stellen.
 3. **Export in CATIA…** (B) klicken. Es öffnet sich der Export von CATIA (*File → Export To → SysML v2 Textual Notation*). Dort die Namespaces wählen, einen Ordner angeben und **Export** klicken.
 4. Im Plugin **Files…** (A) klicken und den Ordner oder die `.sysml`-Dateien wählen. Mehrere Dateien werden zu einem Text zusammengefasst, jede beginnt mit `// ===== File: … =====`.
@@ -231,7 +233,7 @@ Eigene Fassungen liegen unter `Dokumente\SysML-AI-QA\prompts`. Der System-Prompt
 
 ## 8. Fragen zu einem Element
 
-Über **Ask AI about this element…** (Rechtsklick) oder **Ask AI about the selected element…** (Menüleiste) öffnet sich das Fenster für ein einzelnes Element:
+Element per Rechtsklick → **Ask AI…** öffnen (oder im offenen Fenster das Element in CATIA markieren und **Use selection** klicken), *Context* auf **Selected element + surroundings** stellen und **Export model** klicken:
 
 ![Fenster für ein einzelnes Element](docs/images/window-element.png)
 
@@ -381,7 +383,7 @@ Grundregel: Pro Experiment genau **eine** Größe ändern, z. B. nur das KI-Mode
 ## 14. Häufige Fragen
 
 **Die Antwort bezieht sich auf einen alten Stand des Modells.**
-Nach Änderungen in CATIA **Resend model** klicken. Das Fenster arbeitet mit dem Export vom Öffnen.
+Nach Änderungen in CATIA **Resend model** klicken. Das Fenster arbeitet mit dem letzten Export.
 
 **Die erste Antwort dauert lange, die weiteren gehen schneller.**
 Normal: Bei der ersten Frage wird das Modell hochgeladen. Schneller geht es mit kleinerem *Context*, weniger *Thinking* oder einem kleineren Modell.
