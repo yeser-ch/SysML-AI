@@ -1,0 +1,95 @@
+# Baut das Plugin bei jedem Push und veröffentlicht das Paket als neuestes Release (Latest).
+# GitHub hat kein CATIA: Kompiliert wird gegen die Signaturen in ci/catia-stubs
+# (erzeugt mit tools/update-catia-stubs.bat, Beschreibung in INSTALL.md).
+name: Release
+
+on:
+  push:
+    branches: [main, feature/free-prompt-full-model]
+    paths-ignore:
+      - 'Catia_Model/**'
+      - 'evaluation/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Signaturen vorhanden?
+        id: stubs
+        run: |
+          if [ -n "$(find ci/catia-stubs/src -name '*.java' -print -quit 2>/dev/null)" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ci/catia-stubs fehlt noch. Einmalig tools/update-catia-stubs.bat auf einem PC mit CATIA ausführen und den Ordner pushen."
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.stubs.outputs.ok == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: CATIA-Signaturen kompilieren
+        if: steps.stubs.outputs.ok == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/catia/lib" "$RUNNER_TEMP/catia/bin" "$RUNNER_TEMP/catia/plugins" "$RUNNER_TEMP/stubs"
+          find ci/catia-stubs/src -name '*.java' > "$RUNNER_TEMP/stubs.txt"
+          javac --release 21 -encoding UTF-8 -nowarn -proc:none -d "$RUNNER_TEMP/stubs" @"$RUNNER_TEMP/stubs.txt"
+          jar cf "$RUNNER_TEMP/catia/lib/md_api.jar" -C "$RUNNER_TEMP/stubs" .
+
+      - name: Plugin bauen
+        if: steps.stubs.outputs.ok == 'true'
+        shell: pwsh
+        run: |
+          ./build.ps1 -CatiaDir "$env:RUNNER_TEMP/catia" -NoInstall -NonInteractive
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Build fehlgeschlagen. Verwendet der Code neue CATIA-Klassen oder -Methoden? Dann tools/update-catia-stubs.bat ausführen und ci/catia-stubs pushen."
+            exit 1
+          }
+
+      - name: Release veröffentlichen
+        if: steps.stubs.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          zip=$(ls dist/SysML-AI-QA_v*.zip | head -n1)
+          version=$(basename "$zip" .zip); version=${version#SysML-AI-QA_v}
+          tag="v$version"; short=${version%%-*}
+          base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME"
+
+          # Release-Text: Abschnitt "## v<Version>" aus AENDERUNGEN.md
+          section=$(awk -v v="$short" '
+            /^## / { if (take) exit; if ($0 ~ "^## v" v "([ \t]|$)") { take=1; next } }
+            take { print }' AENDERUNGEN.md)
+          {
+            echo "## Installation"
+            echo "Unten bei **Assets** die Datei \`$(basename "$zip")\` laden, entpacken und \`install.bat\` starten. Anleitung: [INSTALL.md]($base/INSTALL.md)."
+            echo "Eine vorhandene Version wird überschrieben; API-Key und Ergebnisse bleiben erhalten."
+            if [ -n "$section" ]; then echo; echo "## Neu in $version"; echo "$section"; fi
+            echo
+            echo "Stand: \`${GITHUB_SHA::7}\` · Alle Änderungen: [AENDERUNGEN.md]($base/AENDERUNGEN.md)"
+          } > notes.md
+
+          # Tag auf den gebauten Stand setzen (bei gleicher Version wird er nachgezogen)
+          git tag -f "$tag" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$tag"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$zip" --clobber
+            gh release edit "$tag" --title "SysML AI Q&A $version" --notes-file notes.md --latest
+          else
+            gh release create "$tag" "$zip" --verify-tag --title "SysML AI Q&A $version" --notes-file notes.md --latest
+          fi
+          echo "Release $tag: https://github.com/$GITHUB_REPOSITORY/releases/latest" >> "$GITHUB_STEP_SUMMARY"

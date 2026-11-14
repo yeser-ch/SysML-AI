@@ -84,7 +84,7 @@ Nach jeder Änderung an `.java`-Dateien muss neu gebaut werden. Den System-Promp
 - Neue Arbeit in einem eigenen Branch davon beginnen (z. B. `feature/<thema>`) und per Pull Request zurückführen. So bleibt der gemeinsame Stand lauffähig.
 - Vor dem Pull Request einmal bauen und in CATIA testen.
 - Bei einer neuen Version `PLUGIN_VERSION` in `api/EvaluationRecord.java` erhöhen. Sie steht in jeder Log-Zeile und macht Messungen eindeutig zuordenbar.
-- Neue Versionen für andere als Release mit dem Paket aus `dist\` veröffentlichen (siehe [`INSTALL.md`](INSTALL.md)).
+- Das Release für andere baut GitHub nach jedem Push automatisch (siehe [`INSTALL.md`](INSTALL.md), Abschnitt *Neue Version an andere verteilen*).
 
 ---
 
