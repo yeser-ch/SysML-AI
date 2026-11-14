@@ -80,7 +80,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 5 | **Choose…** / **Take CATIA selection** | *Choose…* (nur bei *Selected packages / elements*): Pakete oder Elemente im Modellbaum auswählen. *Take CATIA selection*: das in CATIA markierte Element übernehmen und Context auf *Selected element + surroundings* stellen | – |
 | 6 | **Temperature** | Zufälligkeit der Antwort, 0 bis 2. *0* = möglichst gleiche Antworten bei gleicher Frage (empfohlen für Messungen), höher = abwechslungsreicher | 0 |
 | 7 | **Format** | Welches Modell in welcher Form gesendet wird: *SysML v1 (JSON export)* für SysML-v1-Modelle, *SysML v2 (converted from v1)* für dasselbe v1-Modell in SysML-v2-Schreibweise, *SysML v2 model (CATIA export)* für **SysML-v2-Projekte** (siehe [Abschnitt 4](#4-umfang-und-format-wählen)). Jedes Format hat einen eigenen System-Prompt | SysML v1 |
-| 8 | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10) und über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Nach einer Änderung **Export model** klicken | 5 / 3 |
+| 8 | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10) und über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Beispiel: [Was gehört zur Umgebung?](#was-gehört-zur-umgebung-depth-erklärt). Nach einer Änderung **Export model** klicken | 5 / 3 |
 | 9 | **Max tokens** | Maximale Länge der Antwort, inklusive internem Nachdenken. Wird eine Antwort abgeschnitten, steht ein Hinweis darunter: dann erhöhen | 8.192 |
 | 10 | **Upload model once** | An: System-Prompt und Modell werden mit der ersten Frage einmal bei Google hochgeladen (60 Minuten gültig), danach geht nur noch die Frage raus. Das spart Übertragung und Zeit; der Inhalt der Anfrage bleibt gleich. Nicht jedes Modell erlaubt das im Free Tier (z. B. Flash-Lite), dann wird das Modell automatisch mit jeder Frage geschickt | an |
 | 11 | **Grounding** | Erlaubt der KI eine Google-Suche. Für Messungen **aus** lassen, denn die Antwort soll nur aus dem Modell kommen | aus |
@@ -115,6 +115,61 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | **Whole model** | alles außer den SysML/UML-Bibliotheken | Standard für Messungen: alle Fragen haben dieselbe Grundlage |
 | **Selected packages / elements** | nur die gewählten Pakete oder Elemente, jeweils mit allem, was sie enthalten | Einfluss der Modellgröße untersuchen; große Modelle unter das Eingabelimit eines kleinen KI-Modells bringen |
 | **Selected element + surroundings** | das Element, seine Besitzer, Nachbarn und verbundene Elemente bis zur eingestellten Tiefe (*Depth*) | Fragen zu einem Element; untersuchen, ob mehr Kontext hilft |
+
+### Was gehört zur Umgebung? (*Depth* erklärt)
+
+Bei **Selected element + surroundings** entscheidest du zwei Dinge: **welches Element** (Rechtsklick → *Ask AI…* oder **Take CATIA selection**) und **wie weit die Umgebung reicht** (*Depth*). Was dann genau mitgeht, legt das Plugin nach festen Regeln fest (`sysml_partial_export.vm`); bei gleichem Modell und gleichen Einstellungen ist der Export immer gleich.
+
+Beispiel: ausgewählt ist der Block *Babyeinheit*.
+
+```
+Modell
+└── 03_Subsysteme                     ← Ebene 3 nach oben
+    ├── 02_Elterneinheit               (Nachbar auf Ebene 3)
+    └── 01_Babyeinheit                 ← Ebene 2 nach oben
+        ├── 02_Functions               (Nachbar auf Ebene 2)
+        └── 03_Logical_Structure       ← Ebene 1 nach oben
+            ├── Kamera                 (Nachbar auf Ebene 1)
+            └── ★ Babyeinheit          ← ausgewähltes Element
+                ├── kamera : Kamera    ← Ebene 1 nach unten
+                │   └── …              ← Ebene 2 nach unten
+                └── Betriebszustände   ← Ebene 1 nach unten
+```
+
+**Relation depth** (Standard 5) begrenzt drei Richtungen gleichzeitig:
+
+1. **Nach unten:** wie viele Ebenen Inhalt mitkommen. Bei 1 nur das, was direkt in *Babyeinheit* liegt (*kamera*, *Betriebszustände*), bei 2 auch deren Inhalt.
+2. **Nach oben:** wie viele Pakete darüber mitkommen. Bei 1 nur *03_Logical_Structure*, bei 3 auch *01_Babyeinheit* und *03_Subsysteme*.
+3. **Entlang von Beziehungen** (in beide Richtungen): wie viele Schritte.
+   - Schritt 1: *Babyeinheit* «satisfy» → Systemanforderung 7
+   - Schritt 2: Anforderung 7 «deriveReqt» → Stakeholder-Anforderung 2.13
+   - Schritt 3: Anforderung 2.13 ← «verify» Testfall …
+
+   Elemente, die nur über eine Beziehung dazukommen, bringen ihren Inhalt und ihre Pakete **nicht** mit.
+
+**Neighbour depth** (Standard 3) legt fest, auf wie vielen Ebenen nach oben die **Nachbarn** mitkommen, also die anderen Elemente im selben Paket:
+
+| Neighbour depth | Nachbarn im Beispiel |
+| --- | --- |
+| 0 | keine |
+| 1 | *Kamera* (im eigenen Paket) |
+| 2 | zusätzlich *02_Functions* |
+| 3 | zusätzlich *02_Elterneinheit* |
+
+Von einem Nachbarn kommt **nur der Nachbar selbst** mit (Name, Typ, Dokumentation), nicht sein Inhalt: Von *02_Elterneinheit* sieht die KI nur, dass es das Paket gibt, nicht die Blöcke darin. Neighbour depth wirkt höchstens so weit nach oben wie *Relation depth* (bei Relation depth 1 gibt es nur Nachbarn auf Ebene 1).
+
+**Welche Beziehungen verfolgt werden**, hängt vom Typ des jeweiligen Elements ab:
+
+| Elementtyp | verfolgte Beziehungen |
+| --- | --- |
+| Block, Value Type, Constraint Block | Abhängigkeiten (z. B. «satisfy», «allocate», «refine»), Assoziationen, Generalisierungen, Typen von Properties und Ports, Konnektoren, Interface-Realisierungen |
+| Requirement, Test Case, Use Case, Actor | Abhängigkeiten (z. B. «deriveReqt», «satisfy», «verify», «refine», «trace»), Generalisierungen |
+| Activity und Aktionen | Abhängigkeiten, Knoten und Flüsse der Activity, aufgerufene Verhalten |
+| alle anderen | nur Generalisierungen |
+
+**Nachsehen, was mitgeht:** Nach **Export model** zeigt die Statuszeile Anzahl der Elemente, Beziehungen und Tokens. Unter **Show request…** steht bei jedem Element `partial_source` (warum es dabei ist: `center` = ausgewähltes Element, `owned_element` = liegt darin, `parent_hierarchy` = Paket darüber, `sibling_via_parent` = Nachbar, alles andere = über eine Beziehung, z. B. `dependency_outgoing`, `association`) und `partial_depth` (nach wie vielen Schritten gefunden).
+
+**Faustregel:** *Relation depth* = wie tief und wie weit verknüpft, *Neighbour depth* = wie viel Umfeld zur Orientierung. Für Fragen zu einem einzelnen Block reichen oft Relation depth 1–2 und Neighbour depth 1. Für Rückverfolgbarkeit über mehrere Ebenen (Stakeholder-Anforderung → Systemanforderung → Testfall) braucht es eine höhere Relation depth. In einem stark vernetzten Modell erreicht Relation depth 5 schnell fast das ganze Modell.
 
 **Pakete oder Elemente wählen:**
 

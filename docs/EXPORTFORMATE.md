@@ -66,6 +66,7 @@ Erzeugt von den Velocity-Templates `sysml_flat_export.vm` (ganzes Modell, Auswah
    - über Beziehungen in beide Richtungen (aus- und eingehende Abhängigkeiten, Assoziationen, Generalisierungen/Spezialisierungen, Attribute, Ports) bis zur Tiefe *Depth: relations* (Standard 5),
    - zur Seite: Nachbarelemente über die Besitzer bis *Depth: neighbours* (Standard 3).
    - Jedes Element erhält zusätzlich `partial_source` und `partial_depth` (über welchen Weg, in welcher Tiefe gefunden).
+   - Ausführliches Beispiel mit Baum und Tabellen: [`HANDBUCH.md`, „Was gehört zur Umgebung?“](../HANDBUCH.md#was-gehört-zur-umgebung-depth-erklärt).
 4. **Ausgabe:** `Dokumente\SysML-AI-QA\exports\export_<full|selection|focus>_<Zeit>.json` (wird beim Schließen von CATIA gelöscht).
 5. **Weiterverarbeitung im Plugin** (`ModelExport`): Elemente und Beziehungen zählen, alle IDs für den ID-Check sammeln, Prüfsumme bilden (`export_sha`), je nach Format in SysML-v2-Text umwandeln (Abschnitt 4), exakte Tokens bei Google zählen. Beim ersten Senden wird der übertragene Inhalt im Archiv gespeichert.
 
