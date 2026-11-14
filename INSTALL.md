@@ -165,7 +165,7 @@ Wie es weitergeht und was jede Einstellung bedeutet, steht im **[Benutzerhandbuc
 
 | Skript | Was es tut |
 | --- | --- |
-| `update.bat` | lädt den neuesten Stand des Branches `feature/free-prompt-full-model` von GitHub, baut ihn und installiert ihn. Legt außerdem das Paket für Weg A unter `dist\` ab. Ein Git-Clone ist dafür nicht nötig. |
+| `update.bat` | lädt den neuesten Stand des Branches `feature/free-prompt-full-model` von GitHub, baut ihn und installiert ihn. Legt außerdem das Paket für Weg A unter `dist\` ab und veröffentlicht es als neuestes GitHub-Release (siehe [Team](#neue-version-an-andere-verteilen-team)). Ein Git-Clone ist dafür nicht nötig. |
 | `build.bat` | baut den Code aus dem eigenen Ordner (für lokale Änderungen), legt das Paket unter `dist\` ab und installiert es |
 | `install.bat` | installiert nur, ohne zu bauen (das ist der Weg A) |
 
@@ -186,20 +186,33 @@ Dieselben Optionen funktionieren auch mit `update.bat`. Mit `install.bat` gehen 
 
 ## Neue Version an andere verteilen (Team)
 
-1. Falls sich etwas Wesentliches geändert hat: die Versionsnummer `PLUGIN_VERSION` in `src/de/hm/sysmlaiqa/api/EvaluationRecord.java` erhöhen. Sie steht in jeder Log-Zeile und im Dateinamen des Pakets.
-2. `update.bat` (oder `build.bat`) ausführen. Danach liegt das Paket im Ordner der `update.bat` unter `dist\SysML-AI-QA_v<Version>.zip`. Den genauen Pfad zeigt die letzte grüne Zeile im schwarzen Fenster (*Installationspaket für neue Nutzer: …*).
+Das neueste Release auf GitHub wird von `update.bat` automatisch aktualisiert. Neue Teammitglieder laden einfach immer das Release mit dem Schild *Latest* (Weg A).
 
-   ![Die fertige ZIP im Ordner dist](docs/images/team-01-dist-folder.png)
+**Einmalig einrichten** (nur wer Releases veröffentlichen soll, braucht Schreibrechte im Repository):
 
-3. Kurz in CATIA testen.
-4. Auf GitHub: **Releases → Draft a new release** (bei einem vorhandenen Release: Release öffnen → **Stift-Symbol** rechts oben).
-   - **Tag** `v<Version>` anlegen, **Target** = `main`.
-   - Die ZIP unten in das Feld *Attach binaries by dropping them here* ziehen und warten, bis sie in der Liste erscheint.
-   - Kurz notieren, was neu ist → **Publish release** bzw. **Update release**.
+1. GitHub CLI installieren: Eingabeaufforderung öffnen und `winget install --id GitHub.cli` eingeben (oder Installer von <https://cli.github.com>). Danach die Eingabeaufforderung neu öffnen.
+2. `gh auth login` eingeben und durchklicken: *GitHub.com* → *HTTPS* → *Login with a web browser*. Den angezeigten Code im Browser eingeben.
 
-   ![ZIP an das Release anhängen](docs/images/team-02-release-attach.png)
+**Bei jeder neuen Version**
 
-   Danach stehen unter *Assets* drei Dateien: die ZIP und die zwei *Source code*-Dateien, die GitHub automatisch anhängt.
+1. Falls sich etwas Wesentliches geändert hat: `PLUGIN_VERSION` in `src/de/hm/sysmlaiqa/api/EvaluationRecord.java` erhöhen und in `AENDERUNGEN.md` einen Abschnitt `## v<Version> – …` ergänzen. Dieser Abschnitt wird der Text des Releases.
+2. Änderungen auf GitHub pushen (Branch `feature/free-prompt-full-model`).
+3. CATIA schließen, `update.bat` ausführen. Am Ende steht im schwarzen Fenster:
+   - neue Version: *Release v… veröffentlicht (Latest)*,
+   - gleiche Version: *Release v… aktualisiert (Latest)*, die ZIP im vorhandenen Release wird ersetzt.
+4. Kurz in CATIA testen.
+
+Ohne GitHub CLI, ohne Anmeldung oder ohne Schreibrechte überspringt `update.bat` diesen Schritt mit einer gelben Meldung, das Plugin wird trotzdem installiert. Wer nur installieren will: `update.bat -NoPublish`.
+
+`build.bat` veröffentlicht bewusst nicht, weil es den lokalen, eventuell nicht gepushten Stand baut.
+
+**Von Hand (falls nötig):** Das Paket liegt nach `update.bat` oder `build.bat` unter `dist\SysML-AI-QA_v<Version>.zip`.
+
+![Die fertige ZIP im Ordner dist](docs/images/team-01-dist-folder.png)
+
+Auf GitHub: **Releases → Draft a new release**, Tag `v<Version>`, Target `feature/free-prompt-full-model`, ZIP in *Attach binaries by dropping them here* ziehen → **Publish release**.
+
+![ZIP an das Release anhängen](docs/images/team-02-release-attach.png)
 
 Die ZIP gehört **nicht** in den Code (sie steht in `.gitignore`). Sie wird nur als Release-Datei hochgeladen.
 
