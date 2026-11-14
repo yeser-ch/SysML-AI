@@ -9,6 +9,7 @@ Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d
 - Das bisherige v2-Format heißt jetzt **SysML v2 (converted from v1)**.
 - Findet der Export in einem Projekt keine SysML-v1-Elemente, weist das Plugin auf das neue Format hin.
 - Log: `export_format = sysml_v2_native`, `scope = SYSML_V2_FILES`.
+- `update.bat` veröffentlicht das fertige Paket automatisch als neuestes GitHub-Release, wenn die GitHub CLI angemeldet ist und Schreibrechte hat (Einrichtung: `INSTALL.md`, Abschnitt *Neue Version an andere verteilen*). Abschalten mit `update.bat -NoPublish`.
 
 ## v3.3.1 – Tokens und alle Einstellungen im Log
 

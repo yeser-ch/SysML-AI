@@ -21,6 +21,7 @@ param(
     [string]$PluginDir = "",
     [string]$JdkDir = "",
     [switch]$NoInstall,
+    [switch]$NoPublish,      # nur für update.bat (GitHub-Release überspringen), hier ohne Wirkung
     [switch]$NonInteractive
 )
 
