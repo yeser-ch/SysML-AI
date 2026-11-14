@@ -60,6 +60,7 @@ public class ExplanationDialog extends JDialog {
     private Element focusElement;          // angeklicktes/übernommenes Element (darf null sein)
     private JLabel focusLabel;
     private JButton exportBtn;
+    private JButton useSelectionBtn;
     private String exportedKey = null;      // Context des aktuellen Exports (siehe exportKey())
     private JPanel quickPanel;
     private long quickSeed = System.nanoTime();
@@ -111,7 +112,7 @@ public class ExplanationDialog extends JDialog {
 
     /**
      * @param focusElement angeklicktes bzw. ausgewähltes Element (darf null sein). Es ist im Context-Feld als
-     *                     "Selected element + surroundings" wählbar und kann im Fenster mit "Use selection" ersetzt werden.
+     *                     "Selected element + surroundings" wählbar und kann im Fenster mit "Take CATIA selection" ersetzt werden.
      */
     public ExplanationDialog(Element focusElement) {
         // Kein "always on top" mehr: Das Fenster gehört zum CATIA-Hauptfenster. Es bleibt dadurch über CATIA,
@@ -191,7 +192,7 @@ public class ExplanationDialog extends JDialog {
 
     private String focusText() {
         return focusElement == null
-                ? "No element selected. To ask about one element: select it in CATIA and click 'Use selection'."
+                ? "No element selected. To ask about one element: select it in CATIA and click 'Take CATIA selection'."
                 : "Selected element: " + getFocusName() + " [" + focusElement.getHumanType() + "]";
     }
 
@@ -228,7 +229,7 @@ public class ExplanationDialog extends JDialog {
                 if (unavailable) {
                     setForeground(UIManager.getColor("Label.disabledForeground") != null
                             ? UIManager.getColor("Label.disabledForeground") : Color.GRAY);
-                    setToolTipText("No element selected – select one in CATIA and click 'Use selection'.");
+                    setToolTipText("No element selected – select one in CATIA and click 'Take CATIA selection'.");
                 } else {
                     setToolTipText(null);
                 }
@@ -243,7 +244,7 @@ public class ExplanationDialog extends JDialog {
         chooseBtn.addActionListener(e -> {
             if (chooseSelection()) updateControls();
         });
-        JButton useSelectionBtn = new JButton("Use selection");
+        useSelectionBtn = new JButton("Take CATIA selection");
         useSelectionBtn.setToolTipText("<html>Takes the element currently selected in CATIA (containment tree, diagram or table row)<br>"
                 + "as the selected element and switches the context to 'Selected element + surroundings'.</html>");
         useSelectionBtn.addActionListener(e -> useCurrentSelection());
@@ -402,7 +403,7 @@ public class ExplanationDialog extends JDialog {
                 loading = true;
                 scopeBox.setSelectedItem(lastScopeChoice);
                 loading = false;
-                addMessage("System", "No element selected. Select an element in CATIA and click <b>Use selection</b>.");
+                addMessage("System", "No element selected. Select an element in CATIA and click <b>Take CATIA selection</b>.");
                 return;
             }
             if (isSelectionScope() && selectedRoots.isEmpty() && !chooseSelection()) {
@@ -808,7 +809,7 @@ public class ExplanationDialog extends JDialog {
         return true;
     }
 
-    /** "Use selection": das in CATIA ausgewählte Element übernehmen und den Context darauf stellen. */
+    /** "Take CATIA selection": das in CATIA ausgewählte Element übernehmen und den Context darauf stellen. */
     private void useCurrentSelection() {
         if (busy) return;
         Element el = null;
@@ -819,7 +820,7 @@ public class ExplanationDialog extends JDialog {
         }
         if (el == null) {
             addMessage("System", "No element selected in CATIA. Click an element in the containment tree, a diagram "
-                    + "or a table row, then click <b>Use selection</b> again.");
+                    + "or a table row, then click <b>Take CATIA selection</b> again.");
             return;
         }
         focusElement = el;
@@ -1489,6 +1490,7 @@ public class ExplanationDialog extends JDialog {
             suiteBtn.setEnabled(!busy && export != null && !exportOutdated());
         }
         scopeBox.setEnabled(!busy && !nativeV2);
+        if (useSelectionBtn != null) useSelectionBtn.setEnabled(!busy && !nativeV2);
         if (exportBtn != null) {
             exportBtn.setEnabled(!busy);
             exportBtn.setText(export == null || exportOutdated() ? "Export model" : "Resend model");
