@@ -2,6 +2,14 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.5 – Export per Knopf, ein Menüeintrag
+
+- **Export erst per Knopf:** Das Fenster exportiert beim Öffnen nichts mehr. Erst *Context* und *Format* wählen, dann **Export model** klicken. Nach dem ersten Export heißt der Knopf wieder **Resend model**. Wird *Context* oder *Depth* danach geändert, steht in der Statuszeile *Context changed – click 'Export model'*; *Send* und *Run test suite…* sind bis zum neuen Export gesperrt, damit das Protokoll zum gesendeten Modell passt. Der Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (converted from v1)* braucht weiterhin keinen neuen Export.
+- **Ein Menüeintrag „Ask AI…“** statt „Ask AI about the model…“, „Ask AI about this element…“ und „Ask AI about the selected element…“ (Rechtsklick und Menüleiste). Das angeklickte bzw. markierte Element wird mitgegeben und ist unter *Context* wählbar. Voreingestellt ist der zuletzt benutzte Context.
+- **Fester Fenstertitel** „SysML AI Q&A“; er hing bisher vom Menüeintrag ab und stimmte nach einem Context-Wechsel nicht mehr.
+- **Context ohne ausgewähltes Element:** *Selected element + surroundings* ist grau statt unsichtbar, beim Darüberfahren steht der Grund. Neuer Knopf **Use selection** übernimmt das in CATIA markierte Element, ohne das Fenster neu zu öffnen.
+- Log unverändert (neue `plugin_version`). Die Bilder im Handbuch zeigen noch den alten Stand.
+
 ## v3.4 – SysML-v2-Modelle aus CATIA
 
 - Neues Format **SysML v2 model (CATIA export)** für SysML-v2-Projekte: Das Plugin schickt die `.sysml`-Dateien, die CATIA selbst exportiert (*File → Export To → SysML v2 Textual Notation*). Knöpfe **Export in CATIA…** (öffnet den Export von CATIA) und **Files…** (Dateien oder Ordner wählen); **Resend model** liest die Dateien neu.

@@ -1,9 +1,11 @@
 /**
- * "Ask AI about the model"-Fenster: Einstellungen, Schnellfragen, Chat und freie Frage-Eingabe auf EINER Oberfläche.
+ * Frage-Fenster: Einstellungen, Schnellfragen, Chat und freie Frage-Eingabe auf EINER Oberfläche.
  *
  * Ablauf:
- * 1. Beim Öffnen wird das Modell exportiert (ganzes Modell, ausgewählte Pakete/Elemente oder Element mit Umgebung)
- *    und im gewählten Format bereitgestellt (SysML v1 JSON oder SysML v2 Text). Größe in Elementen und Tokens wird angezeigt.
+ * 1. Der Nutzer wählt Context (ganzes Modell, ausgewählte Pakete/Elemente oder Element mit Umgebung) und Format
+ *    und klickt "Export model". Erst dann wird aus CATIA exportiert und im gewählten Format bereitgestellt
+ *    (SysML v1 JSON oder SysML v2 Text). Größe in Elementen und Tokens wird angezeigt. Wird der Context danach
+ *    geändert, muss neu exportiert werden, bevor wieder gefragt werden kann.
  * 2. Der Nutzer tippt eine Frage oder wählt eine Schnellfrage und drückt "Send".
  *    Standard: Das Modell wird mit der ersten Frage EINMAL hochgeladen (Gemini-Cache); danach geht nur die Frage raus.
  *    "Resend model" exportiert neu aus CATIA und lädt bei der nächsten Frage neu hoch.
@@ -55,8 +57,10 @@ public class ExplanationDialog extends JDialog {
     static final String FORMAT_V2_LABEL = "SysML v2 (converted from v1)";
     static final String FORMAT_NATIVE_LABEL = "SysML v2 model (CATIA export)";
 
-    private final Element focusElement;
-    private final boolean elementMode;   // true = "Ask AI about this element" (nur Umgebung des Elements)
+    private Element focusElement;          // angeklicktes/übernommenes Element (darf null sein)
+    private JLabel focusLabel;
+    private JButton exportBtn;
+    private String exportedKey = null;      // Context des aktuellen Exports (siehe exportKey())
     private JPanel quickPanel;
     private long quickSeed = System.nanoTime();
     private volatile ModelIndex modelIndex;
@@ -87,6 +91,7 @@ public class ExplanationDialog extends JDialog {
     private Object lastFormat = FORMAT_V1_LABEL;
     private List<Element> selectedRoots = new ArrayList<>();
     private Object lastScope = SCOPE_FULL;     // Umfang des letzten erfolgreichen Exports
+    private Object lastScopeChoice = SCOPE_FULL; // zuletzt gewählter (gültiger) Eintrag im Context-Feld
 
     // Chat
     private JPanel chatPanel;
@@ -104,23 +109,17 @@ public class ExplanationDialog extends JDialog {
     private volatile boolean cancelRequested = false;
     private boolean loading = false;
 
-    public ExplanationDialog(Element focusElement) {
-        this(focusElement, false);
-    }
-
     /**
-     * @param elementMode true: Fragen zu einem Element – es wird nur das Element mit seiner Umgebung exportiert
-     *                    (kleiner, schneller). false: ganzes Modell.
+     * @param focusElement angeklicktes bzw. ausgewähltes Element (darf null sein). Es ist im Context-Feld als
+     *                     "Selected element + surroundings" wählbar und kann im Fenster mit "Use selection" ersetzt werden.
      */
-    public ExplanationDialog(Element focusElement, boolean elementMode) {
+    public ExplanationDialog(Element focusElement) {
         // Kein "always on top" mehr: Das Fenster gehört zum CATIA-Hauptfenster. Es bleibt dadurch über CATIA,
         // wird mit CATIA minimiert und liegt NICHT über anderen Programmen. Nicht modal: CATIA bleibt bedienbar.
         super(catiaMainFrame(), Dialog.ModalityType.MODELESS);
         this.focusElement = focusElement;
-        this.elementMode = elementMode && focusElement != null;
 
-        setTitle(SysmlAiQaPlugin.DISPLAY_NAME + " – " + (this.elementMode
-                ? "Ask AI about " + getFocusName() : "Ask AI about the model"));
+        setTitle(SysmlAiQaPlugin.DISPLAY_NAME);
         setSize(800, 900);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
@@ -128,7 +127,8 @@ public class ExplanationDialog extends JDialog {
 
         buildUI();
         loadSettings();
-        runExport();
+        addMessage("System", "Choose the <b>context</b> and the <b>format</b> above, then click <b>Export model</b>. "
+                + "The model is only exported from CATIA when you click the button.");
     }
 
     /** CATIA-Hauptfenster als Besitzer der Plugin-Fenster (null, falls nicht verfügbar – dann normales Fenster). */
@@ -177,19 +177,22 @@ public class ExplanationDialog extends JDialog {
 
     private JComponent createHeader() {
         JPanel header = new JPanel(new BorderLayout());
-        JLabel title = new JLabel(elementMode ? "Ask the AI about this element" : "Ask the AI about your SysML model");
+        JLabel title = new JLabel("Ask the AI about your SysML model");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
         header.add(title, BorderLayout.NORTH);
 
-        String focusText = focusElement == null
-                ? "No element selected – questions refer to the whole model."
-                : "Selected element: " + getFocusName() + " [" + focusElement.getHumanType() + "]";
-        JLabel focus = new JLabel(focusText);
-        focus.setFont(focus.getFont().deriveFont(Font.ITALIC, 12f));
-        focus.setForeground(Color.DARK_GRAY);
-        header.add(focus, BorderLayout.SOUTH);
+        focusLabel = new JLabel(focusText());
+        focusLabel.setFont(focusLabel.getFont().deriveFont(Font.ITALIC, 12f));
+        focusLabel.setForeground(Color.DARK_GRAY);
+        header.add(focusLabel, BorderLayout.SOUTH);
         header.setAlignmentX(Component.LEFT_ALIGNMENT);
         return header;
+    }
+
+    private String focusText() {
+        return focusElement == null
+                ? "No element selected. To ask about one element: select it in CATIA and click 'Use selection'."
+                : "Selected element: " + getFocusName() + " [" + focusElement.getHumanType() + "]";
     }
 
     private JComponent createSettingsPanel() {
@@ -215,17 +218,41 @@ public class ExplanationDialog extends JDialog {
         modelRow.add(refreshBtn, BorderLayout.EAST);
 
         // Zeile 1: Kontext (+ Auswahl) + Temperatur
-        scopeBox = new JComboBox<>(focusElement == null ? new String[]{SCOPE_FULL, SCOPE_SELECTION}
-                : new String[]{SCOPE_FULL, SCOPE_SELECTION, SCOPE_FOCUS});
+        scopeBox = new JComboBox<>(new String[]{SCOPE_FULL, SCOPE_SELECTION, SCOPE_FOCUS});
+        // Ohne ausgewähltes Element ist "Selected element + surroundings" grau, mit Erklärung beim Darüberfahren
+        scopeBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                boolean unavailable = SCOPE_FOCUS.equals(value) && focusElement == null;
+                super.getListCellRendererComponent(list, value, index, selected && !unavailable, focus && !unavailable);
+                if (unavailable) {
+                    setForeground(UIManager.getColor("Label.disabledForeground") != null
+                            ? UIManager.getColor("Label.disabledForeground") : Color.GRAY);
+                    setToolTipText("No element selected – select one in CATIA and click 'Use selection'.");
+                } else {
+                    setToolTipText(null);
+                }
+                return this;
+            }
+        });
         scopeBox.setToolTipText("<html>Which part of the model is sent to the AI.<br>'Whole model': everything except SysML/UML libraries.<br>"
                 + "'Selected packages / elements': only what you choose (each with everything it contains).<br>"
                 + "'Selected element + surroundings': the element, its owners, neighbours and related elements up to the chosen depth.</html>");
         chooseBtn = new JButton("Choose…");
         chooseBtn.setToolTipText("Choose the packages or elements that are sent to the AI.");
-        chooseBtn.addActionListener(e -> chooseSelection(true));
+        chooseBtn.addActionListener(e -> {
+            if (chooseSelection()) updateControls();
+        });
+        JButton useSelectionBtn = new JButton("Use selection");
+        useSelectionBtn.setToolTipText("<html>Takes the element currently selected in CATIA (containment tree, diagram or table row)<br>"
+                + "as the selected element and switches the context to 'Selected element + surroundings'.</html>");
+        useSelectionBtn.addActionListener(e -> useCurrentSelection());
+        JPanel scopeButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        scopeButtons.add(chooseBtn);
+        scopeButtons.add(useSelectionBtn);
         JPanel scopeRow = new JPanel(new BorderLayout(4, 0));
         scopeRow.add(scopeBox, BorderLayout.CENTER);
-        scopeRow.add(chooseBtn, BorderLayout.EAST);
+        scopeRow.add(scopeButtons, BorderLayout.EAST);
         temperatureSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0.0, 2.0, 0.1));
         temperatureSpinner.setToolTipText("0 = most deterministic (recommended for evaluation). Higher = more varied answers.");
         temperatureSpinner.addChangeListener(e -> saveSettings());
@@ -285,10 +312,7 @@ public class ExplanationDialog extends JDialog {
                 + "Changing AI model, ID check or grounding uploads once more automatically.<br>"
                 + "Not available for every model on the free tier – then the model is sent with each question.</html>");
         mentionFocusBox = new JCheckBox("Mention selected element");
-        mentionFocusBox.setToolTipText(focusElement == null ? "No element selected."
-                : "<html>On: the first question of a chat starts with<br><tt># Currently selected element<br>"
-                + escapeHtml(buildFocusText()) + "</tt><br>Off: nothing about the selection is sent. See 'Show request…'.</html>");
-        mentionFocusBox.setEnabled(focusElement != null);
+        updateMentionFocusBox();
         for (JCheckBox cb : new JCheckBox[]{groundingBox, freshChatBox, fallbackBox, cacheModelBox, mentionFocusBox}) cb.addActionListener(e -> saveSettings());
         // Mehrere Zeilen, damit bei schmalem Fenster keine Option abgeschnitten wird
         JPanel checks = new JPanel(new GridLayout(3, 2, 8, 0));
@@ -330,15 +354,19 @@ public class ExplanationDialog extends JDialog {
         addRow(p, c, 4, "Evaluation:", evalRow, "Repetitions:", repetitionsSpinner);
 
         // Zeile 5: Status + Buttons
-        exportStatusLabel = new JLabel("Exporting model …");
+        exportStatusLabel = new JLabel("Not exported yet – click 'Export model'.");
         exportStatusLabel.setForeground(Color.DARK_GRAY);
         // Feste Breite: ein langer Status soll die rechte Spalte nicht zusammendrücken (voller Text im Tooltip)
         exportStatusLabel.setPreferredSize(new Dimension(300, exportStatusLabel.getPreferredSize().height));
-        JButton reexportBtn = new JButton("Resend model");
-        reexportBtn.setToolTipText("<html>Exports the model again from CATIA (use after changes) and uploads it with the next question.<br>"
+        exportBtn = new JButton("Export model");
+        exportBtn.setToolTipText("<html>Exports the chosen context from CATIA. Click again after changes in CATIA or after changing<br>"
+                + "the context; the model is uploaded again with the next question.<br>"
                 + "SysML v2 model: reads the .sysml files again – export them in CATIA first.</html>");
-        reexportBtn.addActionListener(e -> {
-            if (!busy) runExport();
+        exportBtn.setFont(exportBtn.getFont().deriveFont(Font.BOLD));
+        exportBtn.addActionListener(e -> {
+            if (busy) return;
+            if (isSelectionScope() && selectedRoots.isEmpty() && !isNativeFormat() && !chooseSelection()) return;
+            runExport();
         });
         JButton requestBtn = new JButton("Show request…");
         requestBtn.setToolTipText("Shows exactly what the next question sends to the AI (system prompt, model data, chat, question) and lets you save it.");
@@ -355,7 +383,7 @@ public class ExplanationDialog extends JDialog {
                 + EvaluationLog.getBaseDir().getAbsolutePath());
         logBtn.addActionListener(e -> openResultsFolder());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        buttons.add(reexportBtn);
+        buttons.add(exportBtn);
         buttons.add(requestBtn);
         buttons.add(promptBtn);
         buttons.add(apiKeyBtn);
@@ -370,27 +398,30 @@ public class ExplanationDialog extends JDialog {
 
         scopeBox.addActionListener(e -> {
             if (loading || busy) return;
-            if (isSelectionScope() && selectedRoots.isEmpty() && !chooseSelection(false)) {
+            if (isFocusScope() && focusElement == null) {   // grauer Eintrag: nicht wählbar
+                loading = true;
+                scopeBox.setSelectedItem(lastScopeChoice);
+                loading = false;
+                addMessage("System", "No element selected. Select an element in CATIA and click <b>Use selection</b>.");
+                return;
+            }
+            if (isSelectionScope() && selectedRoots.isEmpty() && !chooseSelection()) {
                 return; // Auswahl abgebrochen: chooseSelection hat den alten Umfang wiederhergestellt
             }
+            lastScopeChoice = scopeBox.getSelectedItem();
             saveSettings();
             updateControls();
-            runExport();
         });
         formatBox.addActionListener(e -> {
             if (loading || busy) return;
             saveSettings();
             switchFormat();
         });
-        // Tiefe geändert: kurz warten (mehrere Klicks), dann neu exportieren
-        Timer depthTimer = new Timer(900, e -> {
-            if (!busy && isFocusScope()) runExport();
-        });
-        depthTimer.setRepeats(false);
+        // Tiefe geändert: nur merken – exportiert wird mit "Export model"
         javax.swing.event.ChangeListener depthListener = e -> {
             if (loading) return;
             saveSettings();
-            if (isFocusScope()) depthTimer.restart();
+            updateControls();
         };
         relationDepthSpinner.addChangeListener(depthListener);
         siblingDepthSpinner.addChangeListener(depthListener);
@@ -509,7 +540,10 @@ public class ExplanationDialog extends JDialog {
         String model = prefs.get(SysmlAiQaPlugin.MODEL_PREF, GeminiExplanationService.DEFAULT_MODELS[0]);
         for (String m : GeminiExplanationService.mergeModelLists(null, model)) modelBox.addItem(m);
         modelBox.setSelectedItem(model);
-        scopeBox.setSelectedItem(elementMode ? SCOPE_FOCUS : SCOPE_FULL);
+        // Zuletzt benutzter Context ("Selected packages" startet als "Whole model", die Auswahl wird nicht gespeichert)
+        String scope = prefs.get(SysmlAiQaPlugin.SCOPE_PREF, SCOPE_FULL);
+        scopeBox.setSelectedItem(SCOPE_FOCUS.equals(scope) && focusElement != null ? SCOPE_FOCUS : SCOPE_FULL);
+        lastScopeChoice = scopeBox.getSelectedItem();
         thinkingBox.setSelectedItem(prefs.get(SysmlAiQaPlugin.THINKING_PREF, "Model default"));
         temperatureSpinner.setValue(prefs.getDouble(SysmlAiQaPlugin.TEMPERATURE_PREF, 0.0));
         maxTokensSpinner.setValue(prefs.getInt(SysmlAiQaPlugin.MAX_TOKENS_PREF, 8192));
@@ -541,6 +575,7 @@ public class ExplanationDialog extends JDialog {
             return;
         }
         prefs.put(SysmlAiQaPlugin.FORMAT_PREF, currentFormat());
+        prefs.put(SysmlAiQaPlugin.SCOPE_PREF, String.valueOf(scopeBox.getSelectedItem()));
         if (focusElement != null) prefs.putBoolean(SysmlAiQaPlugin.MENTION_FOCUS_PREF, mentionFocusBox.isSelected());
         prefs.putInt(SysmlAiQaPlugin.RELATION_DEPTH_PREF, ((Number) relationDepthSpinner.getValue()).intValue());
         prefs.putInt(SysmlAiQaPlugin.SIBLING_DEPTH_PREF, ((Number) siblingDepthSpinner.getValue()).intValue());
@@ -645,7 +680,6 @@ public class ExplanationDialog extends JDialog {
                     loading = false;
                     saveSettings();
                     updateControls();
-                    if (export == null && !isNativeFormat()) runExport();
                 }
                 return;
             }
@@ -677,6 +711,7 @@ public class ExplanationDialog extends JDialog {
                 try {
                     ModelExport ex = get();
                     baseExport = null;
+                    exportedKey = "native";
                     lastFormat = FORMAT_NATIVE_LABEL;
                     modelIndex = ex.index;
                     refreshQuickQuestions();
@@ -743,11 +778,10 @@ public class ExplanationDialog extends JDialog {
     }
 
     /**
-     * Pakete/Elemente für "Selected packages / elements" wählen.
-     * @param exportNow true: danach sofort neu exportieren (Aufruf über den Button)
+     * Pakete/Elemente für "Selected packages / elements" wählen (exportiert wird mit "Export model").
      * @return true, wenn etwas gewählt wurde
      */
-    private boolean chooseSelection(boolean exportNow) {
+    private boolean chooseSelection() {
         if (busy) return false;
         Project project = Application.getInstance().getProject();
         List<Element> pre = new ArrayList<>(selectedRoots);
@@ -757,7 +791,7 @@ public class ExplanationDialog extends JDialog {
         if (chosen == null || chosen.isEmpty()) {
             if (selectedRoots.isEmpty() && isSelectionScope()) {
                 loading = true;
-                scopeBox.setSelectedItem(lastScope);   // Abbruch: vorherigen Umfang wiederherstellen
+                scopeBox.setSelectedItem(lastScopeChoice);   // Abbruch: vorherigen Umfang wiederherstellen
                 loading = false;
                 updateControls();
             }
@@ -769,11 +803,66 @@ public class ExplanationDialog extends JDialog {
             scopeBox.setSelectedItem(SCOPE_SELECTION);
             loading = false;
         }
-        if (exportNow) {
-            updateControls();
-            runExport();
-        }
+        lastScopeChoice = SCOPE_SELECTION;
+        saveSettings();
         return true;
+    }
+
+    /** "Use selection": das in CATIA ausgewählte Element übernehmen und den Context darauf stellen. */
+    private void useCurrentSelection() {
+        if (busy) return;
+        Element el = null;
+        try {
+            el = ShowExplanationAction.currentSelection();
+        } catch (Throwable t) {
+            logInfo("Could not read the selection: " + t);
+        }
+        if (el == null) {
+            addMessage("System", "No element selected in CATIA. Click an element in the containment tree, a diagram "
+                    + "or a table row, then click <b>Use selection</b> again.");
+            return;
+        }
+        focusElement = el;
+        focusLabel.setText(focusText());
+        updateMentionFocusBox();
+        mentionFocusBox.setSelected(prefs.getBoolean(SysmlAiQaPlugin.MENTION_FOCUS_PREF, true));
+        loading = true;
+        scopeBox.setSelectedItem(SCOPE_FOCUS);
+        loading = false;
+        lastScopeChoice = SCOPE_FOCUS;
+        scopeBox.repaint();
+        saveSettings();
+        updateControls();
+        addMessage("System", "Selected element: <b>" + escapeHtml(getFocusName()) + "</b>. Click <b>Export model</b> to export it with its surroundings.");
+    }
+
+    private void updateMentionFocusBox() {
+        mentionFocusBox.setToolTipText(focusElement == null ? "No element selected."
+                : "<html>On: the first question of a chat starts with<br><tt># Currently selected element<br>"
+                + escapeHtml(buildFocusText()) + "</tt><br>Off: nothing about the selection is sent. See 'Show request…'.</html>");
+        mentionFocusBox.setEnabled(focusElement != null);
+        if (focusElement == null) mentionFocusBox.setSelected(false);
+    }
+
+    /**
+     * Beschreibt den im Fenster eingestellten Context. Weicht er vom Context des letzten Exports ab,
+     * muss neu exportiert werden, bevor gefragt wird (sonst passt das Protokoll nicht zum gesendeten Modell).
+     */
+    private String exportKey() {
+        if (isNativeFormat()) return "native";
+        if (isFocusScope()) return "focus|" + (focusElement == null ? "" : focusElement.getID()) + "|"
+                + relationDepthSpinner.getValue() + "|" + siblingDepthSpinner.getValue();
+        if (isSelectionScope()) {
+            StringBuilder sb = new StringBuilder("selection");
+            for (Element e : selectedRoots) sb.append('|').append(e.getID());
+            return sb.toString();
+        }
+        return "full";
+    }
+
+    /** true, wenn ein Export vorliegt, der Context im Fenster aber inzwischen geändert wurde. */
+    private boolean exportOutdated() {
+        return export != null && exportedKey != null && !exportedKey.equals(exportKey());
     }
 
     /** Im Containment Tree markierte Elemente (Mehrfachauswahl) als Vorauswahl. */
@@ -851,6 +940,9 @@ public class ExplanationDialog extends JDialog {
         final int sibDepth = ((Number) siblingDepthSpinner.getValue()).intValue();
         final String format = currentFormat();
         final Object scopeItem = scopeBox.getSelectedItem();
+        final Element focus = focusElement;
+        final String focusName = getFocusName();
+        final String key = exportKey();
         final String what = scope == DataExtractionService.Scope.FULL_MODEL ? "the whole model"
                 : scope == DataExtractionService.Scope.SELECTION ? selectionLabel()
                 : "the surroundings of the selected element (relations " + relDepth + ", neighbours " + sibDepth + ")";
@@ -864,12 +956,12 @@ public class ExplanationDialog extends JDialog {
             protected ModelExport doInBackground() throws Exception {
                 Project project = Application.getInstance().getProject();
                 if (project == null) return null;
-                File f = DataExtractionService.exportModel(project, focusElement, scope, roots, relDepth, sibDepth);
+                File f = DataExtractionService.exportModel(project, focus, scope, roots, relDepth, sibDepth);
                 if (f == null) return null;
                 ModelExport base = ModelExport.fromFile(f);
                 base.scopeDetail = scope == DataExtractionService.Scope.FULL_MODEL ? "whole model"
                         : scope == DataExtractionService.Scope.SELECTION ? selectionLabel()
-                        : "surroundings of " + getFocusName() + " [" + focusElement.getID() + "] · relation depth "
+                        : "surroundings of " + focusName + " [" + focus.getID() + "] · relation depth "
                         + relDepth + " · neighbour depth " + sibDepth;
                 baseExport = base;
                 return base.inFormat(format);
@@ -886,6 +978,7 @@ public class ExplanationDialog extends JDialog {
                                 + "choose <b>Format: " + FORMAT_NATIVE_LABEL + "</b>.");
                     } else {
                         lastScope = scopeItem;
+                        exportedKey = key;
                         lastFormat = formatBox.getSelectedItem();
                         modelIndex = ModelIndex.parse(ex.json);
                         refreshQuickQuestions();
@@ -907,13 +1000,27 @@ public class ExplanationDialog extends JDialog {
 
     /** Format gewechselt: dasselbe Modell neu schreiben (ohne neuen Export aus CATIA). */
     private void switchFormat() {
-        if (isNativeFormat()) {          // SysML-v2-Modell aus CATIA: Dateien wählen bzw. neu lesen
-            loadSysmlV2(false);
-            return;
-        }
         final ModelExport base = baseExport;
-        if (base == null) {              // vorher SysML-v2-Dateien: jetzt das Modell aus CATIA exportieren
-            runExport();
+        if (isNativeFormat() || base == null || export == null || export.isNative()) {
+            // SysML-v2-Dateien bzw. noch kein SysML-v1-Export: nichts automatisch lesen, auf "Export model" warten
+            boolean had = export != null;
+            export = null;
+            exportedKey = null;
+            if (isNativeFormat()) baseExport = null;
+            modelIndex = null;
+            apiService.resetConversation();
+            apiService.discardUploadedModel();
+            refreshQuickQuestions();
+            exportStatusLabel.setForeground(Color.DARK_GRAY);
+            exportStatusLabel.setText("Not exported yet – click 'Export model'.");
+            if (isNativeFormat()) {
+                addMessage("System", "Format: SysML v2 model. Export the project in CATIA (<b>Export in CATIA…</b>), then click "
+                        + "<b>Files…</b> to choose the .sysml files, or <b>Export model</b> to read the files chosen last time.");
+            } else if (had) {
+                addMessage("System", "Format changed. Click <b>Export model</b> to export the model from CATIA.");
+            }
+            lastFormat = formatBox.getSelectedItem();
+            updateControls();
             return;
         }
         final String format = currentFormat();
@@ -1016,7 +1123,11 @@ public class ExplanationDialog extends JDialog {
     /** "Show request…": Klartext dessen, was mit der nächsten Frage gesendet würde. */
     private void showRequest() {
         if (export == null) {
-            addMessage("System", "The model has not been exported yet.");
+            addMessage("System", "The model has not been exported yet. Click <b>Export model</b>.");
+            return;
+        }
+        if (exportOutdated()) {
+            addMessage("System", "The context was changed. Click <b>Export model</b> first.");
             return;
         }
         String q = inputArea.getText().trim();
@@ -1041,7 +1152,11 @@ public class ExplanationDialog extends JDialog {
         String question = inputArea.getText().trim();
         if (question.isEmpty() || busy) return;
         if (export == null) {
-            addMessage("System", "The model has not been exported yet.");
+            addMessage("System", "The model has not been exported yet. Click <b>Export model</b>.");
+            return;
+        }
+        if (exportOutdated()) {
+            addMessage("System", "The context was changed. Click <b>Export model</b> to export it, then send the question.");
             return;
         }
         if (question.matches("(?s).*<[^<>]{1,40}>.*")) {
@@ -1105,8 +1220,9 @@ public class ExplanationDialog extends JDialog {
     // ═══════════════════════════════════════════════════════════════════════
 
     private void startTestSuite() {
-        if (busy || export == null) {
-            addMessage("System", "Wait until the model export is finished.");
+        if (busy || export == null || exportOutdated()) {
+            addMessage("System", export == null || exportOutdated()
+                    ? "Click <b>Export model</b> first." : "Wait until the model export is finished.");
             return;
         }
         JFileChooser chooser = new JFileChooser(prefs.get("sysmlaiqa_last_suite_dir", System.getProperty("user.home")));
@@ -1345,7 +1461,7 @@ public class ExplanationDialog extends JDialog {
             sendBtn.setEnabled(!cancelRequested);
             sendBtn.setToolTipText("Cancel the running request.");
         } else {
-            sendBtn.setEnabled(!busy && export != null);
+            sendBtn.setEnabled(!busy && export != null && !exportOutdated());
             sendBtn.setText(busy ? "Busy…" : "Send");
             sendBtn.setToolTipText(null);
         }
@@ -1370,9 +1486,21 @@ public class ExplanationDialog extends JDialog {
             suiteBtn.setEnabled(!cancelRequested);
         } else {
             suiteBtn.setText("Run test suite…");
-            suiteBtn.setEnabled(!busy && export != null);
+            suiteBtn.setEnabled(!busy && export != null && !exportOutdated());
         }
         scopeBox.setEnabled(!busy && !nativeV2);
+        if (exportBtn != null) {
+            exportBtn.setEnabled(!busy);
+            exportBtn.setText(export == null || exportOutdated() ? "Export model" : "Resend model");
+        }
+        if (exportStatusLabel != null && !busy) {
+            if (exportOutdated()) {
+                exportStatusLabel.setForeground(new Color(0x9A, 0x67, 0x00));
+                exportStatusLabel.setText("Context changed – click 'Export model' to export it.");
+            } else if (export != null && exportStatusLabel.getText().startsWith("Context changed")) {
+                updateExportStatus();
+            }
+        }
     }
 
     private void insertQuickQuestion(String template) {

@@ -90,7 +90,7 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
         addMenu(mngr, targetElement);
     }
 
-    // Untermenü "Ask AI" mit "Ask AI about the model..." und "Ask AI about this element..."
+    // Untermenü "Ask AI" mit dem Eintrag "Ask AI..."
     private void addMenu(ActionsManager mngr, Element targetElement) {
         if (mngr.getActionFor("SYSMLAIQA_ROOT") != null) {
             return;
@@ -110,12 +110,8 @@ public class MenuConfigurator implements BrowserContextAMConfigurator, DiagramCo
 
         category.setDescription("Ask an AI questions about this SysML model");
 
-        // 1) Fragen zum GANZEN Modell (angeklicktes Element dient als Fokus, z. B. für Schnellfragen)
+        // Ein Eintrag "Ask AI...": das angeklickte Element ist im Fenster als Context wählbar
         category.addAction(new ShowExplanationAction(targetElement));
-        // 2) Fragen zu genau diesem Element (nur Element + Umgebung wird exportiert -> kleiner, schneller)
-        if (targetElement != null) {
-            category.addAction(new ShowExplanationAction(targetElement, true, false));
-        }
 
         mngr.addCategory(category);
     }

@@ -24,7 +24,7 @@ public class SysmlAiQaPlugin extends Plugin {
     /** Sichtbarer Name des Werkzeugs (Fenstertitel, Menü, Meldungen). Hier ändern, um es umzubenennen. */
     public static final String DISPLAY_NAME = "SysML AI Q&A";
     /** Menüpunkt im Rechtsklick- und Tools-Menü. */
-    public static final String MENU_LABEL = "Ask AI about the model...";
+    public static final String MENU_LABEL = "Ask AI...";
     /** Präfix für Einträge im CATIA-Meldungsfenster. */
     public static final String LOG_PREFIX = "[" + DISPLAY_NAME + "] ";
 
@@ -96,8 +96,7 @@ public class SysmlAiQaPlugin extends Plugin {
                     if (manager.getActionFor("SYSMLAIQA_MAIN_MENU") != null) return;
                     ActionsCategory menu = new ActionsCategory("SYSMLAIQA_MAIN_MENU", "Ask AI");
                     menu.setNested(true);
-                    menu.addAction(new ShowExplanationAction(null, false, true));
-                    menu.addAction(new ShowExplanationAction(null, true, true));
+                    menu.addAction(new ShowExplanationAction(null, true));
                     menu.addAction(new OpenSettingsAction());
                     manager.addCategory(menu);
                 }

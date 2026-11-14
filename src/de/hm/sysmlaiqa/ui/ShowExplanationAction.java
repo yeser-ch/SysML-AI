@@ -1,6 +1,6 @@
 /**
- * Menüeinträge "Ask AI about the model..." und "Ask AI about this element...".
- * Prüft Datenschutz-Zustimmung und API-Key und öffnet dann das Frage-Fenster.
+ * Menüeintrag "Ask AI...". Prüft Datenschutz-Zustimmung und API-Key und öffnet dann das Frage-Fenster.
+ * Ein angeklicktes bzw. ausgewähltes Element wird mitgegeben; im Fenster lässt es sich als Context wählen.
  */
 
 package de.hm.sysmlaiqa.ui;
@@ -18,40 +18,23 @@ import com.nomagic.magicdraw.core.Application;
 
 public class ShowExplanationAction extends MDAction {
 
-    public static final String ELEMENT_LABEL = "Ask AI about this element...";
-    public static final String SELECTED_ELEMENT_LABEL = "Ask AI about the selected element...";
-
     private final Element focusElement;
-    private final boolean elementMode;
     private final boolean resolveSelectionOnClick;
 
-    /** Kontextmenü: Fragen zum ganzen Modell, angeklicktes Element als Fokus. */
+    /** Kontextmenü: angeklicktes Element wird mitgegeben. */
     public ShowExplanationAction(Element focusElement) {
-        this(focusElement, false, false);
+        this(focusElement, false);
     }
 
     /**
      * @param focusElement            angeklicktes Element (darf null sein)
-     * @param elementMode             true = "Ask AI about this element" (nur Umgebung des Elements exportieren)
-     * @param resolveSelectionOnClick true = Tools-Menü: Auswahl erst beim Klick ermitteln (Diagramm/Tabelle/Baum)
+     * @param resolveSelectionOnClick true = Menüleiste: Auswahl erst beim Klick ermitteln (Diagramm/Tabelle/Baum)
      */
-    public ShowExplanationAction(Element focusElement, boolean elementMode, boolean resolveSelectionOnClick) {
-        super(id(elementMode, resolveSelectionOnClick), label(elementMode, resolveSelectionOnClick), null, null);
+    public ShowExplanationAction(Element focusElement, boolean resolveSelectionOnClick) {
+        super("SYSMLAIQA_ASK" + (resolveSelectionOnClick ? "_TOOLS" : ""), SysmlAiQaPlugin.MENU_LABEL, null, null);
         this.focusElement = focusElement;
-        this.elementMode = elementMode;
         this.resolveSelectionOnClick = resolveSelectionOnClick;
-        setDescription(elementMode
-                ? SysmlAiQaPlugin.DISPLAY_NAME + ": ask an AI about this element and its surroundings."
-                : SysmlAiQaPlugin.DISPLAY_NAME + ": ask an AI any question about this SysML model.");
-    }
-
-    private static String id(boolean elementMode, boolean tools) {
-        return "SYSMLAIQA_ASK_" + (elementMode ? "ELEMENT" : "MODEL") + (tools ? "_TOOLS" : "");
-    }
-
-    private static String label(boolean elementMode, boolean tools) {
-        if (!elementMode) return SysmlAiQaPlugin.MENU_LABEL;
-        return tools ? SELECTED_ELEMENT_LABEL : ELEMENT_LABEL;
+        setDescription(SysmlAiQaPlugin.DISPLAY_NAME + ": ask an AI questions about this SysML model or a selected element.");
     }
 
     @Override
@@ -90,19 +73,6 @@ public class ShowExplanationAction extends MDAction {
     }
 
     private void proceed(Element focus) {
-        if (elementMode && focus == null) {
-            try {
-                Application.getInstance().getGUILog().log(SysmlAiQaPlugin.LOG_PREFIX
-                        + "Selection not found. Diagnosis: " + lastTableDiagnosis);
-            } catch (Throwable ignored) { }
-            JOptionPane.showMessageDialog(null,
-                    "No element selected.\n\nSelect an element in the containment tree, a diagram or a table row first.\n"
-                            + "If it still does not work in a table: right-click the row -> 'Select in Containment Tree' (Alt+B),\n"
-                            + "then right-click the element in the tree -> 'Ask AI about this element...'.",
-                    SysmlAiQaPlugin.DISPLAY_NAME, JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
         Preferences prefs = Preferences.userNodeForPackage(SysmlAiQaPlugin.class);
         String consent = prefs.get(SysmlAiQaPlugin.PRIVACY_KEY, "UNKNOWN");
 
@@ -130,7 +100,7 @@ public class ShowExplanationAction extends MDAction {
             apiKey = prefs.get(SysmlAiQaPlugin.API_KEY_PREF, "");
         }
         if (!apiKey.isEmpty()) {
-            new ExplanationDialog(focus, elementMode).setVisible(true);
+            new ExplanationDialog(focus).setVisible(true);
         } else {
             Application.getInstance().getGUILog().log(SysmlAiQaPlugin.LOG_PREFIX + "Cancelled: no API key configured.");
         }
