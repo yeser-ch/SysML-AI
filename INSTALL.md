@@ -165,7 +165,7 @@ Wie es weitergeht und was jede Einstellung bedeutet, steht im **[Benutzerhandbuc
 
 | Skript | Was es tut |
 | --- | --- |
-| `update.bat` | lädt den neuesten Stand des Branches `feature/free-prompt-full-model` von GitHub, baut ihn und installiert ihn. Legt außerdem das Paket für Weg A unter `dist\` ab und veröffentlicht es als neuestes GitHub-Release (siehe [Team](#neue-version-an-andere-verteilen-team)). Ein Git-Clone ist dafür nicht nötig. |
+| `update.bat` | lädt den neuesten Stand des Branches `feature/free-prompt-full-model` von GitHub, baut ihn und installiert ihn. Legt außerdem das Paket für Weg A unter `dist\` ab. Ein Git-Clone ist dafür nicht nötig. |
 | `build.bat` | baut den Code aus dem eigenen Ordner (für lokale Änderungen), legt das Paket unter `dist\` ab und installiert es |
 | `install.bat` | installiert nur, ohne zu bauen (das ist der Weg A) |
 
@@ -186,31 +186,30 @@ Dieselben Optionen funktionieren auch mit `update.bat`. Mit `install.bat` gehen 
 
 ## Neue Version an andere verteilen (Team)
 
-Das neueste Release auf GitHub wird von `update.bat` automatisch aktualisiert. Neue Teammitglieder laden einfach immer das Release mit dem Schild *Latest* (Weg A).
+Das macht GitHub automatisch: Bei jedem Push auf `main` oder `feature/free-prompt-full-model` baut GitHub das Plugin und veröffentlicht das Paket als neuestes Release (*Latest*). Neue Teammitglieder laden also immer den aktuellen Stand, ohne dass jemand bei sich etwas ausführen muss. Den Fortschritt sieht man im Repository unter **Actions** (grüner Haken = Release ist aktuell, dauert etwa 2 Minuten).
 
-**Einmalig einrichten** (nur wer Releases veröffentlichen soll, braucht Schreibrechte im Repository):
+- **Neue Version:** `PLUGIN_VERSION` in `src/de/hm/sysmlaiqa/api/EvaluationRecord.java` erhöhen und in `AENDERUNGEN.md` einen Abschnitt `## v<Version> – …` ergänzen. Er wird der Text des Releases. Nach dem Push entsteht ein neues Release `v<Version>`.
+- **Gleiche Version:** Das vorhandene Release bekommt die neu gebaute ZIP, der Tag wird auf den neuen Stand gesetzt.
 
-1. GitHub CLI installieren: Eingabeaufforderung öffnen und `winget install --id GitHub.cli` eingeben (oder Installer von <https://cli.github.com>). Danach die Eingabeaufforderung neu öffnen.
-2. `gh auth login` eingeben und durchklicken: *GitHub.com* → *HTTPS* → *Login with a web browser*. Den angezeigten Code im Browser eingeben.
+### Wie GitHub ohne CATIA baut
 
-**Bei jeder neuen Version**
+GitHub hat kein CATIA. Im Ordner `ci/catia-stubs` liegen deshalb die Signaturen der CATIA-Klassen, die das Plugin verwendet (nur Namen von Klassen, Methoden und Konstanten, kein Programmcode von CATIA). Dagegen wird kompiliert; in CATIA läuft das Plugin dann mit den echten Klassen.
 
-1. Falls sich etwas Wesentliches geändert hat: `PLUGIN_VERSION` in `src/de/hm/sysmlaiqa/api/EvaluationRecord.java` erhöhen und in `AENDERUNGEN.md` einen Abschnitt `## v<Version> – …` ergänzen. Dieser Abschnitt wird der Text des Releases.
-2. Änderungen auf GitHub pushen (Branch `feature/free-prompt-full-model`).
-3. CATIA schließen, `update.bat` ausführen. Am Ende steht im schwarzen Fenster:
-   - neue Version: *Release v… veröffentlicht (Latest)*,
-   - gleiche Version: *Release v… aktualisiert (Latest)*, die ZIP im vorhandenen Release wird ersetzt.
-4. Kurz in CATIA testen.
+Die Signaturen muss man nur neu erzeugen, wenn der Code **CATIA-Klassen oder -Methoden verwendet, die bisher nicht vorkamen**. Dann schlägt der Build unter **Actions** rot fehl, GitHub schickt eine E-Mail, und das bisherige Release bleibt unverändert. So geht es:
 
-Ohne GitHub CLI, ohne Anmeldung oder ohne Schreibrechte überspringt `update.bat` diesen Schritt mit einer gelben Meldung, das Plugin wird trotzdem installiert. Wer nur installieren will: `update.bat -NoPublish`.
+1. Auf einem PC mit CATIA und Java JDK 17+ im Repository-Ordner `tools\update-catia-stubs.bat` doppelklicken (keine Adminrechte nötig, CATIA darf offen sein).
+2. Das Skript kompiliert das Plugin gegen das echte CATIA und gegen die neuen Signaturen und vergleicht beide Ergebnisse. Am Ende steht *„Alle … Klassen des Plugins sind byte-gleich“*.
+3. Den Ordner `ci/catia-stubs` committen und pushen (das Skript bietet das an, wenn Git installiert ist). Danach baut GitHub das Release.
 
-`build.bat` veröffentlicht bewusst nicht, weil es den lokalen, eventuell nicht gepushten Stand baut.
+Änderungen an Oberfläche, Prompts, Logik, Export-Vorlagen oder Dokumentation brauchen das nicht.
 
-**Von Hand (falls nötig):** Das Paket liegt nach `update.bat` oder `build.bat` unter `dist\SysML-AI-QA_v<Version>.zip`.
+### Von Hand (falls nötig)
+
+`update.bat` oder `build.bat` legen das Paket unter `dist\SysML-AI-QA_v<Version>.zip` ab.
 
 ![Die fertige ZIP im Ordner dist](docs/images/team-01-dist-folder.png)
 
-Auf GitHub: **Releases → Draft a new release**, Tag `v<Version>`, Target `feature/free-prompt-full-model`, ZIP in *Attach binaries by dropping them here* ziehen → **Publish release**.
+Auf GitHub: **Releases → Draft a new release** (bei einem vorhandenen Release: Release öffnen → **Stift-Symbol**), Tag `v<Version>`, ZIP in *Attach binaries by dropping them here* ziehen → **Publish release**.
 
 ![ZIP an das Release anhängen](docs/images/team-02-release-attach.png)
 
