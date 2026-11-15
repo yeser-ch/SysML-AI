@@ -1406,6 +1406,18 @@ public class ExplanationDialog extends JDialog {
                     s.allowFallback = false; // keine vermischten Modelle im Testlauf
                     s.max429WaitSec = 120;   // im Testlauf geduldiger auf Rate-Limits warten
                     s.max429Retries = 5;
+                    // Vorab prüfen, ob die Modelldaten in das Eingabelimit passen; sonst scheitert jede Frage gleich
+                    int limit = apiService.inputTokenLimit(model);
+                    int tokens = ex.exactTokens >= 0 && model.equals(ex.exactTokensModel) ? ex.exactTokens
+                            : apiService.countTokens(model, ex.content, ex.format);
+                    if (cancelRequested) break;
+                    if (limit > 0 && tokens > limit) {
+                        publish(String.format("<span style='color:#B00020'><b>Skipped %s</b>: the model data (%,d tokens) is larger than "
+                                + "its input limit (%,d tokens). No questions were sent. Choose a smaller context "
+                                + "(selected packages or element surroundings) or the other format, then export again.</span>",
+                                escapeHtml(model), tokens, limit));
+                        continue;
+                    }
                     modelLoop:
                     for (TestSuite.TestCase tc : suite.cases) {
                         for (int rep = 1; rep <= s.repetitions; rep++) {
@@ -1419,6 +1431,11 @@ public class ExplanationDialog extends JDialog {
                             if (r.answer.success) ok++;
                             if (r.idCheck != null && !r.idCheck.unknown.isEmpty()) unknownIdAnswers++;
                             publish(progressLine(done, total, model, tc, rep, s.repetitions, r));
+                            if (r.answer.tooLarge) {
+                                publish("<span style='color:#B00020'><b>Model data too large for " + escapeHtml(model)
+                                        + "</b> – skipping the remaining questions for this model.</span>");
+                                break modelLoop;
+                            }
                             if (r.answer.dailyLimit) {
                                 publish("<span style='color:#B00020'><b>Daily limit reached for " + escapeHtml(model)
                                         + "</b> – skipping the remaining questions for this model.</span>");

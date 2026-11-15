@@ -114,7 +114,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 
 | Context | Was die KI bekommt | Wann sinnvoll |
 | --- | --- | --- |
-| **Whole model** | alles außer den SysML/UML-Bibliotheken | Standard für Messungen: alle Fragen haben dieselbe Grundlage |
+| **Whole model** | alles außer den SysML/UML-Bibliotheken und den Einheitenbibliotheken ISO-80000 und QUDV | Standard für Messungen: alle Fragen haben dieselbe Grundlage |
 | **Selected packages / elements** | nur die gewählten Pakete oder Elemente, jeweils mit allem, was sie enthalten | Einfluss der Modellgröße untersuchen; große Modelle unter das Eingabelimit eines kleinen KI-Modells bringen |
 | **Selected element + surroundings** | das Element, seine Besitzer, Nachbarn und verbundene Elemente bis zur eingestellten Tiefe (*Depth*) | Fragen zu einem Element; untersuchen, ob mehr Kontext hilft |
 

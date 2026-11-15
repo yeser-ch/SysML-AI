@@ -38,7 +38,7 @@ $!txt.replaceAll('[\n\r\t]', ' ').replace('\', '\\').replace('"', '\"')##
 ##
 ## --- 1. SYSTEM-FILTER ---
 #set($isSystem = false)##
-#if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $elem.getID().contains("_180beta"))##
+#if($qName.startsWith("SysML") || $qName.startsWith("UML") || $qName.startsWith("Simulation Profile") || $qName.startsWith("Metric Suite") || $qName.startsWith("MD Customization") || $qName.startsWith("StandardProfile") || $qName.startsWith("PrimitiveTypes") || $qName.startsWith("Requirement Profile") || $qName.startsWith("Cameo") || $qName.startsWith("ISO-80000") || $qName.startsWith("QUDV") || $elem.getID().contains("_180beta"))##
 #set($isSystem = true)##
 #end##
 ##

@@ -196,6 +196,7 @@ public class GeminiExplanationService implements ExplanationService {
         RetryStats stats = new RetryStats();
         String lastError = "Unknown error.";
         boolean daily = false;
+        boolean tooLarge = false;
         for (String model : models) {
             if (cancelled) break;
             if (s.allowFallback && !CIRCUIT.isAvailable(model)) {
@@ -221,6 +222,7 @@ public class GeminiExplanationService implements ExplanationService {
                     }
                     if (cr.tooLarge) {          // zu groß für dieses Modell: inline würde genauso scheitern
                         lastError = cr.message;
+                        tooLarge = true;
                         continue;
                     }
                     if (cancelled) break;
@@ -278,6 +280,7 @@ public class GeminiExplanationService implements ExplanationService {
                 : Answer.error(lastError, System.currentTimeMillis() - start);
         err.rateLimitWaitSec = stats.waitedSec;
         err.dailyLimit = daily;
+        err.tooLarge = tooLarge && !cancelled;
         err.userMessage = questionText;
         err.previousTurns = previousTurns;
         return err;

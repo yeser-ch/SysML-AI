@@ -28,7 +28,7 @@ Es wird nichts anderes gesendet. Der Antwortstil und die Antwortsprache werden n
 
 | Einstellung *Context* | Was exportiert wird | Logspalte `scope` | Wofür |
 | --- | --- | --- | --- |
-| **Whole model** | alle Elemente des Primärmodells außer SysML/UML-Bibliotheken und Profilen | `FULL_MODEL` | Standard für Messungen: alle Fragen haben dieselbe Grundlage |
+| **Whole model** | alle Elemente des Primärmodells außer SysML/UML-Bibliotheken, Profilen und den Einheitenbibliotheken ISO-80000 und QUDV | `FULL_MODEL` | Standard für Messungen: alle Fragen haben dieselbe Grundlage |
 | **Selected packages / elements** | die mit **Choose…** gewählten Pakete oder Elemente, jeweils mit allem, was sie enthalten | `SELECTION` | Einfluss der Modellgröße: dasselbe Modell in Teilen, große Modelle unter das Eingabelimit bringen |
 | **Selected element + surroundings** | ein Element, seine Besitzer, Nachbarn und über Beziehungen erreichbare Elemente bis zur eingestellten Tiefe | `FOCUS_NEIGHBOURHOOD` | Fragen zu einem Element, Einfluss des Kontexts |
 
@@ -57,7 +57,7 @@ Erzeugt von den Velocity-Templates `sysml_flat_export.vm` (ganzes Modell, Auswah
 2. **Ganzes Modell bzw. Auswahl** (`sysml_flat_export.vm`):
    - Startpunkt: alle obersten Elemente des Primärmodells (*Whole model*) bzw. die gewählten Pakete/Elemente (*Selected packages / elements*; verschachtelte Auswahl wird vorher bereinigt).
    - Rekursiver Durchlauf durch alles, was ein Element enthält (`ownedElement`).
-   - Filter 1 – Bibliotheken: Elemente, deren qualifizierter Name mit `SysML`, `UML`, `StandardProfile`, `PrimitiveTypes`, `Cameo`, `MD Customization`, `Simulation Profile`, `Metric Suite` oder `Requirement Profile` beginnt, werden übersprungen.
+   - Filter 1 – Bibliotheken: Elemente, deren qualifizierter Name mit `SysML`, `UML`, `StandardProfile`, `PrimitiveTypes`, `Cameo`, `MD Customization`, `Simulation Profile`, `Metric Suite`, `Requirement Profile`, `ISO-80000` oder `QUDV` beginnt, werden übersprungen.
    - Filter 2 – nur bekannte SysML-v1-Typen (Liste siehe unten); Diagramme, Tabellen und Kommentare fehlen absichtlich.
    - Pro Element ein JSON-Objekt mit den Feldern aus der Tabelle unten. Ausgehende Abhängigkeiten (`clientDependency`: Satisfy, Verify, Refine, DeriveReqt, Allocate, Trace …) stehen mit Typ, Stereotyp und Ziel-ID in `outgoing_relations`.
 3. **Element mit Umgebung** (`sysml_partial_export.vm`), ausgehend vom gewählten Element:

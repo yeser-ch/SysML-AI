@@ -73,6 +73,8 @@ public interface ExplanationService {
         public int rateLimitWaitSec = 0;
         /** Tageslimit erreicht – weitere Anfragen heute sinnlos. */
         public boolean dailyLimit = false;
+        /** Modelldaten größer als das Eingabelimit des KI-Modells – jede weitere Frage scheitert genauso. */
+        public boolean tooLarge = false;
         /** Hinweis für die Anzeige, z. B. "Caching not available for this model". */
         public String note = "";
         /** Exakter Text der Frage-Nachricht (inkl. ausgewähltem Element, falls mitgeschickt). */
