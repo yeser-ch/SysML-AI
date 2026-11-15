@@ -102,6 +102,7 @@ public class ExplanationDialog extends JDialog {
     private static final String BOUNDS_PREF = "dialogBounds.";
     /** Wird nach dem nächsten erfolgreichen Export ausgeführt (Testlauf ohne vorherigen Export gestartet). */
     private Runnable afterExport;
+    private JLabel liveStatusLabel;
     private JTextArea inputArea;
     private JButton sendBtn;
 
@@ -133,6 +134,7 @@ public class ExplanationDialog extends JDialog {
         buildUI();
         loadSettings();
         fitToScreen();
+        apiService.setStatusListener(this::showLiveStatus);
         addMessage("System", "Choose the <b>context</b> and the <b>format</b> above, then click <b>Export model</b>. "
                 + "The model is only exported from CATIA when you click the button.");
     }
@@ -176,8 +178,20 @@ public class ExplanationDialog extends JDialog {
         });
     }
 
+    /** Live-Status unten rechts, z. B. "17:06:12 · per-minute rate limit, waiting 45 s". Thread-sicher. */
+    private void showLiveStatus(String msg) {
+        String t = java.time.LocalTime.now().withNano(0).toString();
+        SwingUtilities.invokeLater(() -> {
+            if (liveStatusLabel == null) return;
+            String text = msg == null || msg.isEmpty() ? " " : t + " · " + msg;
+            liveStatusLabel.setText(text.length() > 110 ? text.substring(0, 110) + " …" : text);
+            liveStatusLabel.setToolTipText(msg == null || msg.isEmpty() ? null : text);
+        });
+    }
+
     @Override
     public void dispose() {
+        apiService.setStatusListener(null);
         Rectangle b = getBounds();
         prefs.putInt(BOUNDS_PREF + "x", b.x);
         prefs.putInt(BOUNDS_PREF + "y", b.y);
@@ -575,7 +589,14 @@ public class ExplanationDialog extends JDialog {
         btns.add(sendBtn);
         btns.add(newChatBtn);
 
-        p.add(new JLabel("Your question:"), BorderLayout.NORTH);
+        // Kopfzeile: links "Your question:", rechts der Live-Status (was das Plugin gerade tut)
+        JPanel head = new JPanel(new BorderLayout(12, 0));
+        head.add(new JLabel("Your question:"), BorderLayout.WEST);
+        liveStatusLabel = new JLabel(" ");
+        liveStatusLabel.setForeground(new Color(0x9A, 0x67, 0x00));
+        liveStatusLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        head.add(liveStatusLabel, BorderLayout.CENTER);
+        p.add(head, BorderLayout.NORTH);
         p.add(new JScrollPane(inputArea), BorderLayout.CENTER);
         p.add(btns, BorderLayout.EAST);
         return p;
@@ -1407,6 +1428,7 @@ public class ExplanationDialog extends JDialog {
                     s.max429WaitSec = 120;   // im Testlauf geduldiger auf Rate-Limits warten
                     s.max429Retries = 5;
                     // Vorab prüfen, ob die Modelldaten in das Eingabelimit passen; sonst scheitert jede Frage gleich
+                    showLiveStatus("Checking the size of the model data for " + model + " …");
                     int limit = apiService.inputTokenLimit(model);
                     int tokens = ex.exactTokens >= 0 && model.equals(ex.exactTokensModel) ? ex.exactTokens
                             : apiService.countTokens(model, ex.content, ex.format);
@@ -1426,6 +1448,7 @@ public class ExplanationDialog extends JDialog {
                                 for (int w = 0; w < pauseSec * 10 && !cancelRequested; w++) Thread.sleep(100);
                                 if (cancelRequested) break outer;
                             }
+                            showLiveStatus("Question " + (done + 1) + "/" + total + " (" + tc.id + ") …");
                             EvaluationRecord r = Evaluation.run(apiService, s, ex, tc.question, null, tc, runId, rep, runFile);
                             done++;
                             if (r.answer.success) ok++;
@@ -1581,6 +1604,7 @@ public class ExplanationDialog extends JDialog {
             for (Component comp : depthPanel.getComponents()) comp.setEnabled(focus && !busy);
             depthPanel.setVisible(focus && !nativeV2);
         }
+        if (!busy) showLiveStatus("");
         if (suiteRunning) {
             suiteBtn.setText(cancelRequested ? "Stopping…" : "Stop test run");
             suiteBtn.setEnabled(!cancelRequested);

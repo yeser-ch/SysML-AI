@@ -343,6 +343,8 @@ Für Messungen werden Fragen nicht einzeln getippt, sondern als Liste in einer C
 
 ![Testlauf bestätigen](docs/images/test-suite-confirm.png)
 
+Rechts neben *Your question:* steht laufend, was das Plugin gerade tut (welche Frage, Hochladen, Warten auf ein Google-Limit mit Sekunden). Wartet es dort, ist das normal: Im Free Tier sind nur wenige Anfragen pro Minute erlaubt.
+
 Während des Laufs erscheint pro Antwort eine Zeile mit Nummer, Testfall, Modell, *ok* oder *failed*, Dauer und dem Anfang der Antwort. Zum Abbrechen **Stop test run** oder unten **Stop** (der Knopf *Send*) klicken. Das bricht sofort ab, auch die gerade laufende Frage, selbst wenn das Plugin wegen eines Limits wartet oder das Modell hochlädt. Im Chat steht *Stopping the test run …*, danach *Test run … stopped*. Bisherige Ergebnisse bleiben in `runs/run_<id>.csv` und `.xlsx` gespeichert; die abgebrochene Frage steht dort mit *Cancelled by user.* Die Enter-Taste stoppt einen Testlauf nicht.
 
 ![Abgeschlossener Testlauf](docs/images/test-suite-finished.png)

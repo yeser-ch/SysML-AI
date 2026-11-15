@@ -953,7 +953,18 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
+    /** Empfänger für Statusmeldungen (Hochladen, Senden, Warten auf Limits); das Fenster zeigt sie live an. */
+    private volatile java.util.function.Consumer<String> statusListener;
+
+    public void setStatusListener(java.util.function.Consumer<String> listener) {
+        statusListener = listener;
+    }
+
     private void log(String msg) {
+        java.util.function.Consumer<String> l = statusListener;
+        if (l != null) {
+            try { l.accept(msg); } catch (Throwable ignored) { }
+        }
         String prefixed = SysmlAiQaPlugin.LOG_PREFIX + msg;
         try {
             javax.swing.SwingUtilities.invokeLater(() -> {
