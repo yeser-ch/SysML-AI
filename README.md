@@ -24,7 +24,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 - Freie Fragen zum ganzen Modell, zu ausgewählten Paketen/Elementen oder zu einem Element mit einstellbarer Umgebung stellen, mit Folgefragen im Chat
 - SysML-v1- und SysML-v2-Modelle senden (v1 als JSON oder in SysML-v2-Notation, v2-Projekte als Textexport von CATIA), Größe und exakte Tokens vorab sehen
 - Genau ansehen und speichern, was gesendet wird (*Show request…*), System-Prompt im Fenster ändern, laufende Anfragen abbrechen
-- Schnellfragen als Vorlagen nach den vier Kategorien A Retrieval, B Structure, C Semantics, D Uncertainty
+- Schnellfragen: die acht Fragen des Fragenkatalogs (A-01 … D-02) nach den vier Kategorien A Information Retrieval, B Structural Reasoning, C Semantic Reasoning, D Uncertainty
 - Alle Versuchsparameter in einem Fenster: KI-Modell, Temperatur, Thinking, Kontext, Grounding, Fallback, Wiederholungen
 - Eine Testsuite aus einer CSV-Datei automatisch abarbeiten und jede Antwort mit Versuchsaufbau protokollieren (CSV für Excel)
 - Zitierte Element-IDs gegen das Modell prüfen

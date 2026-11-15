@@ -1263,7 +1263,7 @@ public class ExplanationDialog extends JFrame {
             addMessage("System", "The context was changed. Click <b>Export model</b> to export it, then send the question.");
             return;
         }
-        if (question.matches("(?s).*<[^<>]{1,40}>.*")) {
+        if (question.matches("(?s).*<[^<>]{1,100}>.*")) {
             int choice = JOptionPane.showConfirmDialog(this,
                     "Your question still contains a placeholder like <element>. Send anyway?",
                     "Placeholder", JOptionPane.YES_NO_OPTION);

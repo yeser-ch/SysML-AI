@@ -301,25 +301,31 @@ Element per Rechtsklick → **Ask AI…** öffnen (oder im offenen Fenster das E
 - Oben steht das gewählte Element mit Typ, z. B. *Selected element: Operating Time [Requirement]*.
 - **Context** steht auf *Selected element + surroundings*. Die KI bekommt nur dieses Element und seine Umgebung. Das ist schneller, aber Fragen zu weit entfernten Teilen kann sie dann nicht beantworten. Dann **Depth** erhöhen oder auf *Whole model* umstellen.
 - **Mention selected element** (an) nennt der KI das gewählte Element bei der ersten Frage. Ausschalten, wenn die KI das Element selbst finden soll.
-- Die **Schnellfragen** beziehen sich auf das gewählte Element. Für Requirements gibt es eigene Fragen (z. B. zu satisfy und verify).
+- In den **Schnellfragen** ist das gewählte Element schon eingesetzt (bei einer Anforderung in `<requirement ID>`, sonst in `<component>`).
 
 ---
 
 ## 9. Schnellfragen
 
-Die Schnellfragen sind Vorlagen für die vier Fähigkeiten, die das Projekt untersucht:
+Die Schnellfragen sind die acht Fragen des Fragenkatalogs, je zwei für die vier Fähigkeiten, die das Projekt untersucht:
 
-| Kategorie | Prüft | Beispiel |
-| --- | --- | --- |
-| **A · Retrieval** | Findet die KI Informationen im Modell? | *Which component satisfies the requirement …?* |
-| **B · Structure** | Verfolgt sie direkte und indirekte Verbindungen? | *Which components are directly or indirectly connected to …?* |
-| **C · Semantics** | Versteht sie, was eine Beziehung bedeutet? | *Does the satisfy relationship prove that the requirement is fulfilled?* |
-| **D · Uncertainty** | Erkennt sie fehlende Informationen? | *Is there enough information to decide whether … is fulfilled?* |
+| Kategorie | Prüft | ID | Frage |
+| --- | --- | --- | --- |
+| **A: Information Retrieval** | Findet die KI Informationen im Modell? | A-01 | *Which component satisfies the requirement `<requirement ID>`?* |
+| | | A-02 | *Which subcomponents (parts) does `<component>` consist of?* |
+| **B: Structural Reasoning** | Verfolgt sie direkte und indirekte Verbindungen? | B-01 | *Which components is `<component>` directly connected to, and which only indirectly via other components?* |
+| | | B-02 | *How does `<data flow / item>` get from `<component 1>` to `<component 2, with at least one component in between>`? Name all components, ports and interfaces along the way.* |
+| **C: Semantic Reasoning** | Versteht sie, was eine Beziehung bedeutet? | C-01 | *Does the satisfy relationship between `<component>` and `<requirement ID>` prove that the requirement is fulfilled? Explain your answer.* |
+| | | C-02 | *Can `<component 1>` send data directly to `<component 2, not directly connected to component 1>`? Justify your answer using the model.* |
+| **D: Uncertainty** | Erkennt sie fehlende Informationen? | D-01 | *Does the system actually fulfil the requirement `<requirement ID without test results in the model>` in its current state?* |
+| | | D-02 | *What type and which properties does `<element that is not in the model, e.g. a name only mentioned in a text>` have?* |
+
+Der Text in den spitzen Klammern sagt, welches Element passt. Ist ein Element ausgewählt und *Context* auf *Selected element + surroundings* gestellt, setzt das Plugin seinen Namen schon ein: bei einer Anforderung in `<requirement ID>`, sonst in `<component>` bzw. `<component 1>`.
 
 So geht's:
 
 1. Eine Schnellfrage anklicken. Sie wird unten ins Eingabefeld übernommen. Mit der Maus über einen Button fahren zeigt die ganze Frage.
-2. Platzhalter in spitzen Klammern ausfüllen, z. B. `<add requirement>`. Der erste Platzhalter ist nach dem Klick schon markiert und lässt sich direkt überschreiben.
+2. Platzhalter in spitzen Klammern ausfüllen, z. B. `<requirement ID>`. Der erste Platzhalter ist nach dem Klick schon markiert und lässt sich direkt überschreiben.
 3. **Send**. Steht noch ein Platzhalter in der Frage, fragt das Plugin vor dem Senden nach.
 
 ![Schnellfragen zu einem Requirement](docs/images/quick-element.png)
@@ -462,7 +468,7 @@ Normal: Bei der ersten Frage wird das Modell hochgeladen. Schneller geht es mit 
 Das Free-Tier-Limit von Google ist erreicht. Beim Minutenlimit wartet das Plugin selbst. Beim Tageslimit bis zum nächsten Tag warten oder ein anderes Modell wählen.
 
 **Die Schnellfragen passen nicht zu meinem Element.**
-Prüfen, ob *Context* auf *Selected element + surroundings* steht. Bei *Whole model* zeigt das Plugin die Fragen zum ganzen Modell.
+Die Schnellfragen sind die acht festen Fragen des Fragenkatalogs. Das ausgewählte Element setzt das Plugin nur bei *Context: Selected element + surroundings* ein, und nur in passende Platzhalter (Anforderung in `<requirement ID>`, sonst in `<component>`). Die übrigen Platzhalter von Hand ausfüllen.
 
 **„Model data too large for …“ oder rote Statuszeile.**
 Das Modell ist größer als das Eingabelimit des KI-Modells. Kleineren *Context* wählen (*Selected packages / elements* oder *surroundings*), das andere Format probieren oder ein KI-Modell mit größerem Limit nehmen.
