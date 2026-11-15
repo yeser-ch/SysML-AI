@@ -100,6 +100,8 @@ public class ExplanationDialog extends JDialog {
     private JScrollPane topScroll;
     private JSplitPane splitPane;
     private static final String BOUNDS_PREF = "dialogBounds.";
+    /** Wird nach dem nächsten erfolgreichen Export ausgeführt (Testlauf ohne vorherigen Export gestartet). */
+    private Runnable afterExport;
     private JTextArea inputArea;
     private JButton sendBtn;
 
@@ -385,7 +387,8 @@ public class ExplanationDialog extends JDialog {
                 + "The plugin then checks whether these ids exist in the model. Changes the prompt – keep it constant within an experiment.");
         requireIdsBox.addActionListener(e -> saveSettings());
         suiteBtn = new JButton("Run test suite…");
-        suiteBtn.setToolTipText("Load a CSV with test cases (test_id;category;question;expected_answer) and run all of them automatically.");
+        suiteBtn.setToolTipText("<html>Load a CSV with test cases (test_id;category;question;expected_answer) and run all of them automatically.<br>"
+                + "If the model has not been exported yet, the plugin offers to export it first.</html>");
         suiteBtn.addActionListener(e -> {
             if (suiteRunning) stopTestSuite();
             else startTestSuite();
@@ -411,6 +414,7 @@ public class ExplanationDialog extends JDialog {
         exportBtn.setFont(exportBtn.getFont().deriveFont(Font.BOLD));
         exportBtn.addActionListener(e -> {
             if (busy) return;
+            afterExport = null;   // manueller Export startet keinen vorgemerkten Testlauf
             if (isSelectionScope() && selectedRoots.isEmpty() && !isNativeFormat() && !chooseSelection()) return;
             runExport();
         });
@@ -1046,6 +1050,7 @@ public class ExplanationDialog extends JDialog {
 
     /** Format gewechselt: dasselbe Modell neu schreiben (ohne neuen Export aus CATIA). */
     private void switchFormat() {
+        afterExport = null;
         final ModelExport base = baseExport;
         if (isNativeFormat() || base == null || export == null || export.isNative()) {
             // SysML-v2-Dateien bzw. noch kein SysML-v1-Export: nichts automatisch lesen, auf "Export model" warten
@@ -1107,6 +1112,9 @@ public class ExplanationDialog extends JDialog {
                 : "The model is sent with each question.")
                 + "<br>Type a question below or pick a quick question. <i>Show request…</i> shows exactly what is sent.");
         countTokensAsync();
+        Runnable next = afterExport;
+        afterExport = null;
+        if (newExport && next != null) SwingUtilities.invokeLater(next);   // erst nach Abschluss des Exports
     }
 
     private String exportStatusText() {
@@ -1271,9 +1279,22 @@ public class ExplanationDialog extends JDialog {
     // ═══════════════════════════════════════════════════════════════════════
 
     private void startTestSuite() {
-        if (busy || export == null || exportOutdated()) {
-            addMessage("System", export == null || exportOutdated()
-                    ? "Click <b>Export model</b> first." : "Wait until the model export is finished.");
+        if (busy) {
+            addMessage("System", "Wait until the model export is finished.");
+            return;
+        }
+        if (export == null || exportOutdated()) {
+            // Noch kein (aktueller) Export: anbieten, jetzt zu exportieren und danach den Testlauf zu starten
+            String why = export == null ? "The model has not been exported yet."
+                    : "The context was changed since the last export.";
+            String what = isNativeFormat() ? "the SysML v2 files" : String.valueOf(scopeBox.getSelectedItem());
+            int go = JOptionPane.showConfirmDialog(this,
+                    why + "\nExport now (" + what + ", " + formatBox.getSelectedItem() + ") and then choose the test cases?",
+                    "Run test suite", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (go != JOptionPane.YES_OPTION) return;
+            if (isSelectionScope() && selectedRoots.isEmpty() && !isNativeFormat() && !chooseSelection()) return;
+            afterExport = this::startTestSuite;
+            runExport();
             return;
         }
         JFileChooser chooser = new JFileChooser(prefs.get("sysmlaiqa_last_suite_dir", System.getProperty("user.home")));
@@ -1548,7 +1569,7 @@ public class ExplanationDialog extends JDialog {
             suiteBtn.setEnabled(!cancelRequested);
         } else {
             suiteBtn.setText("Run test suite…");
-            suiteBtn.setEnabled(!busy && export != null && !exportOutdated());
+            suiteBtn.setEnabled(!busy);   // ohne Export bietet der Knopf an, zuerst zu exportieren
         }
         scopeBox.setEnabled(!busy && !nativeV2);
         if (useSelectionBtn != null) useSelectionBtn.setEnabled(!busy && !nativeV2);

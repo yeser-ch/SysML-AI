@@ -90,7 +90,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 13 | **Fallback model** | An: Ist das gewählte Modell überlastet, probiert das Plugin automatisch andere Modelle. Für Messungen **aus** lassen, sonst sind Ergebnisse verschiedener Modelle vermischt | aus |
 | 14 | **Mention selected element** | Nur wenn ein Element ausgewählt ist. An: Die erste Frage eines Chats beginnt mit *# Currently selected element* und Name, Typ, ID und Besitzer des Elements (genauer Text im Tooltip). Aus: Über die Auswahl wird nichts gesendet | an |
 | 15 | **Cite element IDs (hallucination check)** | Die KI muss zu jedem genannten Element dessen ID angeben. Das Plugin prüft dann, ob es diese IDs im Modell gibt, und markiert erfundene. Ändert den System-Prompt | aus |
-| 16 | **Run test suite…** | Startet einen Testlauf mit Fragen aus einer CSV-Datei (siehe [Abschnitt 10](#10-testlauf-mit-vielen-fragen)). Während des Laufs heißt der Button *Stop test run*; *Send* (27) heißt dann ebenfalls *Stop* | – |
+| 16 | **Run test suite…** | Startet einen Testlauf mit Fragen aus einer CSV-Datei (siehe [Abschnitt 10](#10-testlauf-mit-vielen-fragen)). Ist das Modell noch nicht exportiert oder der Context geändert, fragt das Plugin, ob es jetzt exportieren soll, und startet danach den Testlauf. Während des Laufs heißt der Button *Stop test run*; *Send* (27) heißt dann ebenfalls *Stop* | – |
 | 17 | **Repetitions** | Wie oft jede Frage gestellt wird (1–20), jedes Mal in einem neuen Chat. Mehr als 1 zeigt, wie stabil die Antworten sind | 1 |
 | 18 | **Statuszeile** | Format, Anzahl Elemente und Beziehungen, Größe, geschätzte Tokens, die **exakte** Tokenzahl für das gewählte KI-Modell und eine Prüfsumme (`export …`). Nach dem Hochladen zusätzlich *uploaded for …*. Ist das Modell größer als das Eingabelimit des KI-Modells, wird die Zeile rot. Mit der Maus darüberfahren zeigt den vollen Text und den Umfang | – |
 | 19 | **Export model** / **Resend model** | Exportiert den gewählten Context aus CATIA. Vor dem ersten Export und nach einer Änderung des Contexts heißt der Button *Export model*, sonst *Resend model*. Lädt das Modell mit der nächsten Frage neu hoch. **Nach jeder Änderung am Modell in CATIA klicken**, sonst antwortet die KI zum alten Stand | – |
@@ -334,7 +334,7 @@ Für Messungen werden Fragen nicht einzeln getippt, sondern als Liste in einer C
 
 1. **Testfälle anlegen:** Vorlage [`evaluation/testcases_template.csv`](evaluation/testcases_template.csv) in Excel öffnen. Pro Zeile eine Frage mit ID, Kategorie (A–D) und Referenzantwort. Details: [`evaluation/README.md`](evaluation/README.md).
 2. Im Plugin die Einstellungen wählen (Modell, Context, Format, Temperatur, Thinking, Repetitions …). Der Testlauf nutzt genau diese Einstellungen und den aktuellen System-Prompt.
-3. **Run test suite…** klicken und die CSV-Datei auswählen.
+3. **Run test suite…** klicken und die CSV-Datei auswählen. Ist das Modell noch nicht exportiert (oder der Context seit dem Export geändert), fragt das Plugin zuerst *Export now … and then choose the test cases?*. Mit **Yes** exportiert es und öffnet danach die Dateiauswahl.
 4. Im folgenden Fenster prüfen:
    - Anzahl der geladenen Testfälle je Kategorie
    - **Models**: ein Modell oder mehrere, durch Komma getrennt. Mehrere Modelle laufen nacheinander mit denselben Fragen, so lassen sich Modellgrößen vergleichen

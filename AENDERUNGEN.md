@@ -5,6 +5,7 @@ Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d
 ## v3.5.1 – Testlauf zuverlässig stoppen, Fenster passt auf den Laptop
 
 - **Fenster passt auf den Bildschirm:** Bisher war das Fenster fest 800 × 900 Pixel groß. Auf Laptops mit Windows-Skalierung ragte es über den unteren Rand, Chat und Eingabefeld waren nicht zu sehen. Jetzt richtet sich die Größe nach dem freien Bildschirm (ohne Taskleiste). Größe und Position werden gespeichert, aber nur wiederhergestellt, wenn sie ganz auf den aktuellen Bildschirm passen.
+- **Run test suite… ohne vorherigen Export:** Der Knopf ist nicht mehr grau, solange kein Export vorliegt. Ein Klick fragt *Export now … and then choose the test cases?*; mit *Yes* exportiert das Plugin den eingestellten Context und öffnet danach die Dateiauswahl für die CSV. *Send* bleibt bis zum Export gesperrt.
 - **Verschiebbare Trennlinie** zwischen Einstellungen und Chat; die Pfeile auf der Linie klappen die Einstellungen ein und aus. Die Einstellungen sind scrollbar.
 
 - **Stop kam manchmal nicht an:** Jede neue Anfrage setzte den Abbruch zurück. Klickte man *Stop test run* zwischen zwei Testfällen, lief die nächste Frage trotzdem komplett durch (mit Upload und Wartezeiten bei Limits bis zu mehreren Minuten), obwohl der Knopf *Stopping…* zeigte. Der Abbruch wird jetzt nur noch beim Start einer neuen Frage bzw. eines neuen Testlaufs zurückgesetzt.
