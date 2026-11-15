@@ -48,7 +48,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.prefs.Preferences;
 
-public class ExplanationDialog extends JDialog {
+public class ExplanationDialog extends JFrame {
 
     private static final String SCOPE_FULL = "Whole model";
     private static final String SCOPE_SELECTION = "Selected packages / elements";
@@ -121,9 +121,12 @@ public class ExplanationDialog extends JDialog {
      *                     "Selected element + surroundings" wählbar und kann im Fenster mit "Take CATIA selection" ersetzt werden.
      */
     public ExplanationDialog(Element focusElement) {
-        // Kein "always on top" mehr: Das Fenster gehört zum CATIA-Hauptfenster. Es bleibt dadurch über CATIA,
-        // wird mit CATIA minimiert und liegt NICHT über anderen Programmen. Nicht modal: CATIA bleibt bedienbar.
-        super(catiaMainFrame(), Dialog.ModalityType.MODELESS);
+        // Eigenes Fenster (JFrame) mit Minimieren, Maximieren und Schließen und eigenem Eintrag in der Taskleiste.
+        // Nicht modal: CATIA bleibt bedienbar. Klickt man in CATIA, kann das Fenster dahinter verschwinden –
+        // über die Taskleiste kommt es zurück.
+        super();
+        Frame catia = catiaMainFrame();
+        if (catia != null && !catia.getIconImages().isEmpty()) setIconImages(catia.getIconImages());
         this.focusElement = focusElement;
 
         setTitle(SysmlAiQaPlugin.DISPLAY_NAME);
@@ -153,7 +156,8 @@ public class ExplanationDialog extends JDialog {
      * Die zuletzt benutzte Größe und Position werden wiederhergestellt, wenn sie vollständig auf den Bildschirm passen.
      */
     private void fitToScreen() {
-        GraphicsConfiguration gc = getOwner() != null ? getOwner().getGraphicsConfiguration() : null;
+        Frame catia = catiaMainFrame();   // auf dem Bildschirm öffnen, auf dem CATIA liegt
+        GraphicsConfiguration gc = catia != null ? catia.getGraphicsConfiguration() : null;
         if (gc == null) gc = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().getDefaultConfiguration();
         Rectangle screen = gc.getBounds();
         Insets in = Toolkit.getDefaultToolkit().getScreenInsets(gc);   // Taskleiste abziehen
@@ -192,11 +196,13 @@ public class ExplanationDialog extends JDialog {
     @Override
     public void dispose() {
         apiService.setStatusListener(null);
-        Rectangle b = getBounds();
-        prefs.putInt(BOUNDS_PREF + "x", b.x);
-        prefs.putInt(BOUNDS_PREF + "y", b.y);
-        prefs.putInt(BOUNDS_PREF + "w", b.width);
-        prefs.putInt(BOUNDS_PREF + "h", b.height);
+        if (getExtendedState() == Frame.NORMAL) {   // maximiert/minimiert: letzte normale Größe behalten
+            Rectangle b = getBounds();
+            prefs.putInt(BOUNDS_PREF + "x", b.x);
+            prefs.putInt(BOUNDS_PREF + "y", b.y);
+            prefs.putInt(BOUNDS_PREF + "w", b.width);
+            prefs.putInt(BOUNDS_PREF + "h", b.height);
+        }
         cancelRequested = true; // laufenden Testlauf beim Schließen beenden
         apiService.cancel();    // ... und die gerade laufende Anfrage auch
         apiService.discardUploadedModel(); // Upload bei Google löschen (läuft sonst nach 60 min ab)
