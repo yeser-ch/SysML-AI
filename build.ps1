@@ -216,7 +216,7 @@ try {
         if ($r.Output -match 'package com\.nomagic') {
             Fail "Die CATIA-Bibliotheken wurden nicht gefunden – ist '$CatiaDir' der richtige Ordner?"
         }
-        Fail 'Kompilieren fehlgeschlagen (Meldungen siehe oben). Bitte die Ausgabe an Claude schicken.'
+        Fail 'Kompilieren fehlgeschlagen (Meldungen siehe oben). Bitte die Ausgabe an die Entwicklerin schicken.'
     }
     Ok 'Kompiliert.'
 
