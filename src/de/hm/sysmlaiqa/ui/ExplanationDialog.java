@@ -144,6 +144,7 @@ public class ExplanationDialog extends JDialog {
     @Override
     public void dispose() {
         cancelRequested = true; // laufenden Testlauf beim Schließen beenden
+        apiService.cancel();    // ... und die gerade laufende Anfrage auch
         apiService.discardUploadedModel(); // Upload bei Google löschen (läuft sonst nach 60 min ab)
         super.dispose();
     }
@@ -336,14 +337,8 @@ public class ExplanationDialog extends JDialog {
         suiteBtn = new JButton("Run test suite…");
         suiteBtn.setToolTipText("Load a CSV with test cases (test_id;category;question;expected_answer) and run all of them automatically.");
         suiteBtn.addActionListener(e -> {
-            if (suiteRunning) {
-                cancelRequested = true;
-                apiService.cancel();   // laufende Anfrage sofort abbrechen
-                suiteBtn.setText("Stopping…");
-                suiteBtn.setEnabled(false);
-            } else {
-                startTestSuite();
-            }
+            if (suiteRunning) stopTestSuite();
+            else startTestSuite();
         });
         JPanel evalRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         evalRow.add(requireIdsBox);
@@ -506,7 +501,7 @@ public class ExplanationDialog extends JDialog {
         am.put("send", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                sendQuestion();
+                if (!suiteRunning) sendQuestion();   // Enter soll einen Testlauf nicht versehentlich stoppen
             }
         });
 
@@ -1143,6 +1138,10 @@ public class ExplanationDialog extends JDialog {
     // ═══════════════════════════════════════════════════════════════════════
 
     private void sendQuestion() {
+        if (suiteRunning) {                 // während eines Testlaufs ist "Send" ebenfalls "Stop"
+            stopTestSuite();
+            return;
+        }
         if (requestRunning) {               // "Stop" (NFR4)
             cancelRequested = true;
             apiService.cancel();
@@ -1178,6 +1177,7 @@ public class ExplanationDialog extends JDialog {
         busy = true;
         requestRunning = true;
         cancelRequested = false;
+        apiService.resetCancel();
         updateControls();
 
         new SwingWorker<Void, EvaluationRecord>() {
@@ -1300,6 +1300,15 @@ public class ExplanationDialog extends JDialog {
         runTestSuite(suite, models, base, pauseSec, total);
     }
 
+    /** Bricht den Testlauf ab: keine weiteren Fragen, die gerade laufende Anfrage wird sofort beendet. */
+    private void stopTestSuite() {
+        if (!suiteRunning || cancelRequested) return;
+        cancelRequested = true;
+        apiService.cancel();
+        addMessage("System", "Stopping the test run … Results so far are kept.");
+        updateControls();
+    }
+
     private void runTestSuite(TestSuite suite, List<String> models, AskSettings base, int pauseSec, int total) {
         final String runId = EvaluationLog.newRunId();
         final File runFile = EvaluationLog.newRunFile(runId);
@@ -1308,6 +1317,7 @@ public class ExplanationDialog extends JDialog {
         busy = true;
         suiteRunning = true;
         cancelRequested = false;
+        apiService.resetCancel();
         updateControls();
         addMessage("System", "<b>Test run " + runId + " started</b>: " + suite.cases.size() + " cases × "
                 + models.size() + " model(s) × " + base.repetitions + " repetition(s) = " + total + " requests.<br>"
@@ -1457,10 +1467,11 @@ public class ExplanationDialog extends JDialog {
     }
 
     private void updateControls() {
-        if (requestRunning) {
+        if (requestRunning || suiteRunning) {
             sendBtn.setText(cancelRequested ? "Stopping…" : "Stop");
             sendBtn.setEnabled(!cancelRequested);
-            sendBtn.setToolTipText("Cancel the running request.");
+            sendBtn.setToolTipText(suiteRunning ? "Stop the test run (also cancels the running request)."
+                    : "Cancel the running request.");
         } else {
             sendBtn.setEnabled(!busy && export != null && !exportOutdated());
             sendBtn.setText(busy ? "Busy…" : "Send");

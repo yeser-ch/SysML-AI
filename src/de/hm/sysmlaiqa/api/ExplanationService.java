@@ -22,8 +22,11 @@ public interface ExplanationService {
     /** Verwirft hochgeladene Modelle (Cache). Die nächste Frage lädt das Modell neu hoch. */
     default void discardUploadedModel() { }
 
-    /** Bricht die laufende Anfrage ab (NFR4). */
+    /** Bricht die laufende Anfrage ab (NFR4). Der Abbruch gilt, bis {@link #resetCancel()} aufgerufen wird. */
     default void cancel() { }
+
+    /** Hebt einen früheren Abbruch auf. Das UI ruft das einmal vor jeder neuen Frage bzw. vor jedem Testlauf auf. */
+    default void resetCancel() { }
 
     /** Anzahl bisheriger Frage/Antwort-Paare im aktuellen Chat. */
     default int previousTurns() { return 0; }

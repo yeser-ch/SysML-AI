@@ -139,6 +139,11 @@ public class GeminiExplanationService implements ExplanationService {
     }
 
     @Override
+    public void resetCancel() {
+        cancelled = false;
+    }
+
+    @Override
     public int previousTurns() {
         return conversationHistory.size() / 2;
     }
@@ -169,7 +174,9 @@ public class GeminiExplanationService implements ExplanationService {
             return Answer.error("No API key configured. Use \"API key...\" to enter one.", 0);
         }
 
-        cancelled = false;
+        // cancelled wird hier bewusst NICHT zurückgesetzt: Ein Stop, der kurz vor dieser Anfrage kam
+        // (z. B. zwischen zwei Testfällen), ginge sonst verloren. Zurückgesetzt wird nur über resetCancel().
+        // Ist er gesetzt, bricht die Modellschleife unten sofort ab und die Antwort lautet "Cancelled by user."
         if (s.freshChat) resetConversation();
         int previousTurns = previousTurns();
         boolean firstInChat = conversationHistory.isEmpty();
@@ -267,13 +274,17 @@ public class GeminiExplanationService implements ExplanationService {
         }
 
         Answer err = cancelled
-                ? new Answer(CANCELLED, "-", false, System.currentTimeMillis() - start, -1, -1, "CANCELLED")
+                ? cancelledAnswer(start)
                 : Answer.error(lastError, System.currentTimeMillis() - start);
         err.rateLimitWaitSec = stats.waitedSec;
         err.dailyLimit = daily;
         err.userMessage = questionText;
         err.previousTurns = previousTurns;
         return err;
+    }
+
+    private static Answer cancelledAnswer(long start) {
+        return new Answer(CANCELLED, "-", false, System.currentTimeMillis() - start, -1, -1, "CANCELLED");
     }
 
     /** Liste der Modelle, die generateContent unterstützen (für das Dropdown). Leer bei Fehlern. */

@@ -88,7 +88,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 13 | **Fallback model** | An: Ist das gewählte Modell überlastet, probiert das Plugin automatisch andere Modelle. Für Messungen **aus** lassen, sonst sind Ergebnisse verschiedener Modelle vermischt | aus |
 | 14 | **Mention selected element** | Nur wenn ein Element ausgewählt ist. An: Die erste Frage eines Chats beginnt mit *# Currently selected element* und Name, Typ, ID und Besitzer des Elements (genauer Text im Tooltip). Aus: Über die Auswahl wird nichts gesendet | an |
 | 15 | **Cite element IDs (hallucination check)** | Die KI muss zu jedem genannten Element dessen ID angeben. Das Plugin prüft dann, ob es diese IDs im Modell gibt, und markiert erfundene. Ändert den System-Prompt | aus |
-| 16 | **Run test suite…** | Startet einen Testlauf mit Fragen aus einer CSV-Datei (siehe [Abschnitt 10](#10-testlauf-mit-vielen-fragen)). Während des Laufs heißt der Button *Stop test run* | – |
+| 16 | **Run test suite…** | Startet einen Testlauf mit Fragen aus einer CSV-Datei (siehe [Abschnitt 10](#10-testlauf-mit-vielen-fragen)). Während des Laufs heißt der Button *Stop test run*; *Send* (27) heißt dann ebenfalls *Stop* | – |
 | 17 | **Repetitions** | Wie oft jede Frage gestellt wird (1–20), jedes Mal in einem neuen Chat. Mehr als 1 zeigt, wie stabil die Antworten sind | 1 |
 | 18 | **Statuszeile** | Format, Anzahl Elemente und Beziehungen, Größe, geschätzte Tokens, die **exakte** Tokenzahl für das gewählte KI-Modell und eine Prüfsumme (`export …`). Nach dem Hochladen zusätzlich *uploaded for …*. Ist das Modell größer als das Eingabelimit des KI-Modells, wird die Zeile rot. Mit der Maus darüberfahren zeigt den vollen Text und den Umfang | – |
 | 19 | **Export model** / **Resend model** | Exportiert den gewählten Context aus CATIA. Vor dem ersten Export und nach einer Änderung des Contexts heißt der Button *Export model*, sonst *Resend model*. Lädt das Modell mit der nächsten Frage neu hoch. **Nach jeder Änderung am Modell in CATIA klicken**, sonst antwortet die KI zum alten Stand | – |
@@ -99,7 +99,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 24 | **Quick questions** | Fragevorlagen nach den Kategorien A–D (siehe [Abschnitt 9](#9-schnellfragen)) | – |
 | 25 | **Chatverlauf** | *System*: Meldungen des Plugins. *You*: deine Fragen. *AI*: Antworten mit Messwerten | – |
 | 26 | **Your question** | Frage eintippen. **Enter** schickt ab, **Shift+Enter** macht eine neue Zeile | – |
-| 27 | **Send / Stop** | Frage abschicken. Während die KI arbeitet, steht dort **Stop**: bricht die Anfrage sofort ab | – |
+| 27 | **Send / Stop** | Frage abschicken. Während die KI arbeitet oder ein Testlauf läuft, steht dort **Stop**: bricht die Anfrage bzw. den Testlauf sofort ab | – |
 | 28 | **New chat** | Löscht den Chatverlauf. Das exportierte Modell bleibt geladen | – |
 
 **Wann wird das Modell neu hochgeladen?** Nach jedem Export (*Export model* / *Resend model*) und automatisch, wenn sich das KI-Modell, das Format, der System-Prompt, der ID-Check oder Grounding ändert. Grund: Diese Dinge gehören zum hochgeladenen Paket.
@@ -341,7 +341,7 @@ Für Messungen werden Fragen nicht einzeln getippt, sondern als Liste in einer C
 
 ![Testlauf bestätigen](docs/images/test-suite-confirm.png)
 
-Während des Laufs erscheint pro Antwort eine Zeile mit Nummer, Testfall, Modell, *ok* oder *failed*, Dauer und dem Anfang der Antwort. **Stop test run** bricht sofort ab, auch die gerade laufende Frage. Bisherige Ergebnisse bleiben gespeichert.
+Während des Laufs erscheint pro Antwort eine Zeile mit Nummer, Testfall, Modell, *ok* oder *failed*, Dauer und dem Anfang der Antwort. Zum Abbrechen **Stop test run** oder unten **Stop** (der Knopf *Send*) klicken. Das bricht sofort ab, auch die gerade laufende Frage, selbst wenn das Plugin wegen eines Limits wartet oder das Modell hochlädt. Im Chat steht *Stopping the test run …*, danach *Test run … stopped*. Bisherige Ergebnisse bleiben in `runs/run_<id>.csv` und `.xlsx` gespeichert; die abgebrochene Frage steht dort mit *Cancelled by user.* Die Enter-Taste stoppt einen Testlauf nicht.
 
 ![Abgeschlossener Testlauf](docs/images/test-suite-finished.png)
 

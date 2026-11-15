@@ -2,6 +2,14 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
+## v3.5.1 – Testlauf zuverlässig stoppen
+
+- **Stop kam manchmal nicht an:** Jede neue Anfrage setzte den Abbruch zurück. Klickte man *Stop test run* zwischen zwei Testfällen, lief die nächste Frage trotzdem komplett durch (mit Upload und Wartezeiten bei Limits bis zu mehreren Minuten), obwohl der Knopf *Stopping…* zeigte. Der Abbruch wird jetzt nur noch beim Start einer neuen Frage bzw. eines neuen Testlaufs zurückgesetzt.
+- **Send wird im Testlauf zu Stop:** Bisher war *Send* während des Laufs grau (*Busy…*), gestoppt werden konnte nur oben über *Stop test run*. Jetzt stoppt auch der Knopf unten den Lauf. Enter im Eingabefeld stoppt ihn nicht.
+- Im Chat erscheint sofort *Stopping the test run …*.
+- Beim Schließen des Fensters wird auch die gerade laufende Anfrage abgebrochen, nicht nur der Testlauf.
+- Log: `plugin_version = 3.5.1-ws2627`, sonst unverändert. `plugin.xml` auf 3.5.1 (stand noch auf 3.4).
+
 ## v3.5 – Export per Knopf, ein Menüeintrag
 
 - **Export erst per Knopf:** Das Fenster exportiert beim Öffnen nichts mehr. Erst *Context* und *Format* wählen, dann **Export model** klicken. Nach dem ersten Export heißt der Knopf wieder **Resend model**. Wird *Context* oder *Depth* danach geändert, steht in der Statuszeile *Context changed – click 'Export model'*; *Send* und *Run test suite…* sind bis zum neuen Export gesperrt, damit das Protokoll zum gesendeten Modell passt. Der Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (converted from v1)* braucht weiterhin keinen neuen Export.
