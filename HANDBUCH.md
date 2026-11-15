@@ -44,7 +44,7 @@ Oben steht das ausgewählte Element (*Selected element: …*) oder, wenn keins a
 
 ![Context ohne ausgewähltes Element: grau, mit Hinweis](docs/images/context-unavailable.png)
 
-**Context nach dem Export geändert?** Dann steht in der Statuszeile *Context changed – click 'Export model'*, und *Send* sowie *Run test suite…* sind gesperrt, bis neu exportiert wurde. So passt das Protokoll immer zum gesendeten Modell. Ein Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (converted from v1)* braucht keinen neuen Export.
+**Context nach dem Export geändert?** Dann steht in der Statuszeile *Context changed – click 'Export model'*, und *Send* ist gesperrt, bis neu exportiert wurde. *Run test suite…* bietet in diesem Fall an, zuerst neu zu exportieren. So passt das Protokoll immer zum gesendeten Modell. Ein Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (converted from v1)* braucht keinen neuen Export.
 
 ---
 
@@ -54,14 +54,14 @@ Oben steht das ausgewählte Element (*Selected element: …*) oder, wenn keins a
 
 Das Bild zeigt das Fenster für ein Element, weil es dort alle Einstellungen gibt. Beim Fenster für das ganze Modell fehlen *Depth* (8), und *Mention selected element* (14) ist ausgegraut. *Choose…* (5) erscheint nur bei *Context: Selected packages / elements*, siehe [Abschnitt 4](#4-umfang-und-format-wählen).
 
-Das Fenster hat vier Bereiche, von oben nach unten:
+Das Fenster hat vier Bereiche, von oben nach unten. Zwischen *Quick questions* und Chatverlauf liegt eine verschiebbare **Trennlinie** (29):
 
 | Bereich | Nummern | Wozu |
 | --- | --- | --- |
 | **Settings** | 1–23 | KI-Modell, Umfang, Format und Versuchsparameter einstellen, Anfrage und System-Prompt ansehen, Testlauf starten, Ergebnisse öffnen |
 | **Quick questions** | 24 | Fragevorlagen zum Anklicken |
 | **Chatverlauf** | 25 | Fragen, Antworten und Systemmeldungen |
-| **Your question** | 26–28 | Frage eintippen, abschicken oder abbrechen |
+| **Your question** | 26–28, 30 | Frage eintippen, abschicken oder abbrechen; rechts oben der Live-Status |
 
 Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wiederhergestellt. Ausnahme: **Context** richtet sich danach, über welchen Menüpunkt das Fenster geöffnet wurde.
 
@@ -103,6 +103,8 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 26 | **Your question** | Frage eintippen. **Enter** schickt ab, **Shift+Enter** macht eine neue Zeile | – |
 | 27 | **Send / Stop** | Frage abschicken. Während die KI arbeitet oder ein Testlauf läuft, steht dort **Stop**: bricht die Anfrage bzw. den Testlauf sofort ab | – |
 | 28 | **New chat** | Löscht den Chatverlauf. Das exportierte Modell bleibt geladen | – |
+| 29 | **Trennlinie** | Teilt Einstellungen und Chat. Ziehen ändert die Aufteilung; der Pfeil ▲ links klappt die Einstellungen ein, ▼ holt sie zurück. Solange man sie nicht verschoben hat, passt das Plugin sie nach dem Export an die Schnellfragen an | – |
+| 30 | **Live-Status** | Während einer Anfrage oder eines Testlaufs mit Uhrzeit, was das Plugin gerade tut: welche Frage, Hochladen, Senden, Warten auf ein Google-Limit. Sonst leer | – |
 
 **Wann wird das Modell neu hochgeladen?** Nach jedem Export (*Export model* / *Resend model*) und automatisch, wenn sich das KI-Modell, das Format, der System-Prompt, der ID-Check oder Grounding ändert. Grund: Diese Dinge gehören zum hochgeladenen Paket.
 
@@ -231,9 +233,9 @@ Alle Regeln zu Umfang und Formaten: [`docs/EXPORTFORMATE.md`](docs/EXPORTFORMATE
 
 Fragen und Antworten sind auf Englisch gedacht, weil Modell und Schnellfragen englisch sind. Die Antwortsprache gibt das Plugin nicht vor: Die KI antwortet meist in der Sprache der Frage. Wer eine bestimmte Sprache will, schreibt das in die Frage.
 
-**Abbrechen:** Während die KI arbeitet, wird **Send** zu **Stop**. Ein Klick bricht die Anfrage sofort ab, auch wenn das Plugin gerade wegen eines Limits wartet. Im Chat steht dann *Cancelled by user.*, im Log `finish_reason = CANCELLED`.
+**Abbrechen:** Während die KI arbeitet, wird **Send** zu **Stop**. Ein Klick bricht die Anfrage sofort ab, auch wenn das Plugin gerade wegen eines Limits wartet. Im Chat steht dann *Cancelled by user.*, im Log `finish_reason = CANCELLED`. Rechts über dem Knopf zeigt der Live-Status, was das Plugin gerade tut.
 
-![Laufende Anfrage mit dem Knopf Stop](docs/images/stop-button.png)
+![Laufende Anfrage: Live-Status und der Knopf Stop](docs/images/stop-button.png)
 
 ---
 
@@ -335,6 +337,8 @@ Für Messungen werden Fragen nicht einzeln getippt, sondern als Liste in einer C
 1. **Testfälle anlegen:** Vorlage [`evaluation/testcases_template.csv`](evaluation/testcases_template.csv) in Excel öffnen. Pro Zeile eine Frage mit ID, Kategorie (A–D) und Referenzantwort. Details: [`evaluation/README.md`](evaluation/README.md).
 2. Im Plugin die Einstellungen wählen (Modell, Context, Format, Temperatur, Thinking, Repetitions …). Der Testlauf nutzt genau diese Einstellungen und den aktuellen System-Prompt.
 3. **Run test suite…** klicken und die CSV-Datei auswählen. Ist das Modell noch nicht exportiert (oder der Context seit dem Export geändert), fragt das Plugin zuerst *Export now … and then choose the test cases?*. Mit **Yes** exportiert es und öffnet danach die Dateiauswahl.
+
+   ![Rückfrage, wenn noch kein Export vorliegt](docs/images/test-suite-export-confirm.png)
 4. Im folgenden Fenster prüfen:
    - Anzahl der geladenen Testfälle je Kategorie
    - **Models**: ein Modell oder mehrere, durch Komma getrennt. Mehrere Modelle laufen nacheinander mit denselben Fragen, so lassen sich Modellgrößen vergleichen
@@ -346,6 +350,8 @@ Für Messungen werden Fragen nicht einzeln getippt, sondern als Liste in einer C
 Rechts neben *Your question:* steht laufend, was das Plugin gerade tut (welche Frage, Hochladen, Warten auf ein Google-Limit mit Sekunden). Wartet es dort, ist das normal: Im Free Tier sind nur wenige Anfragen pro Minute erlaubt.
 
 Während des Laufs erscheint pro Antwort eine Zeile mit Nummer, Testfall, Modell, *ok* oder *failed*, Dauer und dem Anfang der Antwort. Zum Abbrechen **Stop test run** oder unten **Stop** (der Knopf *Send*) klicken. Das bricht sofort ab, auch die gerade laufende Frage, selbst wenn das Plugin wegen eines Limits wartet oder das Modell hochlädt. Im Chat steht *Stopping the test run …*, danach *Test run … stopped*. Bisherige Ergebnisse bleiben in `runs/run_<id>.csv` und `.xlsx` gespeichert; die abgebrochene Frage steht dort mit *Cancelled by user.* Die Enter-Taste stoppt einen Testlauf nicht.
+
+![Laufender Testlauf: Stop test run, Stop und Live-Status (hier Wartezeit wegen eines Minutenlimits)](docs/images/test-suite-running.png)
 
 ![Abgeschlossener Testlauf](docs/images/test-suite-finished.png)
 

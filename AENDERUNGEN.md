@@ -16,6 +16,8 @@ Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d
 - **Send wird im Testlauf zu Stop:** Bisher war *Send* während des Laufs grau (*Busy…*), gestoppt werden konnte nur oben über *Stop test run*. Jetzt stoppt auch der Knopf unten den Lauf. Enter im Eingabefeld stoppt ihn nicht.
 - Im Chat erscheint sofort *Stopping the test run …*.
 - Beim Schließen des Fensters wird auch die gerade laufende Anfrage abgebrochen, nicht nur der Testlauf.
+- **Trennlinie passt sich an:** Nach dem Export werden die Schnellfragen höher; die Trennlinie rückt jetzt automatisch nach, damit sie ganz zu sehen sind (für den Chat bleiben mindestens etwa 220 Pixel). Hat man die Linie selbst gezogen, bleibt sie. Die Einstellungen folgen der Fensterbreite und scrollen nur senkrecht (vorher erschien bei schmalem Fenster ein waagrechter Rollbalken).
+- **Handbuch:** Fensterbilder neu (Trennlinie, Live-Status, Minimieren/Maximieren, *Stop* im Testlauf), neue Bilder `test-suite-running.png` und `test-suite-export-confirm.png`, Nummern 29 (Trennlinie) und 30 (Live-Status) in Kapitel 2. Die Bilder lassen sich mit `tools/docs-screenshots/make-screenshots.sh` ohne CATIA neu erzeugen.
 - Log: `plugin_version = 3.5.1-ws2627`, sonst unverändert. `plugin.xml` auf 3.5.1 (stand noch auf 3.4).
 
 ## v3.5 – Export per Knopf, ein Menüeintrag

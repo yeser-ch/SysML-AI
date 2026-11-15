@@ -99,6 +99,7 @@ public class ExplanationDialog extends JFrame {
     private JScrollPane scrollPane;
     private JScrollPane topScroll;
     private JSplitPane splitPane;
+    private boolean dividerMovedByUser = false;   // Nutzer hat die Trennlinie verschoben -> nicht mehr automatisch setzen
     private static final String BOUNDS_PREF = "dialogBounds.";
     /** Wird nach dem nächsten erfolgreichen Export ausgeführt (Testlauf ohne vorherigen Export gestartet). */
     private Runnable afterExport;
@@ -174,12 +175,18 @@ public class ExplanationDialog extends JFrame {
             int h = Math.min(900, usable.height - 20);
             setBounds(usable.x + (usable.width - w) / 2, usable.y + (usable.height - h) / 2, w, h);
         }
-        // Einstellungen oben höchstens etwas mehr als die Hälfte der Höhe, der Rest gehört dem Chat
-        SwingUtilities.invokeLater(() -> {
-            int pref = topScroll.getViewport().getView().getPreferredSize().height + 4;
-            int max = (int) (splitPane.getHeight() * 0.55);
-            splitPane.setDividerLocation(Math.max(80, Math.min(pref, max)));
-        });
+        SwingUtilities.invokeLater(this::fitDivider);
+    }
+
+    /**
+     * Trennlinie so setzen, dass Einstellungen und Schnellfragen ganz zu sehen sind; für den Chat bleiben mindestens
+     * etwa 220 Pixel bzw. 45 % der Höhe. Hat der Nutzer die Linie selbst verschoben, bleibt sie, wo sie ist.
+     */
+    private void fitDivider() {
+        if (splitPane == null || dividerMovedByUser || splitPane.getHeight() <= 0) return;
+        int pref = topScroll.getViewport().getView().getPreferredSize().height + 4;
+        int max = Math.max((int) (splitPane.getHeight() * 0.55), splitPane.getHeight() - 220);   // Chat mind. ~220 px
+        splitPane.setDividerLocation(Math.max(80, Math.min(pref, max)));
     }
 
     /** Live-Status unten rechts, z. B. "17:06:12 · per-minute rate limit, waiting 45 s". Thread-sicher. */
@@ -214,7 +221,7 @@ public class ExplanationDialog extends JFrame {
     // ═══════════════════════════════════════════════════════════════════════
 
     private void buildUI() {
-        JPanel top = new JPanel();
+        JPanel top = new ScrollablePanel();   // folgt der Fensterbreite, scrollt nur senkrecht
         top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         top.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 10));
         top.add(createHeader());
@@ -226,6 +233,7 @@ public class ExplanationDialog extends JFrame {
         topScroll = new JScrollPane(top);
         topScroll.setBorder(BorderFactory.createEmptyBorder());
         topScroll.getVerticalScrollBar().setUnitIncrement(16);
+        topScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
         chatPanel = new ScrollablePanel();
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
@@ -245,6 +253,16 @@ public class ExplanationDialog extends JFrame {
         topScroll.setMinimumSize(new Dimension(0, 0));
         center.setMinimumSize(new Dimension(0, 80));
         add(splitPane, BorderLayout.CENTER);
+        // Merken, wenn der Nutzer die Linie zieht oder die Pfeile benutzt; dann nicht mehr automatisch verschieben
+        if (splitPane.getUI() instanceof javax.swing.plaf.basic.BasicSplitPaneUI) {
+            Container div = ((javax.swing.plaf.basic.BasicSplitPaneUI) splitPane.getUI()).getDivider();
+            div.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseReleased(java.awt.event.MouseEvent e) { dividerMovedByUser = true; }
+            });
+            for (Component k : div.getComponents()) {
+                if (k instanceof AbstractButton) ((AbstractButton) k).addActionListener(e -> dividerMovedByUser = true);
+            }
+        }
 
         add(createInputPanel(), BorderLayout.SOUTH);
     }
@@ -557,6 +575,7 @@ public class ExplanationDialog extends JFrame {
             quickPanel.add(hint, BorderLayout.SOUTH);
         }
         quickPanel.revalidate();
+        SwingUtilities.invokeLater(this::fitDivider);   // Schnellfragen sind nach dem Export höher
         quickPanel.repaint();
     }
 

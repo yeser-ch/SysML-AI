@@ -1,0 +1,2 @@
+package com.nomagic.magicreport.engine.velocity;
+public class TextEngine implements com.nomagic.magicreport.engine.ITemplateEngine { public void addContext(String k, Object v){} public com.nomagic.magicreport.Template createTemplate(java.io.File a, java.io.File b){return new com.nomagic.magicreport.Template(a);} public void setProperty(String k, String v){} public void evaluate(com.nomagic.magicreport.Template t){} public void destroy(){} }

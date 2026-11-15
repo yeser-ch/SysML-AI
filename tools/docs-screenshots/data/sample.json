@@ -1,0 +1,16 @@
+{
+  "global_context": {"project_name": "Drone", "export_info": "SysML Flat Graph Export for AI"},
+  "elements": [
+{"id":"_p1","name":"Drone Model","type":"Package","stereotypes":[],"owner_id":"","documentation":"","outgoing_relations":[]},
+{"id":"_b1","name":"Drone","type":"Block","stereotypes":["Block"],"owner_id":"_p1","documentation":"Quadcopter for inspection flights","outgoing_relations":[]},
+{"id":"_b2","name":"Battery","type":"Block","stereotypes":["Block"],"owner_id":"_p1","documentation":"","outgoing_relations":[{"relation_type":"Abstraction","relation_stereotypes":["Satisfy"],"target_id":"_r1"}]},
+{"id":"_b3","name":"Motor","type":"Block","stereotypes":["Block"],"owner_id":"_p1","documentation":"","outgoing_relations":[]},
+{"id":"_b4","name":"Flight Controller","type":"Block","stereotypes":["Block"],"owner_id":"_p1","documentation":"","outgoing_relations":[{"relation_type":"Abstraction","relation_stereotypes":["Satisfy"],"target_id":"_r2"}]},
+{"id":"_v1","name":"capacity","type":"ValueProperty","stereotypes":["ValueProperty"],"owner_id":"_b2","documentation":"","default_value":"5000 mAh","outgoing_relations":[]},
+{"id":"_pp1","name":"battery","type":"PartProperty","stereotypes":["PartProperty"],"owner_id":"_b1","documentation":"","outgoing_relations":[]},
+{"id":"_pp2","name":"motors","type":"PartProperty","stereotypes":["PartProperty"],"owner_id":"_b1","documentation":"","outgoing_relations":[]},
+{"id":"_r1","name":"Operating Time","type":"Requirement","stereotypes":["Requirement"],"owner_id":"_p1","documentation":"","requirement_text":"The drone shall fly for at least 25 min on one battery charge.","outgoing_relations":[]},
+{"id":"_r2","name":"Stable Hover","type":"Requirement","stereotypes":["Requirement"],"owner_id":"_p1","documentation":"","requirement_text":"The drone shall hold its position within 0.5 m in wind up to 5 m/s.","outgoing_relations":[{"relation_type":"Abstraction","relation_stereotypes":["DeriveReqt"],"target_id":"_r1"}]},
+{"id":"_r3","name":"Total Mass","type":"Requirement","stereotypes":["Requirement"],"owner_id":"_p1","documentation":"","requirement_text":"The take-off mass shall not exceed 2.5 kg.","outgoing_relations":[]}
+  ]
+}
