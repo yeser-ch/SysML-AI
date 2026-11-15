@@ -389,7 +389,23 @@ public class GeminiExplanationService implements ExplanationService {
                 .timeout(REQUEST_TIMEOUT)
                 .build();
         log("Uploading model for " + model + " (cache, valid " + (CACHE_TTL_SEC / 60) + " min) ...");
-        Sent sent = sendWithRateLimit(req, model, s, stats);
+        // Beim Upload nicht lange auf Limits warten: Klappt er nicht sofort, geht das Modell mit der Frage mit.
+        // (Sonst wartet der Testlauf pro Frage bis zu 5 × 120 s, nur um dann doch ohne Upload zu senden.)
+        AskSettings us = s.copy();
+        us.max429Retries = Math.min(1, s.max429Retries);
+        us.max429WaitSec = Math.min(30, s.max429WaitSec);
+        Sent sent = sendWithRateLimit(req, model, us, stats);
+        if (sent.response == null && sent.quotaZero) {
+            // Upload für dieses KI-Modell mit diesem Key nicht freigegeben -> bis "Resend model" nicht mehr versuchen
+            String msg = "Caching not available for " + model + " (" + sent.error.trim()
+                    + "). The model is sent with each question instead.";
+            synchronized (caches) {
+                cacheUnsupported.put(model, msg);
+            }
+            log(msg);
+            r.message = msg;
+            return r;
+        }
         if (sent.response == null) {
             r.message = "Model upload failed (" + sent.error + ") – model is sent with each question instead.";
             r.dailyLimit = sent.dailyLimit;
@@ -454,6 +470,7 @@ public class GeminiExplanationService implements ExplanationService {
         String error = "";
         boolean dailyLimit;
         boolean rateLimited;
+        boolean quotaZero;   // Kontingent 0 (im Free Tier nicht freigegeben) – Warten hilft nie
     }
 
     /** Sendet eine Anfrage; wartet bei HTTP 429 (pro Minute) die von Google genannte Zeit und versucht es erneut. */
@@ -487,6 +504,12 @@ public class GeminiExplanationService implements ExplanationService {
                 }
                 String body = resp.body();
                 String apiMsg = shorten(extractString(body, "message"), 300);
+                if (isZeroQuota(body)) {
+                    // z. B. Upload (Cache) für Flash-Lite im Free Tier: Kontingent 0, Warten ist sinnlos
+                    out.quotaZero = true;
+                    out.error = "Not available for " + model + " with this API key (HTTP 429, quota 0). " + apiMsg;
+                    return out;
+                }
                 if (body.contains("PerDay")) {
                     out.dailyLimit = true;
                     out.error = "Daily limit reached for " + model + " (HTTP 429). Try again tomorrow or use another model. " + apiMsg;
@@ -514,6 +537,13 @@ public class GeminiExplanationService implements ExplanationService {
                 return out;
             }
         }
+    }
+
+    /** HTTP-429-Antwort mit Kontingent 0 ("limit: 0" bzw. quotaValue 0): im Free Tier nicht freigegeben. */
+    static boolean isZeroQuota(String body) {
+        if (body == null) return false;
+        String b = body.replace(" ", "");
+        return b.contains("limit:0,") || b.contains("limit:0\"") || b.contains("\"quotaValue\":\"0\"");
     }
 
     private static class Attempt {
