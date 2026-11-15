@@ -39,5 +39,5 @@ Status: ✅ erfüllt · 🟡 teilweise / mit Einschränkung · ⬜ offen
 ## Offene Punkte
 
 - **FR4:** Andere Anbieter als Gemini (z. B. lokale Modelle über eine OpenAI-kompatible Schnittstelle wie Ollama) würden echte Modellgrößen-Vergleiche erleichtern. Nicht umgesetzt; als Erweiterung möglich (`ExplanationService` ist dafür als Schnittstelle angelegt).
-- **FR7:** CATIA bietet für SysML v2 keine dokumentierte Programmierschnittstelle; das Plugin nutzt deshalb den Textexport von CATIA (ein Klick mehr als bei v1). *Context*/*Depth* gelten nur für v1; bei v2 wählt man den Umfang über die Namespaces im CATIA-Export. Ob *Ask AI about this element* in SysML-v2-Projekten erscheint, ist noch nicht in CATIA geprüft.
+- **FR7:** CATIA bietet für SysML v2 keine dokumentierte Programmierschnittstelle; das Plugin nutzt deshalb den Textexport von CATIA (ein Klick mehr als bei v1). *Context*/*Depth* gelten nur für v1; bei v2 wählt man den Umfang über die Namespaces im CATIA-Export. Ob der Menüeintrag *Ask AI…* in SysML-v2-Projekten erscheint, ist noch nicht in CATIA geprüft.
 - **Test in CATIA:** Die Änderungen wurden außerhalb von CATIA gegen nachgebildete CATIA-Schnittstellen kompiliert und mit einem simulierten Gemini-Server getestet. Ein Abnahmetest in CATIA (Prüfspalte oben) steht aus.

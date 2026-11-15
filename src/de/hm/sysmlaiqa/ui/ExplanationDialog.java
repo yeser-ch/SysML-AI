@@ -1452,9 +1452,16 @@ public class ExplanationDialog extends JFrame {
                     s.allowFallback = false; // keine vermischten Modelle im Testlauf
                     s.max429WaitSec = 120;   // im Testlauf geduldiger auf Rate-Limits warten
                     s.max429Retries = 5;
+                    s.maxOverloadRetries = 8;  // bei "high demand" bis etwa 3 min warten, bevor eine Frage als failed zählt
                     // Vorab prüfen, ob die Modelldaten in das Eingabelimit passen; sonst scheitert jede Frage gleich
                     showLiveStatus("Checking the size of the model data for " + model + " …");
                     int limit = apiService.inputTokenLimit(model);
+                    if (apiService.isUnknownModel(model)) {
+                        publish("<span style='color:#B00020'><b>Skipped " + escapeHtml(model) + "</b>: Google does not know this model name. "
+                                + "No questions were sent. Check the spelling (e.g. gemini-3.8-flash, gemini-3.5-flash-lite) or click "
+                                + "<b>Refresh</b> to see the models of your API key.</span>");
+                        continue;
+                    }
                     int tokens = ex.exactTokens >= 0 && model.equals(ex.exactTokensModel) ? ex.exactTokens
                             : apiService.countTokens(model, ex.content, ex.format);
                     if (cancelRequested) break;

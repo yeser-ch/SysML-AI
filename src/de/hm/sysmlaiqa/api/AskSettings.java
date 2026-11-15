@@ -26,6 +26,10 @@ public class AskSettings {
     public int relationDepth = -1;           // Depth: relations (nur bei Element + Umgebung, sonst -1)
     public int siblingDepth = -1;            // Depth: neighbours (nur bei Element + Umgebung, sonst -1)
     public int pauseSec = 0;                 // Testlauf: Extra-Pause zwischen Anfragen
+    /** Nicht im Log: Tokens der Modelldaten (genau, sonst geschätzt) – zum Erkennen, dass eine Anfrage nie ins Minutenlimit passt. */
+    public long modelTokens = -1;
+    /** Nicht im Log: so oft bei Überlastung (HTTP 503 "high demand") erneut versuchen; Testlauf geduldiger. */
+    public int maxOverloadRetries = 3;
 
     public AskSettings copy() {
         AskSettings c = new AskSettings();
@@ -47,6 +51,8 @@ public class AskSettings {
         c.relationDepth = relationDepth;
         c.siblingDepth = siblingDepth;
         c.pauseSec = pauseSec;
+        c.modelTokens = modelTokens;
+        c.maxOverloadRetries = maxOverloadRetries;
         return c;
     }
 }

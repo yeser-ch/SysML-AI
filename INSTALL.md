@@ -124,8 +124,10 @@ In CATIA oben im Menü **Window → Notification Window** öffnen (oder **Strg+M
 Im Notification Window muss eine Zeile stehen wie:
 
 ```
-[SysML AI Q&A] Plugin loaded (version 3.1-ws2627, 17/17 diagram/table types)
+[SysML AI Q&A] Plugin loaded (version 3.5.1-ws2627, 17/17 diagram/table types)
 ```
+
+Die Versionsnummer hängt vom installierten Stand ab; das Bild unten zeigt eine ältere Version.
 
 ![Notification Window mit der Kontrollzeile](docs/images/start-02-notification-window.png)
 
@@ -135,17 +137,23 @@ Fehlt die Zeile, ist das Plugin nicht geladen (siehe [Wenn etwas nicht klappt](#
 
 Ein Projekt öffnen. Dann gibt es zwei Wege:
 
-**Rechtsklick** auf ein Element im Containment Tree oder in einem Diagramm → **Ask AI (SysML AI Q&A)** → **Ask AI…**. Im Fenster wählst du unter *Context*, ob das ganze Modell, ausgewählte Pakete oder nur dieses Element mit Umgebung an die KI geht, und klickst **Export model**.
+**Rechtsklick** auf ein Element im Containment Tree oder in einem Diagramm → **Ask AI (SysML AI Q&A)** → **Ask AI…**. Das angeklickte Element wird mitgegeben; im Fenster wählst du unter *Context*, ob das ganze Modell, ausgewählte Pakete oder nur dieses Element mit Umgebung an die KI geht.
 
 ![Rechtsklick-Menü im Containment Tree](docs/images/start-03-context-menu.png)
 
-**Menüleiste:** ganz rechts **Ask AI** → *Ask AI…* oder *SysML AI Q&A – API key…*. Das funktioniert auch, wenn ein Element in einer Tabelle markiert ist.
+**Menüleiste:** ganz rechts **Ask AI** → *Ask AI…* oder *SysML AI Q&A – API key…*. Das gerade markierte Element wird mitgegeben, auch eine Zeile in einer Tabelle.
 
 ![Menüleiste mit „Ask AI“](docs/images/start-04-menu-bar.png)
 
-Es öffnet sich das Fenster **SysML AI Q&A**. Das Plugin exportiert zuerst das Modell. Sobald im Einstellungsbereich **Model ready: …** steht, kann man Fragen stellen.
+Es öffnet sich das Fenster **SysML AI Q&A**, zunächst **ohne Export**. *Context* und *Format* wählen, dann **Export model** klicken. Sobald im Einstellungsbereich **Model ready: …** steht, kann man Fragen stellen oder einen Testlauf starten.
 
-![Das Plugin-Fenster in CATIA nach dem Export](docs/images/start-05-plugin-window.png)
+![Das Fenster direkt nach dem Öffnen: Context und Format wählen, dann Export model](docs/images/start-06-plugin-window-model.png)
+
+![Das Fenster nach Export model](docs/images/start-05-plugin-window.png)
+
+Das Fenster hat oben rechts Minimieren, Maximieren und Schließen und passt sich beim Öffnen an den Bildschirm an. Liegt es hinter CATIA, holt es ein Klick auf seinen Eintrag in der Taskleiste zurück.
+
+**Tipp für den Anfang:** Mit einem kleinen *Context* beginnen (*Selected packages / elements* oder *Selected element + surroundings*) und auf die Tokenzahl in der Statuszeile achten. Mit `gemini-3.8-flash` wird das Modell einmal hochgeladen; bei Flash-Lite geht es mit jeder Frage mit, und große Modelle stoßen im Free Tier schnell an das Minutenlimit.
 
 Wie es weitergeht und was jede Einstellung bedeutet, steht im **[Benutzerhandbuch](HANDBUCH.md)**.
 
@@ -263,9 +271,12 @@ Der Plugin-Ordner liegt normalerweise unter `C:\Program Files\Magic Systems of S
 | `Keine Schreibrechte` / `Zugriff verweigert` | ohne Adminrechte gestartet oder CATIA läuft noch | CATIA schließen; Rechtsklick auf die `.bat` → **Als Administrator ausführen** |
 | `CATIA läuft noch` | ein CATIA-Fenster ist noch offen | alle CATIA-Fenster schließen, ggf. im Task-Manager beenden, dann Enter |
 | Nach dem Start kein Menüeintrag „Ask AI“ | Plugin in eine andere CATIA-Installation kopiert oder Ladefehler | Pfad aus dem Installationsfenster mit dem CATIA-Startpfad vergleichen; im Notification Window nach `SysML AI Q&A` suchen und die Meldung ans Team schicken |
-| Rechtsklick in einer **Requirement-Tabelle** zeigt keinen Eintrag | bekannte Einschränkung | Zeile markieren und oben in der Menüleiste **Ask AI → Ask AI about the selected element…** wählen, oder **Alt+B** (Select in Containment Tree) und dort Rechtsklick |
-| `HTTP 429` | Free-Tier-Limit erreicht | Minutenlimit: das Plugin wartet selbst. Tageslimit: bis morgen warten oder ein anderes KI-Modell wählen |
-| `HTTP 503` / `HTTP 500` | Google-Server überlastet | wird automatisch bis zu dreimal wiederholt; sonst später erneut versuchen oder ein anderes Modell wählen |
+| Rechtsklick in einer **Requirement-Tabelle** zeigt keinen Eintrag | bekannte Einschränkung | Zeile markieren und oben in der Menüleiste **Ask AI → Ask AI…** wählen, oder **Alt+B** (Select in Containment Tree) und dort Rechtsklick |
+| `HTTP 429` | Free-Tier-Limit erreicht | Minutenlimit: das Plugin wartet selbst (rechts neben *Your question:* steht, wie lange). Tageslimit: bis morgen warten oder ein anderes KI-Modell wählen |
+| *„The model data … is larger than the input limit per minute …“* | eine einzelne Anfrage ist größer als das Minutenkontingent des API-Keys – sie käme nie durch | kleineren *Context* wählen, das Format *SysML v2 (converted from v1)* probieren oder `gemini-3.8-flash` (lädt das Modell einmal hoch) |
+| Frage oder Testlauf „hängt“ minutenlang | das Plugin wartet auf ein Google-Limit oder Google ist überlastet | den Live-Status rechts neben *Your question:* ansehen; mit **Stop** abbrechen. Meist hilft ein kleinerer *Context* oder `gemini-3.8-flash` |
+| `HTTP 503` / `HTTP 500` („high demand“) | Google-Server überlastet | wird automatisch wiederholt (Chat bis zu 3-mal, Testlauf bis etwa 3 Minuten); sonst später erneut versuchen oder ein anderes Modell wählen |
+| `HTTP 404` „… is not found“ oder *„Google does not know this model name“* | Modellname falsch geschrieben (z. B. `gemini-3.5` statt `gemini-3.5-flash-lite`) | Namen korrigieren; **Refresh** zeigt die Modelle des eigenen API-Keys |
 | `HTTP 400` / `HTTP 403` mit „API key“ | API-Key falsch oder gelöscht | über **API key…** einen neuen Key eintragen |
 | (Weg B) `Kein Java JDK` oder `javac 1.8` | kein oder zu altes JDK | Temurin JDK 21 installieren (siehe oben) |
 

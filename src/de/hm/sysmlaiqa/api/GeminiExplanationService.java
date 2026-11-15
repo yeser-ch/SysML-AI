@@ -220,7 +220,7 @@ public class GeminiExplanationService implements ExplanationService {
                         daily = true;
                         break;
                     }
-                    if (cr.tooLarge) {          // zu groß für dieses Modell: inline würde genauso scheitern
+                    if (cr.tooLarge || cr.quotaTooSmall) {   // zu groß für dieses Modell: inline würde genauso scheitern
                         lastError = cr.message;
                         tooLarge = true;
                         continue;
@@ -231,13 +231,13 @@ public class GeminiExplanationService implements ExplanationService {
 
             // 2. Frage senden (Denktiefe wie eingestellt; lehnt das Modell sie ab, einmal ohne)
             String thinking = effectiveThinking(model, s.thinkingLevel);
-            Attempt a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats);
+            Attempt a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats, cacheName == null ? s.modelTokens : 0);
             if (a.answer == null && !"default".equals(thinking) && a.error != null && a.error.toLowerCase().contains("think")) {
                 synchronized (thinkingUnsupported) { thinkingUnsupported.add(model + "|" + thinking); }
                 note = (note.isEmpty() ? "" : note + " ") + model + " does not support thinking level \"" + thinking
                         + "\" – used the model's default instead.";
                 thinking = "default";
-                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats);
+                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats, cacheName == null ? s.modelTokens : 0);
             }
             if (a.cacheMissing && cacheName != null) {
                 // Cache bei Google abgelaufen/gelöscht -> einmal neu hochladen
@@ -246,7 +246,7 @@ public class GeminiExplanationService implements ExplanationService {
                 cacheName = cr.name;
                 transfer = cacheName != null ? "cache_new" : "inline";
                 if (cacheName == null) note = cr.message;
-                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats);
+                a = callModel(model, buildRequestBody(s, systemPrompt, modelTurn, questionTurn, cacheName, thinking), apiKey, s, stats, cacheName == null ? s.modelTokens : 0);
             }
 
             if (a.answer != null) {
@@ -272,6 +272,7 @@ public class GeminiExplanationService implements ExplanationService {
             }
             lastError = a.error;
             if (a.dailyLimit) { daily = true; break; }
+            if (a.tooLarge) { tooLarge = true; continue; }   // passt nie ins Minutenlimit dieses Modells
             if (a.fatal || cancelled) break;
         }
 
@@ -336,6 +337,7 @@ public class GeminiExplanationService implements ExplanationService {
         boolean created;
         boolean dailyLimit;
         boolean tooLarge;
+        boolean quotaTooSmall;
         String message = "";
     }
 
@@ -394,7 +396,12 @@ public class GeminiExplanationService implements ExplanationService {
         AskSettings us = s.copy();
         us.max429Retries = Math.min(1, s.max429Retries);
         us.max429WaitSec = Math.min(30, s.max429WaitSec);
-        Sent sent = sendWithRateLimit(req, model, us, stats);
+        Sent sent = sendWithRateLimit(req, model, us, stats, s.modelTokens);
+        if (sent.quotaTooSmall) {
+            r.quotaTooSmall = true;
+            r.message = sent.error;
+            return r;
+        }
         if (sent.response == null && sent.quotaZero) {
             // Upload für dieses KI-Modell mit diesem Key nicht freigegeben -> bis "Resend model" nicht mehr versuchen
             String msg = "Caching not available for " + model + " (" + sent.error.trim()
@@ -471,10 +478,11 @@ public class GeminiExplanationService implements ExplanationService {
         boolean dailyLimit;
         boolean rateLimited;
         boolean quotaZero;   // Kontingent 0 (im Free Tier nicht freigegeben) – Warten hilft nie
+        boolean quotaTooSmall; // eine einzelne Anfrage ist größer als das Minutenkontingent – Warten hilft nie
     }
 
     /** Sendet eine Anfrage; wartet bei HTTP 429 (pro Minute) die von Google genannte Zeit und versucht es erneut. */
-    private Sent sendWithRateLimit(HttpRequest request, String model, AskSettings s, RetryStats stats) {
+    private Sent sendWithRateLimit(HttpRequest request, String model, AskSettings s, RetryStats stats, long requestTokens) {
         Sent out = new Sent();
         int attempt = 0;
         int overloadAttempt = 0;
@@ -488,9 +496,10 @@ public class GeminiExplanationService implements ExplanationService {
                 if (resp.statusCode() == 503 || resp.statusCode() == 500) {
                     // Google überlastet ("high demand") – meist nach Sekunden vorbei: kurz warten und erneut versuchen
                     overloadAttempt++;
-                    if (overloadAttempt <= 3) {
-                        int wait = 5 * overloadAttempt; // 5 s, 10 s, 15 s
-                        log(model + ": overloaded (HTTP " + resp.statusCode() + "), retrying in " + wait + " s (" + overloadAttempt + "/3)");
+                    if (overloadAttempt <= s.maxOverloadRetries) {
+                        int wait = Math.min(30, 5 * overloadAttempt); // 5, 10, 15 … höchstens 30 s
+                        log(model + ": overloaded (HTTP " + resp.statusCode() + "), retrying in " + wait + " s ("
+                                + overloadAttempt + "/" + s.maxOverloadRetries + ")");
                         sleepCancellable(wait * 1000L);
                         stats.waitedSec += wait;
                         continue;
@@ -504,6 +513,16 @@ public class GeminiExplanationService implements ExplanationService {
                 }
                 String body = resp.body();
                 String apiMsg = shorten(extractString(body, "message"), 300);
+                long quota = inputTokenQuota(body);
+                if (quota > 0 && requestTokens > quota) {
+                    // Eine einzelne Anfrage ist größer als das Minutenkontingent: Warten hilft nie
+                    out.quotaTooSmall = true;
+                    out.error = String.format("The model data (about %,d tokens) is larger than the input limit per minute of %s "
+                            + "for your API key (%,d tokens). Every request would be rejected. Choose a smaller context "
+                            + "(selected packages or element surroundings), the SysML v2 format, or an AI model that supports "
+                            + "\"Upload model once\" (e.g. gemini-3.8-flash).", requestTokens, model, quota);
+                    return out;
+                }
                 if (isZeroQuota(body)) {
                     // z. B. Upload (Cache) für Flash-Lite im Free Tier: Kontingent 0, Warten ist sinnlos
                     out.quotaZero = true;
@@ -539,6 +558,14 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
+    /** Minutenkontingent für Eingabe-Tokens aus einer HTTP-429-Antwort ("…input_token_count…, limit: 250000"), sonst -1. */
+    static long inputTokenQuota(String body) {
+        if (body == null) return -1;
+        Matcher m = Pattern.compile("metric: ?([^,\\s]*input_token[^,\\s]*), ?limit: ?(\\d+)").matcher(body);
+        if (m.find()) return Long.parseLong(m.group(2));
+        return -1;
+    }
+
     /** HTTP-429-Antwort mit Kontingent 0 ("limit: 0" bzw. quotaValue 0): im Free Tier nicht freigegeben. */
     static boolean isZeroQuota(String body) {
         if (body == null) return false;
@@ -551,10 +578,11 @@ public class GeminiExplanationService implements ExplanationService {
         String error;
         boolean fatal;
         boolean dailyLimit;
+        boolean tooLarge;
         boolean cacheMissing;
     }
 
-    private Attempt callModel(String model, String body, String apiKey, AskSettings s, RetryStats stats) {
+    private Attempt callModel(String model, String body, String apiKey, AskSettings s, RetryStats stats, long requestTokens) {
         Attempt result = new Attempt();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(API_BASE + "/models/" + model + ":generateContent?key=" + apiKey))
@@ -564,10 +592,11 @@ public class GeminiExplanationService implements ExplanationService {
                 .build();
         log("Sending question to " + model + " (" + String.format("%.1f", body.length() / 1024.0) + " KB) ...");
         long t0 = System.currentTimeMillis();
-        Sent sent = sendWithRateLimit(request, model, s, stats);
+        Sent sent = sendWithRateLimit(request, model, s, stats, requestTokens);
         if (sent.response == null) {
             result.error = sent.error;
             result.dailyLimit = sent.dailyLimit;
+            result.tooLarge = sent.quotaTooSmall;
             result.fatal = CANCELLED.equals(sent.error);
             if (!result.fatal) CIRCUIT.recordFailure(model);
             return result;
@@ -788,6 +817,13 @@ public class GeminiExplanationService implements ExplanationService {
         }
     }
 
+    private final Set<String> unknownModels = new HashSet<>();
+
+    /** true, wenn Google den Modellnamen nicht kennt (HTTP 404 bei {@link #inputTokenLimit(String)}). */
+    public boolean isUnknownModel(String model) {
+        synchronized (unknownModels) { return unknownModels.contains(model); }
+    }
+
     /** Eingabelimit des Modells in Tokens laut Google (einmal abgefragt, dann gemerkt); -1 = unbekannt. */
     public int inputTokenLimit(String model) {
         synchronized (inputLimits) {
@@ -804,6 +840,10 @@ public class GeminiExplanationService implements ExplanationService {
                         .GET().build();
                 HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() == 200) limit = extractInt(resp.body(), "inputTokenLimit");
+                if (resp.statusCode() == 404) {
+                    synchronized (unknownModels) { unknownModels.add(model); }
+                    return -1;   // nicht merken: nach einer Korrektur des Namens erneut fragen
+                }
             } catch (Exception ignored) { }
         }
         synchronized (inputLimits) {

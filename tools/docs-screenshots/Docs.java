@@ -136,7 +136,7 @@ public class Docs {
             setF(d, "loading", false);
             call(d, "updateControls");
         });
-        ModelExport ex = ModelExport.fromSysmlFiles(List.of(new File(data, "DroneSystem.sysml")), new File(data, "tmp"));
+        ModelExport ex = ModelExport.fromSysmlFiles(List.of(new File(data, "DroneSystem.sysml")), new File(System.getProperty("java.io.tmpdir")));
         msg(d, "System", "Reading 1 SysML v2 file(s) exported by CATIA …");
         edt(() -> {
             setF(d, "exportedKey", "native");

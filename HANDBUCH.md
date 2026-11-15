@@ -361,7 +361,9 @@ Während des Laufs erscheint pro Antwort eine Zeile mit Nummer, Testfall, Modell
 
 ![Abgeschlossener Testlauf](docs/images/test-suite-finished.png)
 
-Im Testlauf gilt immer: jede Frage in einem neuen Chat, kein Fallback-Modell. Bei einem Minutenlimit wartet das Plugin automatisch. Bei einem **Tageslimit** überspringt es die restlichen Fragen für dieses Modell und meldet das in Rot.
+Im Testlauf gilt immer: jede Frage in einem neuen Chat, kein Fallback-Modell. Bei einem Minutenlimit wartet das Plugin automatisch, bei Überlastung („high demand“, HTTP 503) bis etwa 3 Minuten. Bei einem **Tageslimit** überspringt es die restlichen Fragen für dieses Modell und meldet das in Rot. Ebenso übersprungen wird ein KI-Modell, dessen Name Google nicht kennt (Tippfehler im Feld *Models*), dessen Eingabelimit das Modell übersteigt oder bei dem eine einzelne Anfrage größer ist als das Minutenkontingent des API-Keys – dann käme keine Frage je durch.
+
+**Wichtig:** Ein Testlauf schickt jede Zeile genau wie eine Frage im Chat. Klappt eine Frage im Chat mit denselben Einstellungen (*AI model*, *Context*, *Format*) nicht, klappt auch der Testlauf nicht. Vor einem langen Lauf deshalb eine Frage im Chat ausprobieren.
 
 ---
 

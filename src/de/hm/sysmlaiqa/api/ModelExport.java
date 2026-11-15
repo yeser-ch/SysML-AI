@@ -170,9 +170,9 @@ public class ModelExport {
         return isV2() ? ".sysml" : ".json";
     }
 
-    /** Grobe Schätzung: ca. 4 Zeichen pro Token. */
+    /** Grobe Schätzung: ca. 2 Zeichen pro Token (gemessen: JSON-Export 1,98, SysML-v2-Text 1,83 Zeichen pro Token bei Gemini). */
     public long approxTokens() {
-        return content.length() / 4;
+        return content.length() / 2;
     }
 
     public double sizeKb() {

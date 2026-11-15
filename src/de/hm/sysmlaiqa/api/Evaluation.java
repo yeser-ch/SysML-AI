@@ -22,6 +22,8 @@ public final class Evaluation {
         AskSettings s = settings.copy();
         if (repetition > 1 || settings.repetitions > 1) s.freshChat = true;
         s.format = export.format;   // System-Prompt und Modelldaten passen immer zum Format des Exports
+        s.modelTokens = export.exactTokens >= 0 && settings.model.equals(export.exactTokensModel)
+                ? export.exactTokens : export.approxTokens();
 
         PromptLoader.Template tpl = PromptLoader.loadTemplate(GeminiExplanationService.getBaseDirectory(), s.format);
         String systemPrompt = PromptLoader.fill(tpl.text, s.requireIds, s.format);
