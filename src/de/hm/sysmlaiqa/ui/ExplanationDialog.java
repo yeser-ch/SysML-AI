@@ -97,6 +97,9 @@ public class ExplanationDialog extends JDialog {
     // Chat
     private JPanel chatPanel;
     private JScrollPane scrollPane;
+    private JScrollPane topScroll;
+    private JSplitPane splitPane;
+    private static final String BOUNDS_PREF = "dialogBounds.";
     private JTextArea inputArea;
     private JButton sendBtn;
 
@@ -121,13 +124,13 @@ public class ExplanationDialog extends JDialog {
         this.focusElement = focusElement;
 
         setTitle(SysmlAiQaPlugin.DISPLAY_NAME);
-        setSize(800, 900);
-        setLocationRelativeTo(null);
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(8, 8));
+        setResizable(true);
 
         buildUI();
         loadSettings();
+        fitToScreen();
         addMessage("System", "Choose the <b>context</b> and the <b>format</b> above, then click <b>Export model</b>. "
                 + "The model is only exported from CATIA when you click the button.");
     }
@@ -141,8 +144,43 @@ public class ExplanationDialog extends JDialog {
         }
     }
 
+    /**
+     * Größe und Position so wählen, dass das ganze Fenster auf den Bildschirm passt (Laptop, Windows-Skalierung 150 %).
+     * Die zuletzt benutzte Größe und Position werden wiederhergestellt, wenn sie vollständig auf den Bildschirm passen.
+     */
+    private void fitToScreen() {
+        GraphicsConfiguration gc = getOwner() != null ? getOwner().getGraphicsConfiguration() : null;
+        if (gc == null) gc = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().getDefaultConfiguration();
+        Rectangle screen = gc.getBounds();
+        Insets in = Toolkit.getDefaultToolkit().getScreenInsets(gc);   // Taskleiste abziehen
+        Rectangle usable = new Rectangle(screen.x + in.left, screen.y + in.top,
+                screen.width - in.left - in.right, screen.height - in.top - in.bottom);
+
+        setMinimumSize(new Dimension(Math.min(560, usable.width), Math.min(420, usable.height)));
+        Rectangle saved = new Rectangle(prefs.getInt(BOUNDS_PREF + "x", 0), prefs.getInt(BOUNDS_PREF + "y", 0),
+                prefs.getInt(BOUNDS_PREF + "w", 0), prefs.getInt(BOUNDS_PREF + "h", 0));
+        if (saved.width >= 400 && saved.height >= 300 && usable.contains(saved)) {
+            setBounds(saved);
+        } else {
+            int w = Math.min(820, usable.width - 20);
+            int h = Math.min(900, usable.height - 20);
+            setBounds(usable.x + (usable.width - w) / 2, usable.y + (usable.height - h) / 2, w, h);
+        }
+        // Einstellungen oben höchstens etwas mehr als die Hälfte der Höhe, der Rest gehört dem Chat
+        SwingUtilities.invokeLater(() -> {
+            int pref = topScroll.getViewport().getView().getPreferredSize().height + 4;
+            int max = (int) (splitPane.getHeight() * 0.55);
+            splitPane.setDividerLocation(Math.max(80, Math.min(pref, max)));
+        });
+    }
+
     @Override
     public void dispose() {
+        Rectangle b = getBounds();
+        prefs.putInt(BOUNDS_PREF + "x", b.x);
+        prefs.putInt(BOUNDS_PREF + "y", b.y);
+        prefs.putInt(BOUNDS_PREF + "w", b.width);
+        prefs.putInt(BOUNDS_PREF + "h", b.height);
         cancelRequested = true; // laufenden Testlauf beim Schließen beenden
         apiService.cancel();    // ... und die gerade laufende Anfrage auch
         apiService.discardUploadedModel(); // Upload bei Google löschen (läuft sonst nach 60 min ab)
@@ -162,7 +200,10 @@ public class ExplanationDialog extends JDialog {
         top.add(createSettingsPanel());
         top.add(Box.createVerticalStrut(6));
         top.add(createQuickQuestionPanel());
-        add(top, BorderLayout.NORTH);
+        // Einstellungen scrollbar, damit das Fenster auch auf kleinen Bildschirmen passt
+        topScroll = new JScrollPane(top);
+        topScroll.setBorder(BorderFactory.createEmptyBorder());
+        topScroll.getVerticalScrollBar().setUnitIncrement(16);
 
         chatPanel = new ScrollablePanel();
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
@@ -172,7 +213,16 @@ public class ExplanationDialog extends JDialog {
         JPanel center = new JPanel(new BorderLayout());
         center.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         center.add(scrollPane, BorderLayout.CENTER);
-        add(center, BorderLayout.CENTER);
+
+        // Trennlinie zwischen Einstellungen und Chat verschiebbar; die Pfeile klappen die Einstellungen ganz ein
+        splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topScroll, center);
+        splitPane.setOneTouchExpandable(true);
+        splitPane.setResizeWeight(0.0);       // zusätzlicher Platz geht an den Chat
+        splitPane.setContinuousLayout(true);
+        splitPane.setBorder(BorderFactory.createEmptyBorder());
+        topScroll.setMinimumSize(new Dimension(0, 0));
+        center.setMinimumSize(new Dimension(0, 80));
+        add(splitPane, BorderLayout.CENTER);
 
         add(createInputPanel(), BorderLayout.SOUTH);
     }

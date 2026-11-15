@@ -65,6 +65,8 @@ Das Fenster hat vier Bereiche, von oben nach unten:
 
 Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wiederhergestellt. Ausnahme: **Context** richtet sich danach, über welchen Menüpunkt das Fenster geöffnet wurde.
 
+**Kleiner Bildschirm (Laptop):** Das Fenster passt sich beim Öffnen an den Bildschirm an, die Taskleiste ist abgezogen. Größe und Position lassen sich an den Rändern ändern und werden gespeichert. Zwischen Einstellungen und Chat liegt eine **Trennlinie**: nach oben ziehen gibt dem Chat mehr Platz. Der kleine Pfeil ▲ links auf der Linie klappt die Einstellungen ganz ein, ▼ holt sie zurück. Passen die Einstellungen nicht ganz hinein, lassen sie sich scrollen.
+
 ---
 
 ## 3. Alle Einstellungen erklärt
