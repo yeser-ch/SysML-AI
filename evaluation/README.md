@@ -21,7 +21,7 @@ Im Dialog: mehrere Modelle mit Komma trennen (z. B. `gemini-3.8-flash, gemini-3.
 - **Modell nur einmal hochladen** („Upload model once“, Standard): Das Modell geht pro KI-Modell einmal als Gemini-Cache hoch (60 min gültig), danach nur noch die Fragen. Nicht jedes Modell erlaubt das im Free Tier (laut Google z. B. die Flash-Lite-Modelle nicht) – dann wird automatisch inline gesendet; Spalte `model_transfer` zeigt, was passiert ist.
 - **Pause:** Standard 0. Meldet Google ein Rate-Limit pro Minute (HTTP 429), wartet das Plugin genau die von Google genannte Zeit und versucht es erneut (Spalte `rate_limit_wait_s`). Bei einem **Tageslimit** werden die restlichen Fragen für dieses Modell übersprungen.
 - „Stop test run“ bricht sofort ab, auch die gerade laufende Anfrage (steht mit `finish_reason = CANCELLED` im Log); bisherige Ergebnisse bleiben gespeichert.
-- Der Testlauf nutzt Format (SysML v1/v2), Umfang und System-Prompt, wie sie gerade im Fenster eingestellt sind.
+- Der Testlauf nutzt Format (SysML v1 oder SysML-v2-Modell aus CATIA), Umfang und System-Prompt, wie sie gerade im Fenster eingestellt sind.
 
 ## 3. Ergebnisse
 Ordner `Dokumente/SysML-AI-QA/` (Button „Open results“):
@@ -41,7 +41,7 @@ Neu ab 3.3 bzw. 3.3.1 (Lastenheft FR11):
 | Spalte | Inhalt |
 |---|---|
 | `system_prompt_source` | `default` = Standardfassung, `custom` = im Fenster geändert, `installed` = Datei im Plugin-Ordner |
-| `export_format` | `sysml_v1_json` (SysML v1), `sysml_v2_text` (v1-Modell als SysML-v2-Text) oder `sysml_v2_native` (SysML-v2-Modell aus CATIA) |
+| `export_format` | `sysml_v1_json` (SysML v1), `sysml_v2_text` (v1-Modell als SysML-v2-Text, früheres Format bis 3.5.1) oder `sysml_v2_native` (SysML-v2-Modell aus CATIA) |
 | `scope` | `FULL_MODEL`, `SELECTION` (gewählte Pakete/Elemente), `FOCUS_NEIGHBOURHOOD` oder `SYSML_V2_FILES` (SysML-v2-Dateien aus CATIA) |
 | `export_scope_detail` | gewählte Pakete/Elemente mit ID bzw. Element und Tiefe |
 | `export_tokens_est` / `export_tokens_exact` | Tokens der Modelldaten: geschätzt (Zeichen / 4) / exakt laut Google mit Modellname |

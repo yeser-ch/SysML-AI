@@ -196,6 +196,22 @@ In CATIA kann man SysML-v1- und SysML-v2-Modelle anlegen. Das Plugin kann beide 
 | **SysML v1 (JSON export)** | SysML-v1-Projekte | der Export des Plugins (JSON), Umfang über *Context* |
 | **SysML v2 model (CATIA export)** | **SysML-v2-Projekte** | genau der SysML-v2-Text, den CATIA selbst exportiert (`.sysml`-Dateien) |
 
+**Welche Sprache ist das?** Die **SysML v2 Textual Notation**, die offizielle Textsprache von SysML v2 (OMG). Das ganze Modell steht darin als Text, ähnlich wie Programmcode, in Dateien mit der Endung `.sysml`:
+
+```sysml
+package Babyphone {
+    part def Babyeinheit {
+        part kamera : Kamera;
+    }
+    requirement def Reichweite {
+        doc /* Die Verbindung zur Elterneinheit muss bis 300 m reichen. */
+    }
+    satisfy Reichweite by Babyeinheit;
+}
+```
+
+„CATIA export“ heißt: **CATIA schreibt diesen Text selbst**, das Plugin übersetzt nichts. Es liest die Dateien und schickt sie unverändert an die KI.
+
 **Ein SysML-v2-Modell schicken:**
 
 1. In CATIA das SysML-v2-Projekt öffnen und das Plugin über **Ask AI → Ask AI…** öffnen.

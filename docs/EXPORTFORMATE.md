@@ -1,6 +1,6 @@
 # Exportformate und Aufbau einer Anfrage
 
-Dieses Dokument beschreibt, **was genau** das Plugin an die KI schickt (Lastenheft NFR6, FR3, NFR3): den Umfang des Exports, die drei Formate (SysML v1 JSON, SysML v2 umgewandelt aus v1, SysML-v2-Modell aus CATIA) und die Reihenfolge der Nachrichten. Die Struktur des Protokolls steht in [`evaluation/README.md`](../evaluation/README.md#3-ergebnisse).
+Dieses Dokument beschreibt, **was genau** das Plugin an die KI schickt (Lastenheft NFR6, FR3, NFR3): den Umfang des Exports, die Formate (SysML v1 JSON und SysML-v2-Modell aus CATIA; dazu das frühere Format „SysML v2 umgewandelt aus v1“, seit 3.5.2 nicht mehr wählbar) und die Reihenfolge der Nachrichten. Die Struktur des Protokolls steht in [`evaluation/README.md`](../evaluation/README.md#3-ergebnisse).
 
 Im Plugin zeigt **Show request…** genau diese Teile für die nächste Frage an und speichert sie auf Wunsch als Dateien.
 
