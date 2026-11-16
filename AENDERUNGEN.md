@@ -2,10 +2,11 @@
 
 Branch: `feature/free-prompt-full-model` (Basis: Stand SoSe 2026, Commit 2606f7d)
 
-## v3.5.2 – Fenster bleibt vor CATIA, Formatname
+## v3.5.2 – Fenster bleibt vor CATIA, Einstellungen ganz sichtbar, ein SysML-v2-Format
 
 - **Fenster verschwand hinter CATIA:** Seit 3.5.1 ist das Plugin-Fenster ein eigenes Fenster mit Minimieren und Maximieren. Beim Export (und bei jedem Klick in CATIA) holte sich CATIA den Vordergrund, das Plugin lag dahinter und musste über die Taskleiste zurückgeholt werden. Jetzt bleibt es vor CATIA wie ein Dialog, der zu CATIA gehört: Wird CATIA aktiv, kommt das Fenster wieder nach vorn, ohne CATIA den Fokus zu nehmen. Nach dem Export ist es wieder aktiv. Andere Programme verdeckt es nicht; ein selbst minimiertes Fenster bleibt minimiert.
-- **Formatname:** *SysML v2 (converted from v1)* heißt jetzt **SysML v2 (textual notation)**, passend zu *SysML v1 (JSON export)*. Inhalt und Log (`export_format = sysml_v2`) unverändert.
+- **Nur noch ein SysML-v2-Format:** Das Format *SysML v2 (converted from v1)* ist entfernt. Für SysML v2 gibt es nur noch **SysML v2 model (CATIA export)**, also das SysML-v2-Modell selbst. War das alte Format gespeichert, startet das Fenster mit *SysML v1 (JSON export)*. Ältere Messungen mit dem alten Format stehen im Log weiter als `export_format = sysml_v2_text`.
+- **Einstellungen beim Öffnen ganz sichtbar:** Kopfzeile und Einstellungen stehen vollständig da, darunter die Schnellfragen (so weit Platz ist) und ein kleinerer Chat (mindestens etwa 160 Pixel). Das Fenster bleibt innerhalb des Bildschirms; die Trennlinie lässt sich weiter verschieben. Die bisher gespeicherte Fenstergröße wird einmal verworfen.
 
 ## v3.5.1 – Testlauf zuverlässig stoppen, Fenster passt auf den Laptop
 

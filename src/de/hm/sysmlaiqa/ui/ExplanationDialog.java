@@ -100,7 +100,9 @@ public class ExplanationDialog extends JFrame {
     private JScrollPane topScroll;
     private JSplitPane splitPane;
     private boolean dividerMovedByUser = false;   // Nutzer hat die Trennlinie verschoben -> nicht mehr automatisch setzen
-    private static final String BOUNDS_PREF = "dialogBounds.";
+    private static final String BOUNDS_PREF = "dialogBounds2.";   // 2: neue Standardgröße ab 3.5.2
+    private JComponent settingsBlock;   // Kopfzeile + Einstellungen (sollen beim Öffnen ganz zu sehen sein)
+    private JComponent inputBlock;
     /** Wird nach dem nächsten erfolgreichen Export ausgeführt (Testlauf ohne vorherigen Export gestartet). */
     private Runnable afterExport;
     private JLabel liveStatusLabel;
@@ -172,22 +174,32 @@ public class ExplanationDialog extends JFrame {
         if (saved.width >= 400 && saved.height >= 300 && usable.contains(saved)) {
             setBounds(saved);
         } else {
+            // Hoch genug, dass Einstellungen, Schnellfragen und ein Chat von etwa 260 px Platz haben – höchstens der Bildschirm
+            int needed = 10 + getTopPreferredHeight() + 260 + inputBlock.getPreferredSize().height + 70;
             int w = Math.min(820, usable.width - 20);
-            int h = Math.min(900, usable.height - 20);
+            int h = Math.min(Math.max(needed, 640), usable.height - 20);
             setBounds(usable.x + (usable.width - w) / 2, usable.y + (usable.height - h) / 2, w, h);
         }
         SwingUtilities.invokeLater(this::fitDivider);
     }
 
+    private int getTopPreferredHeight() {
+        return topScroll.getViewport().getView().getPreferredSize().height + 4;
+    }
+
     /**
-     * Trennlinie so setzen, dass Einstellungen und Schnellfragen ganz zu sehen sind; für den Chat bleiben mindestens
-     * etwa 220 Pixel bzw. 45 % der Höhe. Hat der Nutzer die Linie selbst verschoben, bleibt sie, wo sie ist.
+     * Trennlinie beim Öffnen: Kopfzeile und Einstellungen sind immer ganz zu sehen, die Schnellfragen soweit Platz ist;
+     * der Chat darunter behält mindestens etwa 160 Pixel (auf sehr kleinen Bildschirmen 100). Hat der Nutzer die
+     * Linie selbst verschoben, bleibt sie, wo sie ist.
      */
     private void fitDivider() {
         if (splitPane == null || dividerMovedByUser || splitPane.getHeight() <= 0) return;
-        int pref = topScroll.getViewport().getView().getPreferredSize().height + 4;
-        int max = Math.max((int) (splitPane.getHeight() * 0.55), splitPane.getHeight() - 220);   // Chat mind. ~220 px
-        splitPane.setDividerLocation(Math.max(80, Math.min(pref, max)));
+        int avail = splitPane.getHeight();
+        int full = getTopPreferredHeight();                                       // mit Schnellfragen
+        int settings = 10 + settingsBlock.getPreferredSize().height + 4;          // nur Kopfzeile + Einstellungen
+        int loc = Math.min(full, avail - 160);
+        loc = Math.max(loc, Math.min(settings, avail - 100));
+        splitPane.setDividerLocation(Math.max(80, loc));
     }
 
     /** Live-Status unten rechts, z. B. "17:06:12 · per-minute rate limit, waiting 45 s". Thread-sicher. */
@@ -257,9 +269,14 @@ public class ExplanationDialog extends JFrame {
         JPanel top = new ScrollablePanel();   // folgt der Fensterbreite, scrollt nur senkrecht
         top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         top.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 10));
-        top.add(createHeader());
-        top.add(Box.createVerticalStrut(6));
-        top.add(createSettingsPanel());
+        JPanel settings = new JPanel();
+        settings.setLayout(new BoxLayout(settings, BoxLayout.Y_AXIS));
+        settings.setOpaque(false);
+        settings.add(createHeader());
+        settings.add(Box.createVerticalStrut(6));
+        settings.add(createSettingsPanel());
+        settingsBlock = settings;
+        top.add(settings);
         top.add(Box.createVerticalStrut(6));
         top.add(createQuickQuestionPanel());
         // Einstellungen scrollbar, damit das Fenster auch auf kleinen Bildschirmen passt
@@ -297,7 +314,8 @@ public class ExplanationDialog extends JFrame {
             }
         }
 
-        add(createInputPanel(), BorderLayout.SOUTH);
+        inputBlock = createInputPanel();
+        add(inputBlock, BorderLayout.SOUTH);
     }
 
     private JComponent createHeader() {
@@ -390,10 +408,9 @@ public class ExplanationDialog extends JFrame {
         addRow(p, c, 1, "Context:", scopeRow, "Temperature:", temperatureSpinner);
 
         // Zeile 2: Format + Kontexttiefe + Max Tokens
-        formatBox = new JComboBox<>(new String[]{FORMAT_V1_LABEL, FORMAT_V2_LABEL, FORMAT_NATIVE_LABEL});
+        formatBox = new JComboBox<>(new String[]{FORMAT_V1_LABEL, FORMAT_NATIVE_LABEL});
         formatBox.setToolTipText("<html>Which model is sent and how.<br>"
                 + "<b>SysML v1 (JSON export)</b>: a SysML v1 model, exported by the plugin.<br>"
-                + "<b>SysML v2 (textual notation)</b>: the same SysML v1 model, written by the plugin in SysML v2 textual notation.<br>"
                 + "<b>SysML v2 model (CATIA export)</b>: a SysML v2 project – the .sysml files CATIA exports<br>"
                 + "(File → Export To → SysML v2 Textual Notation). Each format has its own system prompt.</html>");
         relationDepthSpinner = new JSpinner(new SpinnerNumberModel(DataExtractionService.DEFAULT_RELATION_DEPTH, 0, 10, 1));
@@ -774,7 +791,7 @@ public class ExplanationDialog extends JFrame {
 
     static String formatLabel(String id) {
         if (ModelExport.FORMAT_V2_NATIVE.equals(id)) return FORMAT_NATIVE_LABEL;
-        return ModelExport.FORMAT_V2.equals(id) ? FORMAT_V2_LABEL : FORMAT_V1_LABEL;
+        return FORMAT_V1_LABEL;   // auch für das frühere Format "SysML v2 aus v1 umgewandelt" (nicht mehr wählbar)
     }
 
     private boolean isNativeFormat() {

@@ -16,7 +16,7 @@ public class SystemPromptDialog extends JDialog {
 
     private final File baseDir;
     private final Runnable onChange;
-    private final JComboBox<String> formatBox = new JComboBox<>(new String[]{ExplanationDialog.FORMAT_V1_LABEL, ExplanationDialog.FORMAT_V2_LABEL, ExplanationDialog.FORMAT_NATIVE_LABEL});
+    private final JComboBox<String> formatBox = new JComboBox<>(new String[]{ExplanationDialog.FORMAT_V1_LABEL, ExplanationDialog.FORMAT_NATIVE_LABEL});
     private final JTextArea area = new JTextArea();
     private final JLabel sourceLabel = new JLabel();
     private String shownFormat;
