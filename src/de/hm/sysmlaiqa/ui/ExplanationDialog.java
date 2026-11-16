@@ -54,7 +54,7 @@ public class ExplanationDialog extends JFrame {
     private static final String SCOPE_SELECTION = "Selected packages / elements";
     private static final String SCOPE_FOCUS = "Selected element + surroundings";
     static final String FORMAT_V1_LABEL = "SysML v1 (JSON export)";
-    static final String FORMAT_V2_LABEL = "SysML v2 (converted from v1)";
+    static final String FORMAT_V2_LABEL = "SysML v2 (textual notation)";
     static final String FORMAT_NATIVE_LABEL = "SysML v2 model (CATIA export)";
 
     private Element focusElement;          // angeklicktes/übernommenes Element (darf null sein)
@@ -123,8 +123,8 @@ public class ExplanationDialog extends JFrame {
      */
     public ExplanationDialog(Element focusElement) {
         // Eigenes Fenster (JFrame) mit Minimieren, Maximieren und Schließen und eigenem Eintrag in der Taskleiste.
-        // Nicht modal: CATIA bleibt bedienbar. Klickt man in CATIA, kann das Fenster dahinter verschwinden –
-        // über die Taskleiste kommt es zurück.
+        // Nicht modal: CATIA bleibt bedienbar. Das Fenster bleibt trotzdem vor CATIA (siehe keepAboveCatia),
+        // außer man minimiert es selbst.
         super();
         Frame catia = catiaMainFrame();
         if (catia != null && !catia.getIconImages().isEmpty()) setIconImages(catia.getIconImages());
@@ -139,6 +139,7 @@ public class ExplanationDialog extends JFrame {
         loadSettings();
         fitToScreen();
         apiService.setStatusListener(this::showLiveStatus);
+        keepAboveCatia();
         addMessage("System", "Choose the <b>context</b> and the <b>format</b> above, then click <b>Export model</b>. "
                 + "The model is only exported from CATIA when you click the button.");
     }
@@ -200,8 +201,40 @@ public class ExplanationDialog extends JFrame {
         });
     }
 
+    /** Wird beim Aktivieren des CATIA-Fensters aufgerufen (z. B. beim Export oder nach einem Klick in CATIA). */
+    private java.awt.event.WindowFocusListener catiaFocusListener;
+
+    /**
+     * Hält das Fenster vor CATIA, wie ein Dialog, der zu CATIA gehört: Wird das CATIA-Fenster aktiv (Export,
+     * Klick ins Modell, Auswahl übernehmen …), holt sich das Plugin-Fenster wieder nach vorn, ohne CATIA den
+     * Fokus wegzunehmen. Andere Programme verdeckt es nicht, und ein selbst minimiertes Fenster bleibt minimiert.
+     */
+    private void keepAboveCatia() {
+        Frame catia = catiaMainFrame();
+        if (catia == null) return;
+        catiaFocusListener = new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowGainedFocus(java.awt.event.WindowEvent e) {
+                SwingUtilities.invokeLater(() -> bringToFront(false));
+            }
+        };
+        catia.addWindowFocusListener(catiaFocusListener);
+    }
+
+    /** Fenster nach vorn holen; mit focus=false behält das gerade aktive Fenster (CATIA) den Fokus. */
+    private void bringToFront(boolean focus) {
+        if (!isDisplayable() || !isVisible() || (getExtendedState() & Frame.ICONIFIED) != 0) return;
+        boolean auto = isAutoRequestFocus();
+        setAutoRequestFocus(focus);
+        toFront();
+        setAutoRequestFocus(auto);
+        if (focus) requestFocus();
+    }
+
     @Override
     public void dispose() {
+        Frame catia = catiaMainFrame();
+        if (catia != null && catiaFocusListener != null) catia.removeWindowFocusListener(catiaFocusListener);
         apiService.setStatusListener(null);
         if (getExtendedState() == Frame.NORMAL) {   // maximiert/minimiert: letzte normale Größe behalten
             Rectangle b = getBounds();
@@ -360,7 +393,7 @@ public class ExplanationDialog extends JFrame {
         formatBox = new JComboBox<>(new String[]{FORMAT_V1_LABEL, FORMAT_V2_LABEL, FORMAT_NATIVE_LABEL});
         formatBox.setToolTipText("<html>Which model is sent and how.<br>"
                 + "<b>SysML v1 (JSON export)</b>: a SysML v1 model, exported by the plugin.<br>"
-                + "<b>SysML v2 (converted from v1)</b>: the same SysML v1 model written in SysML v2 textual notation.<br>"
+                + "<b>SysML v2 (textual notation)</b>: the same SysML v1 model, written by the plugin in SysML v2 textual notation.<br>"
                 + "<b>SysML v2 model (CATIA export)</b>: a SysML v2 project – the .sysml files CATIA exports<br>"
                 + "(File → Export To → SysML v2 Textual Notation). Each format has its own system prompt.</html>");
         relationDepthSpinner = new JSpinner(new SpinnerNumberModel(DataExtractionService.DEFAULT_RELATION_DEPTH, 0, 10, 1));
@@ -1090,6 +1123,7 @@ public class ExplanationDialog extends JFrame {
                     addMessage("System", "Critical error during export: " + escapeHtml(String.valueOf(cause.getMessage())));
                 }
                 updateControls();
+                bringToFront(true);   // CATIA holt sich beim Export den Fokus – danach hier weiterarbeiten
             }
         }.execute();
     }

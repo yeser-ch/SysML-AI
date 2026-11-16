@@ -44,7 +44,7 @@ Oben steht das ausgewählte Element (*Selected element: …*) oder, wenn keins a
 
 ![Context ohne ausgewähltes Element: grau, mit Hinweis](docs/images/context-unavailable.png)
 
-**Context nach dem Export geändert?** Dann steht in der Statuszeile *Context changed – click 'Export model'*, und *Send* ist gesperrt, bis neu exportiert wurde. *Run test suite…* bietet in diesem Fall an, zuerst neu zu exportieren. So passt das Protokoll immer zum gesendeten Modell. Ein Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (converted from v1)* braucht keinen neuen Export.
+**Context nach dem Export geändert?** Dann steht in der Statuszeile *Context changed – click 'Export model'*, und *Send* ist gesperrt, bis neu exportiert wurde. *Run test suite…* bietet in diesem Fall an, zuerst neu zu exportieren. So passt das Protokoll immer zum gesendeten Modell. Ein Wechsel zwischen *SysML v1 (JSON export)* und *SysML v2 (textual notation)* braucht keinen neuen Export.
 
 ---
 
@@ -65,7 +65,7 @@ Das Fenster hat vier Bereiche, von oben nach unten. Zwischen *Quick questions* u
 
 Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wiederhergestellt. Ausnahme: **Context** richtet sich danach, über welchen Menüpunkt das Fenster geöffnet wurde.
 
-**Kleiner Bildschirm (Laptop):** Das Fenster passt sich beim Öffnen an den Bildschirm an, die Taskleiste ist abgezogen. Größe und Position lassen sich an den Rändern ändern und werden gespeichert. Oben rechts gibt es **Minimieren, Maximieren und Schließen**; das Fenster hat einen eigenen Eintrag in der Taskleiste. Liegt es hinter CATIA, holt ein Klick auf diesen Eintrag es zurück. Zwischen Einstellungen und Chat liegt eine **Trennlinie**: nach oben ziehen gibt dem Chat mehr Platz. Der kleine Pfeil ▲ links auf der Linie klappt die Einstellungen ganz ein, ▼ holt sie zurück. Passen die Einstellungen nicht ganz hinein, lassen sie sich scrollen.
+**Kleiner Bildschirm (Laptop):** Das Fenster passt sich beim Öffnen an den Bildschirm an, die Taskleiste ist abgezogen. Größe und Position lassen sich an den Rändern ändern und werden gespeichert. Oben rechts gibt es **Minimieren, Maximieren und Schließen**; das Fenster hat einen eigenen Eintrag in der Taskleiste. Es bleibt **vor CATIA**, auch wenn man in CATIA klickt oder ein Export läuft; andere Programme verdeckt es nicht. Wer CATIA ganz sehen will, minimiert das Fenster und holt es über die Taskleiste zurück. Zwischen Einstellungen und Chat liegt eine **Trennlinie**: nach oben ziehen gibt dem Chat mehr Platz. Der kleine Pfeil ▲ links auf der Linie klappt die Einstellungen ganz ein, ▼ holt sie zurück. Passen die Einstellungen nicht ganz hinein, lassen sie sich scrollen.
 
 ---
 
@@ -81,7 +81,7 @@ Alle Einstellungen werden automatisch gespeichert und beim nächsten Öffnen wie
 | 4 | **Context** | Welcher Teil des Modells an die KI geht: *Whole model*, *Selected packages / elements* oder *Selected element + surroundings* (grau, solange kein Element ausgewählt ist). Nach einem Wechsel **Export model** klicken. Details in [Abschnitt 4](#4-umfang-und-format-wählen) | wie zuletzt |
 | 5 | **Choose…** / **Take CATIA selection** | *Choose…* (nur bei *Selected packages / elements*): Pakete oder Elemente im Modellbaum auswählen. *Take CATIA selection*: das in CATIA markierte Element übernehmen und Context auf *Selected element + surroundings* stellen | – |
 | 6 | **Temperature** | Zufälligkeit der Antwort, 0 bis 2. *0* = möglichst gleiche Antworten bei gleicher Frage (empfohlen für Messungen), höher = abwechslungsreicher | 0 |
-| 7 | **Format** | Welches Modell in welcher Form gesendet wird: *SysML v1 (JSON export)* für SysML-v1-Modelle, *SysML v2 (converted from v1)* für dasselbe v1-Modell in SysML-v2-Schreibweise, *SysML v2 model (CATIA export)* für **SysML-v2-Projekte** (siehe [Abschnitt 4](#4-umfang-und-format-wählen)). Jedes Format hat einen eigenen System-Prompt | SysML v1 |
+| 7 | **Format** | Welches Modell in welcher Form gesendet wird: *SysML v1 (JSON export)* für SysML-v1-Modelle, *SysML v2 (textual notation)* für dasselbe v1-Modell in SysML-v2-Schreibweise, *SysML v2 model (CATIA export)* für **SysML-v2-Projekte** (siehe [Abschnitt 4](#4-umfang-und-format-wählen)). Jedes Format hat einen eigenen System-Prompt | SysML v1 |
 | 8 | **Depth: relations / neighbours** | Nur bei *Selected element + surroundings*: wie viele Beziehungsschritte vom Element aus verfolgt werden (0–10) und über wie viele Besitzer-Ebenen Nachbarelemente dazukommen (0–5). Beispiel: [Was gehört zur Umgebung?](#was-gehört-zur-umgebung-depth-erklärt). Nach einer Änderung **Export model** klicken | 5 / 3 |
 | 9 | **Max tokens** | Maximale Länge der Antwort, inklusive internem Nachdenken. Wird eine Antwort abgeschnitten, steht ein Hinweis darunter: dann erhöhen | 8.192 |
 | 10 | **Upload model once** | An: System-Prompt und Modell werden mit der ersten Frage einmal bei Google hochgeladen (60 Minuten gültig), danach geht nur noch die Frage raus. Das spart Übertragung und Zeit; der Inhalt der Anfrage bleibt gleich. Nicht jedes Modell erlaubt das im Free Tier (z. B. Flash-Lite), dann wird das Modell automatisch mit jeder Frage geschickt | an |
@@ -194,7 +194,7 @@ In CATIA kann man SysML-v1- und SysML-v2-Modelle anlegen. Das Plugin kann beide 
 | Format | Für | Was gesendet wird |
 | --- | --- | --- |
 | **SysML v1 (JSON export)** | SysML-v1-Projekte | der Export des Plugins (JSON), Umfang über *Context* |
-| **SysML v2 (converted from v1)** | SysML-v1-Projekte | dasselbe v1-Modell in SysML-v2-Schreibweise, z. B. `part def <_bat> Battery { … }`. Gleicher Inhalt, andere Notation |
+| **SysML v2 (textual notation)** | SysML-v1-Projekte | dasselbe v1-Modell in SysML-v2-Schreibweise, z. B. `part def <_bat> Battery { … }`. Gleicher Inhalt, andere Notation |
 | **SysML v2 model (CATIA export)** | **SysML-v2-Projekte** | genau der SysML-v2-Text, den CATIA selbst exportiert (`.sysml`-Dateien) |
 
 **Ein SysML-v2-Modell schicken:**

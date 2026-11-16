@@ -151,7 +151,7 @@ Es öffnet sich das Fenster **SysML AI Q&A**, zunächst **ohne Export**. *Contex
 
 ![Das Fenster nach Export model](docs/images/start-05-plugin-window.png)
 
-Das Fenster hat oben rechts Minimieren, Maximieren und Schließen und passt sich beim Öffnen an den Bildschirm an. Liegt es hinter CATIA, holt es ein Klick auf seinen Eintrag in der Taskleiste zurück.
+Das Fenster hat oben rechts Minimieren, Maximieren und Schließen und passt sich beim Öffnen an den Bildschirm an. Es bleibt vor CATIA, auch wenn man in CATIA klickt oder ein Export läuft; minimiert holt es ein Klick auf seinen Eintrag in der Taskleiste zurück.
 
 **Tipp für den Anfang:** Mit einem kleinen *Context* beginnen (*Selected packages / elements* oder *Selected element + surroundings*) und auf die Tokenzahl in der Statuszeile achten. Mit `gemini-3.8-flash` wird das Modell einmal hochgeladen; bei Flash-Lite geht es mit jeder Frage mit, und große Modelle stoßen im Free Tier schnell an das Minutenlimit.
 
@@ -273,7 +273,7 @@ Der Plugin-Ordner liegt normalerweise unter `C:\Program Files\Magic Systems of S
 | Nach dem Start kein Menüeintrag „Ask AI“ | Plugin in eine andere CATIA-Installation kopiert oder Ladefehler | Pfad aus dem Installationsfenster mit dem CATIA-Startpfad vergleichen; im Notification Window nach `SysML AI Q&A` suchen und die Meldung ans Team schicken |
 | Rechtsklick in einer **Requirement-Tabelle** zeigt keinen Eintrag | bekannte Einschränkung | Zeile markieren und oben in der Menüleiste **Ask AI → Ask AI…** wählen, oder **Alt+B** (Select in Containment Tree) und dort Rechtsklick |
 | `HTTP 429` | Free-Tier-Limit erreicht | Minutenlimit: das Plugin wartet selbst (rechts neben *Your question:* steht, wie lange). Tageslimit: bis morgen warten oder ein anderes KI-Modell wählen |
-| *„The model data … is larger than the input limit per minute …“* | eine einzelne Anfrage ist größer als das Minutenkontingent des API-Keys – sie käme nie durch | kleineren *Context* wählen, das Format *SysML v2 (converted from v1)* probieren oder `gemini-3.8-flash` (lädt das Modell einmal hoch) |
+| *„The model data … is larger than the input limit per minute …“* | eine einzelne Anfrage ist größer als das Minutenkontingent des API-Keys – sie käme nie durch | kleineren *Context* wählen, das Format *SysML v2 (textual notation)* probieren oder `gemini-3.8-flash` (lädt das Modell einmal hoch) |
 | Frage oder Testlauf „hängt“ minutenlang | das Plugin wartet auf ein Google-Limit oder Google ist überlastet | den Live-Status rechts neben *Your question:* ansehen; mit **Stop** abbrechen. Meist hilft ein kleinerer *Context* oder `gemini-3.8-flash` |
 | `HTTP 503` / `HTTP 500` („high demand“) | Google-Server überlastet | wird automatisch wiederholt (Chat bis zu 3-mal, Testlauf bis etwa 3 Minuten); sonst später erneut versuchen oder ein anderes Modell wählen |
 | `HTTP 404` „… is not found“ oder *„Google does not know this model name“* | Modellname falsch geschrieben (z. B. `gemini-3.5` statt `gemini-3.5-flash-lite`) | Namen korrigieren; **Refresh** zeigt die Modelle des eigenen API-Keys |

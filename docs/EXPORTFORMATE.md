@@ -106,7 +106,7 @@ Exportiert werden nur SysML-v1-Elementtypen aus einer festen Liste (Blöcke, Por
 
 ---
 
-## 4. Format SysML v2, umgewandelt aus v1 (FR7)
+## 4. Format SysML v2 (textual notation), aus dem v1-Export geschrieben (FR7)
 
 Das Plugin übersetzt **denselben** v1-Export in die textuelle Notation von SysML v2 (Klasse `SysmlV2Writer`). Es ist also kein natives SysML-v2-Modell, sondern das v1-Modell in v2-Schreibweise. Für die Auswertung ist das gewollt: Inhalt gleich, nur die Darstellung ändert sich. So lässt sich der Einfluss der Notation isoliert messen (Vergleich SysML v1/v2 in der Aufgabenstellung).
 
