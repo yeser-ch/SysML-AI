@@ -18,6 +18,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 - **Änderungen im WS 2026/27:** [`AENDERUNGEN.md`](AENDERUNGEN.md)
 - **Exportformate und Aufbau einer Anfrage:** [`docs/EXPORTFORMATE.md`](docs/EXPORTFORMATE.md)
 - **Abdeckung des Lastenhefts:** [`docs/LASTENHEFT_ABDECKUNG.md`](docs/LASTENHEFT_ABDECKUNG.md)
+- **Begriffe:** [`docs/GLOSSAR.md`](docs/GLOSSAR.md) – SysML, KI, Plugin, Bewertung und Projektmanagement, jeweils mit Herkunft
 
 ## Was das Plugin kann
 
@@ -42,7 +43,7 @@ Entwickelt im Projekt **„How well does AI understand the SysML model?“** –
 | `src/de/hm/sysmlaiqa/data_extraction/` | Modellexport als JSON über Velocity-Templates (ganzes Modell oder Umgebung eines Elements) |
 | `src/de/hm/sysmlaiqa/api/` | Gemini-Anbindung (Cache, Retry, Rate-Limits), System-Prompt, Testsuite, Protokoll, ID-Check |
 | `resources/System_Prompt*.md` | Standard-System-Prompts für SysML v1 und SysML v2 aus CATIA (dazu der Prompt des früheren Formats „v2 aus v1 umgewandelt“) (im Plugin unter *System prompt…* änderbar) |
-| `docs/` | Exportformate, Lastenheft-Abdeckung, Bilder der Anleitungen |
+| `docs/` | Exportformate, Lastenheft-Abdeckung, Glossar, Bilder der Anleitungen |
 | `evaluation/` | Vorlage für Testfälle und Erklärung der Log-Spalten |
 | `Catia_Model/` | CATIA-Modelle (Anforderungen und Systemmodell des Plugins) |
 | `build.*`, `update.*`, `install.*` | Bauen, Aktualisieren, Installieren (siehe [`INSTALL.md`](INSTALL.md)) |
